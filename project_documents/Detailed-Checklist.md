@@ -25,26 +25,26 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 0.3 Docker Compose for local services
 
-- [ ] Write `docker-compose.yml` with:
-  - [ ] `postgres` service (use `postgis/postgis` image, not plain postgres)
-  - [ ] `redis` service
-- [ ] `docker-compose up -d`
-- [ ] Confirm Postgres is reachable (`psql` or DB client connects)
-- [ ] Confirm Redis is reachable (`redis-cli ping` → `PONG`)
+- [x] Write `docker-compose.yml` with:
+  - [x] `postgres` service (use `postgis/postgis` image, not plain postgres)
+  - [x] `redis` service
+- [x] `docker-compose up -d`
+- [x] Confirm Postgres is reachable (`psql` or DB client connects)
+- [x] Confirm Redis is reachable (`redis-cli ping` → `PONG`)
 
 ### 0.4 Base server
 
-- [ ] Write minimal `main.go` with Gin, one `GET /health` route
-- [ ] `go run main.go` → confirm it starts
-- [ ] Add DB connection (`db/postgres.go`) using `pgx` or `sqlx`
-- [ ] Update `/health` to also ping the DB, return DB status in response
-- [ ] `go get github.com/jackc/pgx/v5` (or `sqlx` equivalent)
+- [x] Write minimal `main.go` with Gin, one `GET /health` route
+- [x] `go run main.go` → confirm it starts
+- [x] Add DB connection (`db/postgres.go`) using `pgx` or `sqlx`
+- [x] Update `/health` to also ping the DB, return DB status in response
+- [x] `go get github.com/jackc/pgx/v5` (or `sqlx` equivalent)
 
 ### 0.5 Git & repo hygiene
 
-- [ ] `git init`, first commit
-- [ ] `.gitignore`: `.env`, `/uploads`, compiled binaries
-- [ ] Push to GitHub/GitLab (private repo)
+- [x] `git init`, first commit
+- [x] `.gitignore`: `.env`, `/uploads`, compiled binaries
+- [x] Push to GitHub/GitLab (private repo)
 
 **Phase 0 done when:** `go run main.go`, hit `GET /health` in Postman, get back `{"status":"ok","db":"connected"}`.
 
@@ -181,15 +181,15 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] Test in Postman: no token -> 401
 - [ ] Test in Postman: report on nonexistent pin -> 404
 
-### 2.5.3 Admin review endpoints
+### 2.5.3 Report review (no admin role for MVP)
 
-- [ ] `internal/reports/list_reports.go` -> `ListReports` handler (admin-only — simplest MVP approach: a hardcoded admin user ID/email check, or an `is_admin` flag on `users`)
-- [ ] `internal/reports/resolve_report.go` -> `ResolveReport` handler, updates status to `reviewed`/`actioned`
-- [ ] Routes: `GET /reports`, `POST /reports/:id/resolve` (both admin-only)
-- [ ] Test in Postman: non-admin user gets 403
-- [ ] Test in Postman: admin can list + resolve reports
+- No `is_admin` flag, no admin user concept, and no `GET /reports` / `POST /reports/:id/resolve` HTTP endpoints for MVP — deliberately out of scope.
+- [ ] Review reports directly against the database (`psql`/DBeaver/TablePlus): `SELECT * FROM reports WHERE status = 'pending' ORDER BY created_at;`
+- [ ] Resolve a report by hand: `UPDATE reports SET status = 'reviewed', resolved_at = now() WHERE id = '<id>';`
+- [ ] (Optional) Save the above as a couple of saved queries/snippets in your DB client so this is a 10-second habit, not friction that causes you to skip it
+- [ ] Test: submit a report via Postman, confirm the row appears correctly in `reports` via direct query
 
-**Phase 2.5 done when:** A logged-in user can report a pin, and you (as admin) can list and resolve reports via Postman. This is the MVP's baseline content moderation mechanism — no automated scanning yet, just user reporting + manual review.
+**Phase 2.5 done when:** A logged-in user can report a pin via `POST /pins/:id/report`, and the resulting row is visible and resolvable via a direct database query. This is the MVP's baseline content moderation mechanism — no automated scanning, no admin role/endpoints, just user reporting + manual review at the DB level. Revisit adding `is_admin` + review endpoints only if/when a second person needs to moderate.
 
 ---
 
@@ -335,7 +335,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 ### 7.3 Pre-launch checklist
 
 - [ ] Privacy Policy + Terms of Service published and linked in-app
-- [ ] Content moderation: `reports` feature (Phase 2.5) is live and you have a routine for checking `GET /reports` regularly
+- [ ] Content moderation: `reports` feature (Phase 2.5) is live and you have a routine for checking pending reports directly via database query, on a regular cadence
 - [ ] Rate limiting on `POST /auth/register` and `POST /pins` (prevent spam/abuse)
 - [ ] Basic uptime monitoring (even a free tool like UptimeRobot)
 - [ ] Error tracking (Sentry free tier is enough to start)
@@ -384,7 +384,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 | 0. Setup                        | 15                      |
 | 1. Auth (+ public user profile) | 23                      |
 | 2. Pins & Categories            | 20                      |
-| 2.5 Reports                     | 11                      |
+| 2.5 Reports                     | 6                       |
 | 3. Photo Upload                 | 10                      |
 | 4. Frontend Map View            | 20                      |
 | 5. Real-Time Layer              | 15                      |

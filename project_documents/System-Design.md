@@ -3,6 +3,7 @@
 ## 1. Requirements
 
 ### Functional
+
 - Users can register/login (required only to create a pin or take other interactive actions)
 - Anyone (including guests, no login) can browse the map and view pin details
 - Users can pin a location + upload a photo + select a fixed category
@@ -12,19 +13,21 @@
 - (Future) Likes, comments, trending spots, sponsored pins, analytics
 
 ### Non-functional
+
 - Low-latency real-time updates (near-instant pin/chat delivery)
 - Handle concentrated concurrency (many users watching one hotspot/event)
 - Horizontally scalable (no single point of failure as usage grows)
 - Reasonable cost at MVP scale; scales predictably beyond it
 
 ### Back-of-envelope estimates (MVP → early growth)
-| Metric | Estimate |
-|---|---|
-| Registered users | 10K → 500K |
-| Concurrent active users | 500 → 20K |
-| Peak concurrent viewers on one hotspot | 100 → 5,000 |
-| Pin writes/day | 5K → 200K |
-| Avg photo size | ~2–4MB (compressed on upload to ~500KB) |
+
+| Metric                                 | Estimate                                |
+| -------------------------------------- | --------------------------------------- |
+| Registered users                       | 10K → 500K                              |
+| Concurrent active users                | 500 → 20K                               |
+| Peak concurrent viewers on one hotspot | 100 → 5,000                             |
+| Pin writes/day                         | 5K → 200K                               |
+| Avg photo size                         | ~2–4MB (compressed on upload to ~500KB) |
 
 ---
 
@@ -48,9 +51,9 @@ POST   /streams/:id/end          — [auth required]
 GET    /users/:id                — [public]
 
 POST   /pins/:id/report          — [auth required] report a pin (content moderation)
-GET    /reports                  — [admin only] list submitted reports
-POST   /reports/:id/resolve      — [admin only] mark a report reviewed/actioned
 ```
+
+No admin role or admin-only endpoints exist in this system for MVP. Submitted reports are reviewed and resolved directly against the `reports` table via a database client (`psql`/DBeaver), not through the API. This may change if/when moderation needs to be shared across more than one person.
 
 ### WebSocket events
 
@@ -132,11 +135,13 @@ CREATE TABLE reports (
 ## 4. Real-Time Fan-Out Design (the core scaling piece)
 
 ### Room assignment
+
 - Map viewport is divided into geohash cells (e.g., precision 5-6, ~5km cells, tuned by zoom level)
 - Client subscribes to the cells currently visible on its screen
 - Server maintains: `map[geohashCell][]*Connection`
 
 ### Broadcast flow
+
 ```
 1. New pin written to Postgres
 2. Compute its geohash cell
@@ -147,11 +152,13 @@ CREATE TABLE reports (
 ```
 
 ### Why batching + rooms + Redis together
+
 - **Rooms** — shrink fan-out from "all connected users" to "users actually viewing this area"
 - **Batching** — collapse many rapid events into fewer broadcast operations
 - **Redis Pub/Sub** — lets this work correctly across multiple horizontally-scaled Go instances (a pin written on instance A needs to reach a viewer connected to instance B)
 
 ### Concurrency handling in Go
+
 - Each WebSocket connection read/write runs in its own goroutine
 - Broadcasting to a room's connections is parallelized across goroutines (bounded via worker pool to avoid unbounded goroutine spawn under extreme load)
 - `sync.RWMutex` or sharded maps protect the room registry from concurrent access
@@ -186,15 +193,15 @@ Viewer count
 
 ## 6. Failure & Edge Case Handling
 
-| Scenario | Handling |
-|---|---|
-| Go instance crashes mid-broadcast | Client WebSocket reconnects, re-subscribes to cells; Redis Pub/Sub means other instances unaffected |
-| Photo upload fails mid-way | Client retries; pin isn't created until photo URL is confirmed stored in R2 (local disk in dev) |
-| Unauthenticated user attempts a gated action (create pin, go live) | Middleware rejects with 401 before handler logic runs; client shows login/register prompt |
-| Viewport query on sparse data | Standard bounding-box query, no special handling needed at this scale |
-| Viewport query on dense hotspot (thousands of pins in view) | Paginate / limit + cluster pins client-side (marker clustering) rather than returning all points |
-| LiveKit room fails to start | Return error to broadcaster before they think they're live; don't create a "phantom" stream row |
-| Redis goes down | Real-time updates degrade to single-instance-only (if only one instance up) or pause; core REST API (pins, auth) keeps working since it doesn't depend on Redis |
+| Scenario                                                           | Handling                                                                                                                                                        |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Go instance crashes mid-broadcast                                  | Client WebSocket reconnects, re-subscribes to cells; Redis Pub/Sub means other instances unaffected                                                             |
+| Photo upload fails mid-way                                         | Client retries; pin isn't created until photo URL is confirmed stored in R2 (local disk in dev)                                                                 |
+| Unauthenticated user attempts a gated action (create pin, go live) | Middleware rejects with 401 before handler logic runs; client shows login/register prompt                                                                       |
+| Viewport query on sparse data                                      | Standard bounding-box query, no special handling needed at this scale                                                                                           |
+| Viewport query on dense hotspot (thousands of pins in view)        | Paginate / limit + cluster pins client-side (marker clustering) rather than returning all points                                                                |
+| LiveKit room fails to start                                        | Return error to broadcaster before they think they're live; don't create a "phantom" stream row                                                                 |
+| Redis goes down                                                    | Real-time updates degrade to single-instance-only (if only one instance up) or pause; core REST API (pins, auth) keeps working since it doesn't depend on Redis |
 
 ---
 

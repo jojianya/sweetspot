@@ -24,7 +24,7 @@ func main() {
 	defer pool.Close()
 
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.New()
+	r := gin.New()	
 	r.Use(gin.Recovery(), logger.RequestLogger(lg, "/health"))
 
 	r.GET("/health", func(c *gin.Context) {

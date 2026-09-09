@@ -48,12 +48,15 @@
 ## 2. Core Components
 
 ### 2.1 Client Layer
+
 - **Web:** Next.js + MapLibre GL JS
 - **Mobile:** React Native + MapLibre Native SDK
 - Both talk to the same Go backend via REST + WebSocket + WebRTC (via LiveKit SDKs)
 
 ### 2.2 Go API Server (REST)
+
 Handles standard CRUD + business logic:
+
 - Auth (register/login, JWT issuance) — required only for write/interactive actions (creating a pin, later: going live, liking, commenting). Browsing pins and viewing pin details is open to unauthenticated/guest requests.
 - Pins (create, viewport query, get by id, filter by category)
 - Categories (fixed list — e.g. Food, Nature, Event, Nightlife)
@@ -64,36 +67,44 @@ Handles standard CRUD + business logic:
 Framework: **Gin**
 
 ### 2.3 Go Realtime Hub (WebSocket layer)
+
 Separate logical service (can run as its own goroutine pool within the same binary initially, split out later if needed):
+
 - Manages WebSocket connections
 - Groups clients into **geohash-based rooms** (only broadcast to viewers actually watching that map cell)
 - **Batches** broadcasts (e.g., every 500ms–1s) instead of pushing every event instantly
 - Publishes/subscribes via **Redis Pub/Sub** so multiple Go instances stay in sync
 
 Used for:
+
 - New pin notifications in a viewport
 - Live event pin updates
 - Chat/reactions during livestreams
 - Viewer count updates
 
 ### 2.4 Livestreaming (WebRTC + SFU)
+
 - **LiveKit** (Go-based, open source) — managed via LiveKit Cloud to start, self-hostable later
 - Go API server creates "rooms" via LiveKit's API, issues join tokens
 - Actual video routing handled entirely by LiveKit — your backend never touches raw video
 
 ### 2.5 Database — PostgreSQL + PostGIS
+
 - Single source of truth: users, pins, categories, photos, streams, (later) likes/comments
 - `GIST` index on `location GEOGRAPHY(POINT, 4326)` for fast viewport/radius queries
 - Scales via read replicas later if needed
 
 ### 2.6 Storage — Cloudflare R2 + CDN
+
 - Chosen over AWS S3 specifically for zero egress fees — GoodSpot247's usage pattern (many views per photo upload) is egress-heavy, so this avoids costs scaling with popularity
 - Photos uploaded from client → Go backend → resized (e.g. `imaging` lib or a worker) → stored in R2
 - Served through Cloudflare's CDN for fast delivery
 - **Deferred for local development** — MVP build starts with local filesystem storage, swapped to R2 before deployment/public use (see build order)
 
 ### 2.7 Redis
+
 Two jobs:
+
 - **Pub/Sub** — coordinates real-time broadcasts across multiple Go instances
 - Optional: cache hot queries (e.g., trending spots) later
 
@@ -102,6 +113,7 @@ Two jobs:
 ## 3. Data Flow Examples
 
 ### A) User posts a new pin (requires login)
+
 ```
 Client → (must have valid JWT) → POST /pins (Go API) → validate → save to Postgres/PostGIS
                                        → upload photo to R2
@@ -112,6 +124,7 @@ Client → (must have valid JWT) → POST /pins (Go API) → validate → save t
 ```
 
 ### B) User goes live at a location
+
 ```
 Client → POST /streams (Go API) → create LiveKit room → return join token
 Broadcaster → connects to LiveKit via WebRTC (video/audio)
@@ -120,6 +133,7 @@ Chat/reactions → WebSocket → Realtime Hub → geohash/room-based fan-out
 ```
 
 ### C) User browses the map (no login required)
+
 ```
 Client → GET /pins?bbox=...&category=... (Go API, public endpoint) → PostGIS bounding-box query → return pins
 Client → opens WebSocket → subscribes to visible geohash cells
@@ -202,11 +216,9 @@ goodspot247-backend/
     │
     ├── reports/
     │   ├── create_report.go      # POST /pins/:id/report (auth required)
-    │   ├── list_reports.go       # admin: GET /reports
-    │   ├── resolve_report.go     # admin: mark reviewed/actioned
     │   ├── dto.go
     │   ├── model.go
-    │   └── repository.go
+    │   └── repository.go         # review/resolve happens via direct DB query, no HTTP handlers
     │
     ├── realtime/
     │   ├── handler.go            # GET /ws upgrade + message routing
@@ -232,7 +244,7 @@ goodspot247-backend/
 
 **Why `categories` lives inside the pins migration, not its own file:** categories is a small reference/lookup table that only exists to support pins (no independent use case), so it's created in the same migration as the table that depends on it.
 
-**`reports/` covers the Content Moderation Policy's technical side** — user-submitted reports on pins, plus an admin review/resolve flow — built as a first-class feature from the start rather than retrofitted later.
+**`reports/` covers the Content Moderation Policy's technical side** — user-submitted reports on pins, built as a first-class feature from the start rather than retrofitted later. There is no admin role or admin-only API in this system for MVP: review and resolution happen via direct database queries against the `reports` table, not through HTTP endpoints. This keeps the auth model (JWT gates writes only) simple and avoids introducing a user-role concept for a single-operator MVP.
 
 ---
 

@@ -1,3 +1,5 @@
 .env
 /uploads
 goodspot247-backend
+server
+*.exe

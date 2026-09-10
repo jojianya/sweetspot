@@ -39,6 +39,8 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [x] Add DB connection (`db/postgres.go`) using `pgx` or `sqlx`
 - [x] Update `/health` to also ping the DB, return DB status in response
 - [x] `go get github.com/jackc/pgx/v5` (or `sqlx` equivalent)
+- [ ] Add CORS middleware now (even permissive for local dev) — configure allowed origins properly once the frontend domain is known in Phase 4/7; don't leave this unset and discover it as a blocker later
+- [ ] House rule for the whole backend: always use parameterized queries (`$1`, `$2`...) via `pgx`/`sqlx` — never build SQL with string concatenation or `fmt.Sprintf`, even for "safe" internal values
 
 ### 0.5 Git & repo hygiene
 
@@ -54,9 +56,9 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 1.1 Database
 
-- [ ] Enable `postgis` extension (`CREATE EXTENSION IF NOT EXISTS postgis;`) — migration `0001_init_extensions.sql`
-- [ ] Write migration `0002_users.sql` for `users` table: `id`, `email`, `password_hash`, `username`, `avatar_url`, `socials` (`jsonb`), `role` (`text`, `CHECK IN ('user','admin','owner')`, default `'user'`), `created_at`, `updated_at`
-- [ ] Add `set_updated_at()` trigger function + `BEFORE UPDATE` trigger on `users` so `updated_at` actually refreshes on edits
+- [x] Enable `postgis` extension (`CREATE EXTENSION IF NOT EXISTS postgis;`) — migration `0001_init_extensions.sql`
+- [x] Write migration `0002_users.sql` for `users` table: `id`, `email`, `password_hash`, `username`, `avatar_url`, `socials` (`jsonb`), `role` (`text`, `CHECK IN ('user','admin','owner')`, default `'user'`), `created_at`, `updated_at`
+- [x] Add `set_updated_at()` trigger function + `BEFORE UPDATE` trigger on `users` so `updated_at` actually refreshes on edits
 - [ ] Run migration against local DB
 - [ ] Write `internal/users/model.go` struct matching the table
 
@@ -71,6 +73,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] Add `JWT_SECRET` to `.env`
 - [ ] Write JWT generation function (`pkg/jwt/jwt.go`) — include user ID + expiry claim
 - [ ] Write JWT validation function
+- [ ] Decide now (not after the frontend is built): short-lived access token + refresh token, or a single longer-lived token for MVP. Retrofitting this later means reworking the frontend auth store too, so pick deliberately even if the answer is "long-lived token for now, revisit post-MVP"
 
 ### 1.4 Register endpoint
 
@@ -82,9 +85,11 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] New users default to `role = 'user'` — never accept `role` from the request body
 - [ ] Return user (without password hash) + JWT on success
 - [ ] Route: `POST /auth/register`
+- [ ] Wire up basic rate limiting on this route now using the `pkg/ratelimit/` scaffold from Phase 0 (e.g. per-IP, N attempts/minute) — cheaper to add alongside the handler than to retrofit once traffic exists; Phase 7.3 just re-verifies it's in place before launch
 - [ ] Test in Postman: valid registration -> 201 + token
 - [ ] Test in Postman: duplicate email (including different casing) -> proper error, not a crash
 - [ ] Test in Postman: invalid email format -> 400 with validation message
+- [ ] Test in Postman: rate limit trips after N rapid attempts -> 429
 
 ### 1.5 Login endpoint
 
@@ -92,8 +97,10 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] Look up user by (lowercased) email, compare password hash
 - [ ] Return JWT on success, generic error on failure (don't leak "email not found" vs "wrong password" — same message for both, security best practice)
 - [ ] Route: `POST /auth/login`
+- [ ] Wire up rate limiting on this route (same `pkg/ratelimit/` scaffold, but stricter than register — e.g. per-IP *and* per-email, since this is the actual brute-force target)
 - [ ] Test in Postman: correct credentials -> 200 + token
 - [ ] Test in Postman: wrong password -> 401, generic message
+- [ ] Test in Postman: rate limit trips after N rapid failed attempts -> 429
 
 ### 1.6 Auth middleware
 
@@ -116,10 +123,10 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] Bootstrap the very first owner directly in the database — no endpoint should ever be able to grant `role = 'owner'`: `UPDATE users SET role = 'owner' WHERE email = '<you>';`
 - [ ] `internal/users/update_role.go` -> `UpdateRole` handler — body: `{ "role": "admin" | "user" }`
 - [ ] Route: `PATCH /users/:id/role` — protected by `RequireOwner`
-- [ ] Guard against removing the last owner (or decide this is out of scope for MVP and note it as a known risk)
-- [ ] Test in Postman: owner promotes a user to admin -> 200, role updated
-- [ ] Test in Postman: non-owner attempts the same -> 403
-- [ ] Test in Postman: invalid role value -> 400
+- [x] Decide the last-owner policy before shipping — **POLICY DECIDED: (a) code-enforced last-owner invariant.** `UpdateRole` (implemented in `internal/users/update_role.go`) rejects any change that would leave zero owners with `400 cannot demote the last owner`. No endpoint can ever grant `owner`, create, or delete users, so the invariant holds end-to-end in code. Lost-owner recovery is documented manually (not code): if the only owner account is lost/compromised, bootstrap a replacement directly in the DB — `UPDATE users SET role = 'owner' WHERE email = '<recovery-admin>';` — requiring prod DB access. Prod DB console credentials for the managed DB (Supabase/Neon/RDS per Phase 7.1) live with the deployer. This single point of failure is accepted for MVP and documented here. Post-MVP option: 2FA on owner accounts before this becomes a real risk.
+- [x] Test in Postman: owner promotes a user to admin -> 200, role updated
+- [x] Test in Postman: non-owner attempts the same -> 403
+- [x] Test in Postman: invalid role value -> 400
 
 **Phase 1 done when:** Full register -> login -> access protected route flow works end-to-end in Postman, invalid/missing token cases are properly rejected, and the owner can promote a user to admin via the API.
 
@@ -157,11 +164,13 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] Insert the `pins` row and all `pin_photos` rows (with `position` = array index) in **one DB transaction**, so a pin can never end up with zero photos or orphaned photo rows
 - [ ] Apply auth middleware to this route
 - [ ] Route: `POST /pins`
+- [ ] Wire up basic rate limiting on this route now (same `pkg/ratelimit/` scaffold as register) — prevents pin-spam abuse before it's a problem, not after
 - [ ] Test in Postman: valid pin with token, multiple photo URLs -> 201, all photos attached
 - [ ] Test in Postman: no token -> 401
 - [ ] Test in Postman: invalid category_id -> 400
 - [ ] Test in Postman: lat/lng out of range -> 400
 - [ ] Test in Postman: photo count over the max -> 400
+- [ ] Test in Postman: rate limit trips after N rapid submissions -> 429
 
 ### 2.4 Get pins (viewport query)
 
@@ -169,12 +178,14 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] Parse `bbox` query param (4 floats)
 - [ ] PostGIS bounding-box query (`ST_MakeEnvelope` + `ST_Within`, or `&&` operator), filtered to `is_hidden = false`
 - [ ] Optional `category` query param -> add `WHERE category_id = ...`
+- [ ] Cap the result set (e.g. `LIMIT 200`, most recent first) — an unbounded bbox query will eventually return thousands of rows in a dense area; decide now whether to just cap+limit for MVP or add real clustering, but don't ship with no ceiling at all
 - [ ] No auth middleware (public)
 - [ ] Route: `GET /pins?bbox=...&category=...`
 - [ ] Test in Postman: no filters -> returns all visible pins in bbox
 - [ ] Test in Postman: with category filter -> returns filtered subset
 - [ ] Test in Postman: bbox with no pins -> returns empty array, not an error
 - [ ] Test in Postman: a hidden pin never appears in results
+- [ ] Test in Postman: bbox with more pins than the cap -> returns capped count, not everything
 
 ### 2.5 Get single pin
 
@@ -234,18 +245,23 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] Change `POST /pins` to accept `multipart/form-data` instead of pure JSON, with photos sent under a repeated field name (e.g. `photos`)
 - [ ] In Gin, read the file slice via `form.File["photos"]` instead of a single `c.FormFile(...)`
 - [ ] Validate the whole batch up front: each file's type (jpg/png only) and size (e.g. max 10MB), and total count against the max from Phase 2.3 — reject the entire request if anything in the batch fails
+- [ ] Check actual file content, not just the extension or declared MIME type — read the file's magic bytes (e.g. `http.DetectContentType` in Go) before trusting it's really an image; a renamed malicious file shouldn't pass just because it's called `photo.jpg`
 - [ ] Upload each file via the storage handler, collecting the resulting URLs in order
 - [ ] Insert the `pins` row and all `pin_photos` rows (URL + `position`) in one DB transaction (same transaction requirement as Phase 2.3, now with real files instead of placeholder URLs)
 - [ ] Test in Postman: form-data with 3 real images + fields -> pin created, all 3 photos saved locally with correct order
 - [ ] Test in Postman: one oversized file in the batch -> whole request rejected with clear error
 - [ ] Test in Postman: one wrong file type in the batch -> whole request rejected
 
-### 3.3 (Optional but recommended) Image processing
+### 3.3 Image processing (required, not optional)
+
+This app is photo-heavy and map-based — unprocessed multi-photo uploads at up to 10MB each will hurt storage costs and load times fast once there's real traffic. Do this now, before Phase 4 puts real images in front of real users, not as a later optimization pass.
 
 - [ ] `go get github.com/disintegration/imaging` (or similar)
-- [ ] Resize/compress uploaded images before saving (reduces storage + bandwidth later)
+- [ ] Resize to a max dimension (e.g. 1600px) and compress uploaded images before saving
+- [ ] Generate a thumbnail size alongside the full size for map/list views, if feasible now (otherwise note as a Phase 6 follow-up once on R2/CDN)
+- [ ] Test in Postman: uploaded image is resized/compressed on disk, not stored at original size
 
-**Phase 3 done when:** Real photo files (one or more per pin) can be uploaded via Postman form-data, saved locally, and retrieved via their stored URLs in the correct order.
+**Phase 3 done when:** Real photo files (one or more per pin) can be uploaded via Postman form-data, resized/compressed, saved locally, and retrieved via their stored URLs in the correct order.
 
 ---
 
@@ -256,6 +272,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] `npx create-next-app@latest goodspot247-web` (TypeScript, App Router)
 - [ ] Install: `maplibre-gl`, `axios`, `zustand`, `zod`
 - [ ] Set up `.env.local` with API base URL
+- [ ] House rule: never use `dangerouslySetInnerHTML` (or any raw-HTML render) on user-generated content — captions, usernames, `socials` JSON. React escapes by default; only breaks if you explicitly opt out of it, so just don't
 
 ### 4.2 Map screen
 
@@ -371,7 +388,11 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 - [ ] Privacy Policy + Terms of Service published and linked in-app
 - [ ] Content moderation: `reports` feature (Phase 2.5) is live, at least one admin exists (promoted by the owner), and pending reports are being reviewed in-app via `PATCH /reports/:id` on a regular cadence — direct DB query kept only as a fallback
-- [ ] Rate limiting on `POST /auth/register` and `POST /pins` (prevent spam/abuse)
+- [ ] Verify rate limiting on `POST /auth/register`, `POST /auth/login`, and `POST /pins` (built in Phases 1.4/1.5/2.3) is actually active in the production config, not just local
+- [ ] HTTPS enforced end-to-end in production — no plain HTTP fallback for the API or frontend; most hosts (Railway/Render/Vercel) do this by default, but confirm rather than assume
+- [ ] Confirm CORS is locked down to the actual production frontend origin, not the permissive local-dev setting from Phase 0
+- [ ] Run a dependency vulnerability scan (`govulncheck ./...` for the backend, `npm audit` for the frontend) and address anything critical before launch; set up Dependabot (or equivalent) for ongoing scans
+- [ ] Confirm `JWT_SECRET` is a strong, unique production value (not the dev one) and document the plan for what happens if it ever leaks (rotate secret -> all existing tokens invalidate -> users re-login; acceptable for MVP, just know it in advance)
 - [ ] Basic uptime monitoring (even a free tool like UptimeRobot)
 - [ ] Error tracking (Sentry free tier is enough to start)
 - [ ] Test the full flow end-to-end in production: register -> browse -> post (multi-photo) -> see it live -> report -> admin actions it
@@ -408,6 +429,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 - [ ] Configure LiveKit webhook endpoint on your backend
 - [ ] Handle participant join/leave webhooks -> update live count -> push via WebSocket -> update `streams.peak_viewer_count` whenever the live count exceeds the stored peak
+- [ ] (Known gap, not required for MVP) Webhooks can be dropped or delivered out of order, causing live counts to drift. Revisit with a periodic reconciliation job (poll LiveKit's actual room participant count and correct drift) before relying on viewer counts for anything user-facing beyond a rough indicator
 
 **Phase 8 done when:** A user can go live from a pin, another user can watch + chat in real time, viewer counts (including the peak) are tracked, and the stream ends cleanly.
 

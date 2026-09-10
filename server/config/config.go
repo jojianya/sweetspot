@@ -17,6 +17,7 @@ type Config struct {
 	DBName    string
 	LogLevel  string
 	LogFormat string
+	JWTSecret string
 }
 
 func Load() *Config {
@@ -33,6 +34,7 @@ func Load() *Config {
 		DBName:    getEnv("DB_NAME", "goodspotdb"),
 		LogLevel:  getEnv("LOG_LEVEL", "info"),
 		LogFormat: getEnv("LOG_FORMAT", "text"),
+		JWTSecret: getEnv("JWT_SECRET", ""),
 	}
 }
 

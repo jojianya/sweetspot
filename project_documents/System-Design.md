@@ -94,7 +94,7 @@ CREATE TABLE users (
 
 CREATE TABLE categories (
     id   SERIAL PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL       -- fixed list: Food, Nature, Event, Nightlife, etc.
+    name TEXT UNIQUE NOT NULL       -- fixed list (finalized): Food, Nature, Event, Nightlife, Art, Sports, Travel, Other
 );
 
 CREATE TABLE pins (

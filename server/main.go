@@ -9,6 +9,9 @@ import (
 	"github.com/jojianya/sweetspot247-backend/config"
 	"github.com/jojianya/sweetspot247-backend/db"
 	"github.com/jojianya/sweetspot247-backend/internal/auth"
+	"github.com/jojianya/sweetspot247-backend/internal/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/reports"
+	"github.com/jojianya/sweetspot247-backend/internal/storage"
 	"github.com/jojianya/sweetspot247-backend/internal/users"
 	"github.com/jojianya/sweetspot247-backend/pkg/logger"
 	"github.com/jojianya/sweetspot247-backend/pkg/ratelimit"
@@ -33,8 +36,10 @@ func main() {
 	}
 
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.New()	
+	r := gin.New()
 	r.Use(gin.Recovery(), logger.RequestLogger(lg, "/health"))
+
+	r.Static("/uploads", "./uploads")
 
 	r.GET("/health", func(c *gin.Context) {
 		dbStatus := "connected"
@@ -63,6 +68,18 @@ func main() {
 	r.GET("/me", auth.AuthRequired(cfg.JWTSecret), auth.Me())
 
 	r.GET("/users/:id", users.GetUser(userRepo))
+
+	pinRepo := pins.NewRepository(pool)
+	store := storage.NewLocal("./uploads", cfg.StorageBase)
+	r.GET("/categories", pins.ListCategories(pinRepo))
+	r.GET("/pins", pins.GetPins(pinRepo))
+	r.GET("/pins/:id", pins.GetPin(pinRepo))
+
+	reportRepo := reports.NewRepository(pool)
+	r.POST("/pins/:id/report", auth.AuthRequired(cfg.JWTSecret), reports.CreateReport(reportRepo))
+	r.PATCH("/reports/:id", auth.AuthRequired(cfg.JWTSecret), auth.RequireAdmin(userRepo), reports.ReviewReport(reportRepo))
+	pinCreateLimit := ratelimit.New(10, time.Minute)
+	r.POST("/pins", pinCreateLimit.Middleware(), auth.AuthRequired(cfg.JWTSecret), pins.CreatePin(pinRepo, store))
 
 	r.PATCH("/users/:id/role", auth.AuthRequired(cfg.JWTSecret), auth.RequireOwner(userRepo), users.UpdateRole(userRepo))
 

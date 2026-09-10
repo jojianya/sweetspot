@@ -30,21 +30,29 @@
 
 ### 5.1 MVP Features
 
-| Feature                  | Description                                                                                                                              |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Pin a location           | User selects a point on the map to attach content to                                                                                     |
-| Upload a photo           | Photo tied to that specific pin                                                                                                          |
-| Viewport-based discovery | View pins within the current map view                                                                                                    |
-| Auth                     | Register / login required only to create a pin; browsing the map and viewing pin details is open to guests                               |
-| Real-time updates        | New pins appear live via WebSocket, no refresh needed                                                                                    |
-| Location-based discovery | Core browsing model is the map, not a feed                                                                                               |
-| Categories               | Each pin has a fixed category (e.g. Food, Nature, Event, Nightlife), for filtering/discovery                                             |
-| Content reporting        | Users can report a pin; no admin role in the system — reports are reviewed directly against the database (baseline moderation mechanism) |
+| Feature                  | Description                                                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pin a location            | User selects a point on the map to attach content to                                                                                                                 |
+| Upload photo(s)           | One or more photos tied to that specific pin (multi-photo upload, ordered)                                                                                          |
+| Viewport-based discovery | View pins within the current map view                                                                                                                                |
+| Auth                     | Register / login required only to create a pin; browsing the map and viewing pin details is open to guests                                                          |
+| Real-time updates        | New pins appear live via WebSocket, no refresh needed                                                                                                                |
+| Location-based discovery | Core browsing model is the map, not a feed                                                                                                                           |
+| Categories               | Each pin has a fixed, required category (e.g. Food, Nature, Event, Nightlife), for filtering/discovery                                                              |
+| Content reporting        | Users can report a pin; an **admin** reviews and actions reports in-app (hides the pin if warranted) — see §5.1a                                                    |
+| User roles                | Three tiers — `user`, `admin`, `owner` — gate moderation and role-management actions; see §5.1a                                                                     |
+
+### 5.1a User Roles & Moderation
+
+- Every user has a single `role`: **user** (default), **admin**, or **owner**.
+- **Admin** can review reported pins and action them (hiding a pin that violates policy).
+- **Owner** can do anything an admin can, plus promote/demote a user's role. There is exactly one path to becoming the first owner: it's set directly against the database by whoever operates the app — there's no signup flow or endpoint that grants it. From there, the owner can promote other users to admin through the app.
+- This replaces the original MVP plan of having no admin role at all (moderation was going to be 100% manual via direct database queries). That fallback is still available as a bootstrap step (setting the first owner), but day-to-day report review now happens through the app once an admin exists.
 
 ### 5.2 Future Features (post-MVP)
 
 | Feature                 | Description                                                            |
-| ----------------------- | ---------------------------------------------------------------------- |
+| ------------------------ | ------------------------------------------------------------------------ |
 | Likes & comments        | Engagement on individual pins                                          |
 | Trending spots          | Surface locations with high recent activity                            |
 | Live event pins         | Real-time pins tied to live happenings (high-concurrency broadcast)    |
@@ -62,10 +70,12 @@
 ## 6. User Stories
 
 - _As a traveler_, I want to see what other people have pinned nearby, so I can discover interesting spots without prior research.
-- _As a content creator_, I want to pin a photo at a specific location, so my content is discoverable by anyone exploring that area.
+- _As a content creator_, I want to pin one or more photos at a specific location, so my content is discoverable by anyone exploring that area.
 - _As an event attendee_, I want to see live activity at an event in real time, so I know what's happening right now, not what happened hours ago.
 - _As a small business_, I want to eventually promote a sponsored pin at my location, so I can attract nearby users.
 - _As any user_, I want new pins to appear on my map automatically while I'm browsing, without needing to refresh.
+- _As an admin_, I want to review reported pins and hide the ones that violate policy, so the map stays trustworthy.
+- _As the owner_, I want to promote trusted users to admin, so moderation doesn't depend on a single person.
 
 ## 7. Success Metrics (suggested)
 
@@ -73,7 +83,7 @@
 - # of active viewport sessions / day (map opens + browsing duration)
 - Real-time update latency (pin post → visible to nearby viewers)
 - Retention: % of users who pin or view again within 7 days
-- (Post-launch, live features) peak concurrent viewers per hotspot handled without degradation
+- (Post-launch, live features) peak concurrent viewers per hotspot handled without degradation — captured per-stream via `streams.peak_viewer_count`
 
 ## 8. Technical Constraints & Direction
 
@@ -85,6 +95,7 @@
 
 ## 9. Open Questions
 
-- Photo moderation approach beyond user reporting (automated pre-screening) — not yet defined; MVP ships with user reports reviewed directly via the database (no admin role/endpoints) as the baseline
+- Photo moderation approach beyond user reporting (automated pre-screening) — not yet defined; MVP ships with user reports reviewed by an admin in-app, with the owner role bootstrapped manually via the database
 - Monetization model for sponsored/business pins — not yet defined
 - Whether livestreaming ships as MVP+1 or later, pending validation of core pin/discovery loop first
+- Whether the owner should ever be able to demote themselves or another owner-equivalent, and how to prevent the app from ending up with zero owners

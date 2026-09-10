@@ -50,12 +50,13 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ---
 
-## Phase 1 — Auth
+## Phase 1 — Auth & Roles
 
 ### 1.1 Database
 
 - [ ] Enable `postgis` extension (`CREATE EXTENSION IF NOT EXISTS postgis;`) — migration `0001_init_extensions.sql`
-- [ ] Write migration `0002_users.sql` for `users` table (id, email, password_hash, display_name, created_at)
+- [ ] Write migration `0002_users.sql` for `users` table: `id`, `email`, `password_hash`, `username`, `avatar_url`, `socials` (`jsonb`), `role` (`text`, `CHECK IN ('user','admin','owner')`, default `'user'`), `created_at`, `updated_at`
+- [ ] Add `set_updated_at()` trigger function + `BEFORE UPDATE` trigger on `users` so `updated_at` actually refreshes on edits
 - [ ] Run migration against local DB
 - [ ] Write `internal/users/model.go` struct matching the table
 
@@ -74,19 +75,21 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 ### 1.4 Register endpoint
 
 - [ ] `internal/auth/register.go` -> `Register` handler
-- [ ] Request struct (`internal/auth/dto.go`) with `binding` validation tags (email format, password min length)
-- [ ] Check email uniqueness before insert
+- [ ] Request struct (`internal/auth/dto.go`) with `binding` validation tags (email format, password min length, username min/max length)
+- [ ] Check email uniqueness before insert (lowercase the email first — Postgres `UNIQUE` is case-sensitive, so `Dave@x.com`/`dave@x.com` won't collide otherwise)
+- [ ] Check username uniqueness before insert
 - [ ] Hash password before storing
+- [ ] New users default to `role = 'user'` — never accept `role` from the request body
 - [ ] Return user (without password hash) + JWT on success
 - [ ] Route: `POST /auth/register`
 - [ ] Test in Postman: valid registration -> 201 + token
-- [ ] Test in Postman: duplicate email -> proper error, not a crash
+- [ ] Test in Postman: duplicate email (including different casing) -> proper error, not a crash
 - [ ] Test in Postman: invalid email format -> 400 with validation message
 
 ### 1.5 Login endpoint
 
 - [ ] `internal/auth/login.go` -> `Login` handler
-- [ ] Look up user by email, compare password hash
+- [ ] Look up user by (lowercased) email, compare password hash
 - [ ] Return JWT on success, generic error on failure (don't leak "email not found" vs "wrong password" — same message for both, security best practice)
 - [ ] Route: `POST /auth/login`
 - [ ] Test in Postman: correct credentials -> 200 + token
@@ -94,8 +97,8 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 1.6 Auth middleware
 
-- [ ] `internal/auth/middleware.go` — reads `Authorization: Bearer <token>` header, validates JWT, sets user ID in context
-- [ ] Write a temporary `GET /me` protected test route that returns the authenticated user's ID from context
+- [ ] `internal/auth/middleware.go` — reads `Authorization: Bearer <token>` header, validates JWT, sets user ID + role in context
+- [ ] Write a temporary `GET /me` protected test route that returns the authenticated user's ID + role from context
 - [ ] Test in Postman: `/me` with valid token -> 200
 - [ ] Test in Postman: `/me` with no token -> 401
 - [ ] Test in Postman: `/me` with garbage/expired token -> 401
@@ -106,20 +109,36 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] Route: `GET /users/:id` (public, no auth middleware)
 - [ ] Test in Postman: returns public profile fields only, never password_hash
 
-**Phase 1 done when:** Full register -> login -> access protected route flow works end-to-end in Postman, and invalid/missing token cases are properly rejected.
+### 1.8 Roles & permission middleware
+
+- [ ] `internal/auth/middleware.go` -> `RequireAdmin` (passes for `role = 'admin'` or `role = 'owner'`)
+- [ ] `internal/auth/middleware.go` -> `RequireOwner` (passes only for `role = 'owner'`)
+- [ ] Bootstrap the very first owner directly in the database — no endpoint should ever be able to grant `role = 'owner'`: `UPDATE users SET role = 'owner' WHERE email = '<you>';`
+- [ ] `internal/users/update_role.go` -> `UpdateRole` handler — body: `{ "role": "admin" | "user" }`
+- [ ] Route: `PATCH /users/:id/role` — protected by `RequireOwner`
+- [ ] Guard against removing the last owner (or decide this is out of scope for MVP and note it as a known risk)
+- [ ] Test in Postman: owner promotes a user to admin -> 200, role updated
+- [ ] Test in Postman: non-owner attempts the same -> 403
+- [ ] Test in Postman: invalid role value -> 400
+
+**Phase 1 done when:** Full register -> login -> access protected route flow works end-to-end in Postman, invalid/missing token cases are properly rejected, and the owner can promote a user to admin via the API.
 
 ---
 
-## Phase 2 — Pins & Categories
+## Phase 2 — Pins, Categories & Multi-Photo
 
-### 2.1 Categories + Pins migration
+### 2.1 Categories + Pins + Pin Photos migration
 
-- [ ] Write migration `0003_pins.sql` — `categories` table created first, then `pins` table referencing it (single migration file, since categories only exists to support pins)
+- [ ] Write migration `0003_pins.sql` — `categories` table created first, then `pins` (referencing `categories`, `category_id` **NOT NULL**, `ON DELETE RESTRICT`), then `pin_photos` (single migration file, since categories and pin_photos only exist to support pins)
+- [ ] `pins` gets an `is_hidden BOOLEAN NOT NULL DEFAULT false` column (used by moderation in Phase 2.5)
+- [ ] `pin_photos`: `id`, `pin_id` (`ON DELETE CASCADE`), `photo_url`, `position` (`SMALLINT`, default 0), `created_at`
 - [ ] Seed script inserting fixed category list (Food, Nature, Event, Nightlife, etc. — finalize the actual list)
 - [ ] `GIST` index on `pins.location`
 - [ ] Index on `pins.geohash`
 - [ ] Index on `pins.category_id`
-- [ ] `internal/pins/model.go` — Pin + Category structs
+- [ ] Index on `pin_photos.pin_id`
+- [ ] Unique index on `pin_photos (pin_id, position)`
+- [ ] `internal/pins/model.go` — Pin + Category + PinPhoto structs
 - [ ] Pick + install a geohash library (e.g. `github.com/mmcloughlin/geohash`)
 
 ### 2.2 Categories endpoint
@@ -131,44 +150,49 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 ### 2.3 Create pin endpoint
 
 - [ ] `internal/pins/upload_pin.go` -> `CreatePin` handler
-- [ ] Request struct (`internal/pins/dto.go`): lat, lng, caption (optional), category_id, photo_url (placeholder string for now — real upload comes in Phase 3)
+- [ ] Request struct (`internal/pins/dto.go`): lat, lng, caption (optional), category_id (required), photo_urls (placeholder list of strings for now — real multi-file upload comes in Phase 3)
+- [ ] Decide + validate a max photo count per pin (e.g. 5)
 - [ ] Validate lat/lng ranges, category_id exists
 - [ ] Compute geohash from lat/lng, store alongside `GEOGRAPHY(POINT)`
+- [ ] Insert the `pins` row and all `pin_photos` rows (with `position` = array index) in **one DB transaction**, so a pin can never end up with zero photos or orphaned photo rows
 - [ ] Apply auth middleware to this route
 - [ ] Route: `POST /pins`
-- [ ] Test in Postman: valid pin with token -> 201
+- [ ] Test in Postman: valid pin with token, multiple photo URLs -> 201, all photos attached
 - [ ] Test in Postman: no token -> 401
 - [ ] Test in Postman: invalid category_id -> 400
 - [ ] Test in Postman: lat/lng out of range -> 400
+- [ ] Test in Postman: photo count over the max -> 400
 
 ### 2.4 Get pins (viewport query)
 
 - [ ] `internal/pins/get_pin.go` -> `GetPins` handler
 - [ ] Parse `bbox` query param (4 floats)
-- [ ] PostGIS bounding-box query (`ST_MakeEnvelope` + `ST_Within`, or `&&` operator)
+- [ ] PostGIS bounding-box query (`ST_MakeEnvelope` + `ST_Within`, or `&&` operator), filtered to `is_hidden = false`
 - [ ] Optional `category` query param -> add `WHERE category_id = ...`
 - [ ] No auth middleware (public)
 - [ ] Route: `GET /pins?bbox=...&category=...`
-- [ ] Test in Postman: no filters -> returns all pins in bbox
+- [ ] Test in Postman: no filters -> returns all visible pins in bbox
 - [ ] Test in Postman: with category filter -> returns filtered subset
 - [ ] Test in Postman: bbox with no pins -> returns empty array, not an error
+- [ ] Test in Postman: a hidden pin never appears in results
 
 ### 2.5 Get single pin
 
-- [ ] `internal/pins/get_pin.go` -> `GetPin` handler
+- [ ] `internal/pins/get_pin.go` -> `GetPin` handler — joins `pin_photos` (ordered by `position`) and `users` (for `username`/`avatar_url`)
 - [ ] Route: `GET /pins/:id` (public)
-- [ ] Test in Postman: valid ID -> pin details
+- [ ] Test in Postman: valid ID -> pin details with an ordered photo array
 - [ ] Test in Postman: invalid/nonexistent ID -> 404
 
-**Phase 2 done when:** Can create pins (authenticated) and query them by viewport + category (unauthenticated), fully tested in Postman, no photo upload yet.
+**Phase 2 done when:** Can create pins with multiple photos (authenticated) and query them by viewport + category (unauthenticated), fully tested in Postman, no real photo upload yet.
 
 ---
 
-## Phase 2.5 — Reports (Content Moderation Baseline)
+## Phase 2.5 — Reports & Moderation
 
 ### 2.5.1 Reports table
 
-- [ ] Write migration `0004_reports.sql` (id, pin_id, reporter_id, reason, status, created_at, resolved_at)
+- [ ] Write migration `0004_reports.sql`: `id`, `pin_id` (`ON DELETE CASCADE`), `reporter_id` (`ON DELETE SET NULL`), `reason`, `status` (`NOT NULL`, `CHECK IN ('pending','reviewed','actioned')`, default `'pending'`), `resolved_by` (`ON DELETE SET NULL` — which admin/owner actioned it), `resolved_at`, `created_at`
+- [ ] Unique constraint `UNIQUE (pin_id, reporter_id)` — one report per user per pin
 - [ ] `internal/reports/model.go`
 
 ### 2.5.2 Create report endpoint
@@ -180,44 +204,48 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] Test in Postman: valid report with token -> 201
 - [ ] Test in Postman: no token -> 401
 - [ ] Test in Postman: report on nonexistent pin -> 404
+- [ ] Test in Postman: same user reports the same pin twice -> rejected (unique constraint)
 
-### 2.5.3 Report review (no admin role for MVP)
+### 2.5.3 Report review endpoint (admin role)
 
-- No `is_admin` flag, no admin user concept, and no `GET /reports` / `POST /reports/:id/resolve` HTTP endpoints for MVP — deliberately out of scope.
-- [ ] Review reports directly against the database (`psql`/DBeaver/TablePlus): `SELECT * FROM reports WHERE status = 'pending' ORDER BY created_at;`
-- [ ] Resolve a report by hand: `UPDATE reports SET status = 'reviewed', resolved_at = now() WHERE id = '<id>';`
-- [ ] (Optional) Save the above as a couple of saved queries/snippets in your DB client so this is a 10-second habit, not friction that causes you to skip it
-- [ ] Test: submit a report via Postman, confirm the row appears correctly in `reports` via direct query
+- [ ] `internal/reports/review_report.go` -> `ReviewReport` handler — body: `{ "action": "approve" | "dismiss" }`
+- [ ] **Approve** -> `pins.is_hidden = true`, `reports.status = 'actioned'`, set `resolved_by` (from JWT) + `resolved_at`
+- [ ] **Dismiss** -> `reports.status = 'reviewed'`, set `resolved_by` + `resolved_at`, pin untouched
+- [ ] Route: `PATCH /reports/:id` — protected by `RequireAdmin` (Phase 1.8)
+- [ ] Test in Postman: admin approves a report -> pin becomes hidden, disappears from `GET /pins`
+- [ ] Test in Postman: admin dismisses a report -> pin unaffected, report marked `reviewed`
+- [ ] Test in Postman: regular user attempts either action -> 403
+- [ ] (Fallback, keep for emergencies) Direct DB query still works if the API is ever down: `SELECT * FROM reports WHERE status = 'pending' ORDER BY created_at;`
 
-**Phase 2.5 done when:** A logged-in user can report a pin via `POST /pins/:id/report`, and the resulting row is visible and resolvable via a direct database query. This is the MVP's baseline content moderation mechanism — no automated scanning, no admin role/endpoints, just user reporting + manual review at the DB level. Revisit adding `is_admin` + review endpoints only if/when a second person needs to moderate.
+**Phase 2.5 done when:** A logged-in user can report a pin via `POST /pins/:id/report`, and an admin can review + action it in-app via `PATCH /reports/:id`, hiding the pin on approval. Direct database review remains available as a fallback, but is no longer the primary path now that roles exist (see Phase 1.8 for how the first admin/owner gets set up).
 
 ---
 
-## Phase 3 — Photo Upload
+## Phase 3 — Photo Upload (Multi-File)
 
 ### 3.1 Local storage handler
 
-- [ ] `storage/local.go` — save uploaded file to `./uploads/`, return local path/URL
+- [ ] `storage/local.go` — save an uploaded file to `./uploads/`, return local path/URL
 - [ ] Add static file serving: `r.Static("/uploads", "./uploads")`
 - [ ] Add `./uploads` to `.gitignore`
 
-### 3.2 Update create-pin flow
+### 3.2 Update create-pin flow for multiple files
 
-- [ ] Change `POST /pins` to accept `multipart/form-data` instead of pure JSON
-- [ ] Parse photo file from form data
-- [ ] Validate file type (jpg/png only) and size limit (e.g. max 10MB)
-- [ ] Save via storage handler, get back URL
-- [ ] Store URL in `photo_url` column
-- [ ] Test in Postman: form-data with real image + fields -> pin created, photo saved locally
-- [ ] Test in Postman: oversized file -> rejected with clear error
-- [ ] Test in Postman: wrong file type -> rejected
+- [ ] Change `POST /pins` to accept `multipart/form-data` instead of pure JSON, with photos sent under a repeated field name (e.g. `photos`)
+- [ ] In Gin, read the file slice via `form.File["photos"]` instead of a single `c.FormFile(...)`
+- [ ] Validate the whole batch up front: each file's type (jpg/png only) and size (e.g. max 10MB), and total count against the max from Phase 2.3 — reject the entire request if anything in the batch fails
+- [ ] Upload each file via the storage handler, collecting the resulting URLs in order
+- [ ] Insert the `pins` row and all `pin_photos` rows (URL + `position`) in one DB transaction (same transaction requirement as Phase 2.3, now with real files instead of placeholder URLs)
+- [ ] Test in Postman: form-data with 3 real images + fields -> pin created, all 3 photos saved locally with correct order
+- [ ] Test in Postman: one oversized file in the batch -> whole request rejected with clear error
+- [ ] Test in Postman: one wrong file type in the batch -> whole request rejected
 
 ### 3.3 (Optional but recommended) Image processing
 
 - [ ] `go get github.com/disintegration/imaging` (or similar)
 - [ ] Resize/compress uploaded images before saving (reduces storage + bandwidth later)
 
-**Phase 3 done when:** Real photo files can be uploaded via Postman form-data, saved locally, and retrieved via their stored URL.
+**Phase 3 done when:** Real photo files (one or more per pin) can be uploaded via Postman form-data, saved locally, and retrieved via their stored URLs in the correct order.
 
 ---
 
@@ -245,23 +273,28 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 ### 4.4 Pin detail view
 
 - [ ] Tap/click a marker -> open detail view (modal or side panel)
-- [ ] Display photo, caption, category, user, timestamp
+- [ ] Display photo carousel (multiple photos, ordered), caption, category, user, timestamp
 
 ### 4.5 Auth screens
 
 - [ ] Login page/form -> calls `POST /auth/login`, stores JWT (e.g. in memory + httpOnly cookie or secure storage)
 - [ ] Register page/form -> calls `POST /auth/register`
-- [ ] Global auth state (Zustand store): current user, token, `isLoggedIn`
+- [ ] Global auth state (Zustand store): current user, token, role, `isLoggedIn`
 
 ### 4.6 Create-pin flow
 
 - [ ] "+" button on map
 - [ ] If not logged in -> show login/register prompt instead of the form
-- [ ] If logged in -> open create-pin form (photo picker, category select, caption)
-- [ ] Submit -> `POST /pins` with auth header, multipart form data
+- [ ] If logged in -> open create-pin form (multi-photo picker, category select, caption)
+- [ ] Submit -> `POST /pins` with auth header, multipart form data (multiple files)
 - [ ] On success -> new pin appears on map immediately (optimistic update)
 
-**Phase 4 done when:** A real person (not just you testing Postman) can open the app, browse the map as a guest, and — after logging in — successfully post a pin with a photo that shows up. This is your first genuinely demoable version.
+### 4.7 (If applicable) Basic admin UI
+
+- [ ] Simple "Reports" screen, visible only when `role` is `admin`/`owner` — lists pending reports, approve/dismiss buttons calling `PATCH /reports/:id`
+- [ ] Simple "Manage roles" screen, visible only when `role` is `owner` — promote/demote a user via `PATCH /users/:id/role`
+
+**Phase 4 done when:** A real person (not just you testing Postman) can open the app, browse the map as a guest, and — after logging in — successfully post a pin with multiple photos that shows up. This is your first genuinely demoable version.
 
 ---
 
@@ -280,6 +313,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] `REDIS_URL` in `.env`
 - [ ] `internal/realtime/pubsub.go` — on pin creation, publish event to Redis channel keyed by geohash cell
 - [ ] Realtime hub subscribes to relevant Redis channels, receives cross-instance events
+- [ ] (Known gap, not required for MVP) Pin write and Redis publish are two separate steps today — a crash between them means a pin is saved but never broadcast. Revisit with a transactional outbox table + poller before relying on real-time delivery being 100% reliable.
 
 ### 5.3 Batching
 
@@ -310,7 +344,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] `go get github.com/aws/aws-sdk-go-v2/service/s3` (+ config packages)
 - [ ] `storage/r2.go` implementing the same interface as `storage/local.go`
 - [ ] Config flag/env var to switch storage backend (`STORAGE_DRIVER=local|r2`)
-- [ ] Test upload against R2 in a staging environment
+- [ ] Test upload against R2 in a staging environment (single and multi-photo pins)
 - [ ] Set up custom domain or Cloudflare CDN in front of the bucket
 - [ ] Confirm uploaded photos are publicly viewable via CDN URL
 
@@ -326,6 +360,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [ ] Set up managed Postgres (Supabase/Neon/RDS) — or migrate local DB schema to it
 - [ ] Set up managed Redis (Upstash/Redis Cloud)
 - [ ] Configure all production env vars/secrets on the host
+- [ ] Bootstrap the production owner directly in the managed DB (same manual step as Phase 1.8, done again in prod)
 
 ### 7.2 Frontend deploy
 
@@ -335,11 +370,11 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 ### 7.3 Pre-launch checklist
 
 - [ ] Privacy Policy + Terms of Service published and linked in-app
-- [ ] Content moderation: `reports` feature (Phase 2.5) is live and you have a routine for checking pending reports directly via database query, on a regular cadence
+- [ ] Content moderation: `reports` feature (Phase 2.5) is live, at least one admin exists (promoted by the owner), and pending reports are being reviewed in-app via `PATCH /reports/:id` on a regular cadence — direct DB query kept only as a fallback
 - [ ] Rate limiting on `POST /auth/register` and `POST /pins` (prevent spam/abuse)
 - [ ] Basic uptime monitoring (even a free tool like UptimeRobot)
 - [ ] Error tracking (Sentry free tier is enough to start)
-- [ ] Test the full flow end-to-end in production: register -> browse -> post -> see it live
+- [ ] Test the full flow end-to-end in production: register -> browse -> post (multi-photo) -> see it live -> report -> admin actions it
 
 **Phase 7 done when:** GoodSpot247 is live at a real public URL and you (and a few trusted testers) can use it fully.
 
@@ -355,7 +390,8 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 8.2 Streams table + endpoints
 
-- [ ] Write migration `0005_streams.sql`
+- [ ] Write migration `0005_streams.sql`: `id`, `pin_id`, `broadcaster_id`, `livekit_room_name` (`NOT NULL UNIQUE`), `status` (`NOT NULL`, `CHECK IN ('live','ended')`, default `'live'`), `peak_viewer_count` (`INT NOT NULL DEFAULT 0`), `started_at`, `ended_at`
+- [ ] Partial index: `CREATE INDEX streams_status_idx ON streams (status) WHERE status = 'live';`
 - [ ] `internal/streams/handler.go` -> `POST /streams` — creates LiveKit room, returns broadcaster token
 - [ ] `internal/streams/handler.go` -> `GET /streams/:id` — returns stream info + viewer token
 - [ ] `internal/streams/handler.go` -> `POST /streams/:id/end` — closes room, updates status
@@ -371,25 +407,25 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 ### 8.4 Viewer count
 
 - [ ] Configure LiveKit webhook endpoint on your backend
-- [ ] Handle participant join/leave webhooks -> update count -> push via WebSocket
+- [ ] Handle participant join/leave webhooks -> update live count -> push via WebSocket -> update `streams.peak_viewer_count` whenever the live count exceeds the stored peak
 
-**Phase 8 done when:** A user can go live from a pin, another user can watch + chat in real time, and the stream ends cleanly.
+**Phase 8 done when:** A user can go live from a pin, another user can watch + chat in real time, viewer counts (including the peak) are tracked, and the stream ends cleanly.
 
 ---
 
 ## Quick Reference — Checklist Count by Phase
 
-| Phase                           | Approx. checklist items |
-| ------------------------------- | ----------------------- |
-| 0. Setup                        | 15                      |
-| 1. Auth (+ public user profile) | 23                      |
-| 2. Pins & Categories            | 20                      |
-| 2.5 Reports                     | 6                       |
-| 3. Photo Upload                 | 10                      |
-| 4. Frontend Map View            | 20                      |
-| 5. Real-Time Layer              | 15                      |
-| 6. Storage Swap                 | 7                       |
-| 7. Deploy                       | 12                      |
-| 8. Livestreaming                | 15                      |
+| Phase                            | Approx. checklist items |
+| --------------------------------- | ------------------------ |
+| 0. Setup                         | 15                       |
+| 1. Auth & Roles                  | 30                       |
+| 2. Pins, Categories & Multi-Photo | 26                       |
+| 2.5 Reports & Moderation         | 14                       |
+| 3. Photo Upload (Multi-File)     | 10                       |
+| 4. Frontend Map View             | 23                       |
+| 5. Real-Time Layer               | 16                       |
+| 6. Storage Swap                  | 7                        |
+| 7. Deploy                        | 13                       |
+| 8. Livestreaming                 | 16                       |
 
 Work top to bottom, phase by phase. Don't skip ahead to Phase 5+ until Phase 4's exit criteria genuinely passes — that's the point where you have something real to show and test.

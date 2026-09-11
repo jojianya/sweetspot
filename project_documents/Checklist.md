@@ -256,10 +256,10 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 This app is photo-heavy and map-based — unprocessed multi-photo uploads at up to 10MB each will hurt storage costs and load times fast once there's real traffic. Do this now, before Phase 4 puts real images in front of real users, not as a later optimization pass.
 
-- [ ] `go get github.com/disintegration/imaging` (or similar)
-- [ ] Resize to a max dimension (e.g. 1600px) and compress uploaded images before saving
-- [ ] Generate a thumbnail size alongside the full size for map/list views, if feasible now (otherwise note as a Phase 6 follow-up once on R2/CDN)
-- [ ] Test in Postman: uploaded image is resized/compressed on disk, not stored at original size
+- [x] `go get github.com/disintegration/imaging` (or similar) — done via **bimg (libvips)**; `go.mod` dependency + Docker toolchain
+- [x] Resize to a max dimension (e.g. 1600px) and compress uploaded images before saving — done: downscale ≤1600px, WebP q80 (`server/internal/pins/process.go`)
+- [x] Generate a thumbnail size alongside the full size for map/list views, if feasible now (otherwise note as a Phase 6 follow-up once on R2/CDN) — done: 400×400 square WebP thumbnail per photo (`thumbnail_url` on `pin_photos`, migration `0006`); `GET /pins` `cover_url` now serves the thumbnail
+- [x] Test in Postman: uploaded image is resized/compressed on disk, not stored at original size
 
 **Phase 3 done when:** Real photo files (one or more per pin) can be uploaded via Postman form-data, resized/compressed, saved locally, and retrieved via their stored URLs in the correct order.
 

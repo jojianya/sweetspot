@@ -3,7 +3,6 @@ package pins
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,13 +29,14 @@ func (r *Repository) CategoryExists(ctx context.Context, id int) (bool, error) {
 }
 
 type NewPin struct {
-	UserID     string
-	Lat        float64
-	Lng        float64
-	Caption    *string
-	CategoryID int
-	PhotoURLs  []string
-	Geohash    string
+	UserID        string
+	Lat           float64
+	Lng           float64
+	Caption       *string
+	CategoryID    int
+	PhotoURLs     []string
+	ThumbnailURLs []string
+	Geohash       string
 }
 
 func (r *Repository) CreatePin(ctx context.Context, pin NewPin) (Pin, error) {
@@ -58,12 +58,12 @@ func (r *Repository) CreatePin(ctx context.Context, pin NewPin) (Pin, error) {
 		return Pin{}, err
 	}
 
-	for i, url := range pin.PhotoURLs {
+	for i := range pin.PhotoURLs {
 		position := int16(i)
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO pin_photos (pin_id, photo_url, position)
-			VALUES ($1, $2, $3)
-		`, p.ID, url, position); err != nil {
+			INSERT INTO pin_photos (pin_id, photo_url, thumbnail_url, position)
+			VALUES ($1, $2, $3, $4)
+		`, p.ID, pin.PhotoURLs[i], pin.ThumbnailURLs[i], position); err != nil {
 			return Pin{}, err
 		}
 	}
@@ -125,7 +125,7 @@ func (r *Repository) GetPin(ctx context.Context, id string) (PinDetail, error) {
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, pin_id, photo_url, position, created_at
+		SELECT id, pin_id, photo_url, thumbnail_url, position, created_at
 		FROM pin_photos
 		WHERE pin_id = $1
 		ORDER BY position
@@ -138,7 +138,7 @@ func (r *Repository) GetPin(ctx context.Context, id string) (PinDetail, error) {
 	d.Photos = []PinPhoto{}
 	for rows.Next() {
 		var ph PinPhoto
-		if err := rows.Scan(&ph.ID, &ph.PinID, &ph.PhotoURL, &ph.Position, &ph.CreatedAt); err != nil {
+		if err := rows.Scan(&ph.ID, &ph.PinID, &ph.PhotoURL, &ph.ThumbnailURL, &ph.Position, &ph.CreatedAt); err != nil {
 			return PinDetail{}, err
 		}
 		d.Photos = append(d.Photos, ph)
@@ -157,28 +157,31 @@ type PinListEntry struct {
 }
 
 func (r *Repository) ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error) {
+	args := []any{bbox[1], bbox[0], bbox[3], bbox[2]}
+	if categoryID != nil {
+		args = append(args, *categoryID)
+	} else {
+		args = append(args, nil)
+	}
+	args = append(args, limit)
+
 	query := `
 		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
-		       COALESCE(pp.photo_url, ''), u.username
+		       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username
 		FROM pins p
 		LEFT JOIN LATERAL (
-			SELECT photo_url FROM pin_photos
+			SELECT photo_url, thumbnail_url FROM pin_photos
 			WHERE pin_id = p.id
 			ORDER BY position
 			LIMIT 1
 		) pp ON true
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE p.is_hidden = false
+		  AND ($5::int IS NULL OR p.category_id = $5)
 		  AND ST_DWithin(p.location, ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography, 0)
+		ORDER BY p.created_at DESC
+		LIMIT $6
 	`
-	args := []any{bbox[1], bbox[0], bbox[3], bbox[2]}
-
-	if categoryID != nil {
-		args = append(args, *categoryID)
-		query += fmt.Sprintf(" AND p.category_id = $%d", len(args))
-	}
-
-	query += fmt.Sprintf(" ORDER BY p.created_at DESC LIMIT %d", limit)
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {

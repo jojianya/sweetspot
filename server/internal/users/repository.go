@@ -19,14 +19,12 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const userColumns = "id, email, username, avatar_url, socials, role, created_at, updated_at"
-
 func (r *Repository) Create(ctx context.Context, email, passwordHash, username string) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO users (email, password_hash, username)
 		VALUES ($1, $2, $3)
-		RETURNING `+userColumns+`
+		RETURNING id, email, username, avatar_url, socials, role, created_at, updated_at
 	`, strings.ToLower(email), passwordHash, username).Scan(
 		&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt,
 	)
@@ -39,7 +37,8 @@ func (r *Repository) Create(ctx context.Context, email, passwordHash, username s
 func (r *Repository) GetByEmail(ctx context.Context, email string) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
-		SELECT `+userColumns+`, password_hash FROM users WHERE email = $1
+		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at, password_hash
+		FROM users WHERE email = $1
 	`, strings.ToLower(email)).Scan(
 		&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt, &u.PasswordHash,
 	)
@@ -55,7 +54,8 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (User, error)
 func (r *Repository) GetByUsername(ctx context.Context, username string) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
-		SELECT `+userColumns+` FROM users WHERE username = $1
+		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at
+		FROM users WHERE username = $1
 	`, username).Scan(
 		&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt,
 	)
@@ -71,7 +71,8 @@ func (r *Repository) GetByUsername(ctx context.Context, username string) (User, 
 func (r *Repository) GetByID(ctx context.Context, id string) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
-		SELECT `+userColumns+` FROM users WHERE id = $1
+		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at
+		FROM users WHERE id = $1
 	`, id).Scan(
 		&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt,
 	)
@@ -97,7 +98,7 @@ func (r *Repository) UpdateRole(ctx context.Context, id, role string) (User, err
 	var u User
 	err := r.pool.QueryRow(ctx, `
 		UPDATE users SET role = $2 WHERE id = $1
-		RETURNING `+userColumns+`
+		RETURNING id, email, username, avatar_url, socials, role, created_at, updated_at
 	`, id, role).Scan(
 		&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt,
 	)

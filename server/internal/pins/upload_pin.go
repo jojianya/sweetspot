@@ -14,6 +14,12 @@ import (
 
 const maxPhotoSize = 10 << 20
 
+type validatedFile struct {
+	data  []byte
+	thumb []byte
+	ext   string
+}
+
 func CreatePin(repo *Repository, store *storage.Local) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		form, err := c.MultipartForm()
@@ -44,8 +50,8 @@ func CreatePin(repo *Repository, store *storage.Local) gin.HandlerFunc {
 		}
 
 		var caption *string
-		if c := c.PostForm("caption"); c != "" {
-			caption = &c
+		if v := c.PostForm("caption"); v != "" {
+			caption = &v
 		}
 
 		files := form.File["photos"]
@@ -58,8 +64,8 @@ func CreatePin(repo *Repository, store *storage.Local) gin.HandlerFunc {
 			return
 		}
 
-		photoURLs := make([]string, 0, len(files))
-		for _, fh := range files {
+		validated := make([]validatedFile, 0, len(files))
+		for i, fh := range files {
 			if fh.Size > maxPhotoSize {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "one or more photos exceed 10MB"})
 				return
@@ -77,18 +83,18 @@ func CreatePin(repo *Repository, store *storage.Local) gin.HandlerFunc {
 				return
 			}
 
-			ext, err := validateImage(data)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			if err := validateImage(data); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "photo " + strconv.Itoa(i+1) + ": " + err.Error()})
 				return
 			}
 
-			url, err := store.Save(data, ext)
+			proc, err := processImage(data)
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save uploaded file"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": "photo " + strconv.Itoa(i+1) + ": " + err.Error()})
 				return
 			}
-			photoURLs = append(photoURLs, url)
+
+			validated = append(validated, validatedFile{data: proc.full, thumb: proc.thumb, ext: "webp"})
 		}
 
 		exists, err := repo.CategoryExists(c.Request.Context(), categoryID)
@@ -101,14 +107,32 @@ func CreatePin(repo *Repository, store *storage.Local) gin.HandlerFunc {
 			return
 		}
 
+		photoURLs := make([]string, 0, len(validated))
+		thumbURLs := make([]string, 0, len(validated))
+		for _, vf := range validated {
+			url, err := store.Save(vf.data, vf.ext)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save uploaded file"})
+				return
+			}
+			thumbURL, err := store.Save(vf.thumb, vf.ext)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save uploaded file"})
+				return
+			}
+			photoURLs = append(photoURLs, url)
+			thumbURLs = append(thumbURLs, thumbURL)
+		}
+
 		pin, err := repo.CreatePin(c.Request.Context(), NewPin{
-			UserID:     auth.GetUserID(c),
-			Lat:        lat,
-			Lng:        lng,
-			Caption:    caption,
-			CategoryID: categoryID,
-			PhotoURLs:  photoURLs,
-			Geohash:    geohash.Encode(lat, lng),
+			UserID:        auth.GetUserID(c),
+			Lat:           lat,
+			Lng:           lng,
+			Caption:       caption,
+			CategoryID:    categoryID,
+			PhotoURLs:     photoURLs,
+			ThumbnailURLs: thumbURLs,
+			Geohash:       geohash.Encode(lat, lng),
 		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -119,13 +143,11 @@ func CreatePin(repo *Repository, store *storage.Local) gin.HandlerFunc {
 	}
 }
 
-func validateImage(data []byte) (string, error) {
+func validateImage(data []byte) error {
 	switch http.DetectContentType(data) {
-	case "image/jpeg":
-		return "jpg", nil
-	case "image/png":
-		return "png", nil
+	case "image/jpeg", "image/png":
+		return nil
 	default:
-		return "", errors.New("only jpg and png images are allowed")
+		return errors.New("only jpg and png images are allowed")
 	}
 }

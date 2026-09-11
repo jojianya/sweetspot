@@ -23,9 +23,10 @@ type Pin struct {
 }
 
 type PinPhoto struct {
-	ID        pgtype.UUID `json:"id"`
-	PinID     pgtype.UUID `json:"pin_id"`
-	PhotoURL  string      `json:"photo_url"`
-	Position  int16       `json:"position"`
-	CreatedAt time.Time   `json:"created_at"`
+	ID           pgtype.UUID `json:"id"`
+	PinID        pgtype.UUID `json:"pin_id"`
+	PhotoURL     string      `json:"photo_url"`
+	ThumbnailURL string      `json:"thumbnail_url"`
+	Position     int16       `json:"position"`
+	CreatedAt    time.Time   `json:"created_at"`
 }

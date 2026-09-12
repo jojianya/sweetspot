@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { createPin, type CreatedPin } from "@/lib/api";
-import type { NewPinPhoto } from "@/lib/types";
+import { createPin } from "@/lib/api";
+import type { CreatedPin, NewPinPhoto } from "@/lib/types";
 import { useAuth } from "@/store/auth";
 
 const MAX_PHOTOS = 5;

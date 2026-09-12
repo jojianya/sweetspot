@@ -3,31 +3,20 @@
 import { useEffect, useRef } from "react";
 import {
   Map as MapLibreMap,
+  Marker,
   setWorkerUrl,
   type GeoJSONSource,
-  type LngLatBounds,
   type Map as MaplibreMap,
+  type Marker as MaplibreMarker,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { PinListEntry } from "@/lib/types";
-import { parsePoint } from "@/lib/format";
+import { boundsToValidBbox, parsePoint } from "@/lib/utils";
+import { useGeolocation } from "@/hooks/useGeolocation";
 
 const MAP_STYLE = `https://api.maptiler.com/maps/toner-lite/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_API_KEY}`;
 
 setWorkerUrl("/maplibre-gl-worker.js");
-
-function boundsToValidBbox(b: LngLatBounds): [number, number, number, number] {
-  const south = Math.max(-90, Math.min(90, b.getSouth()));
-  const north = Math.max(-90, Math.min(90, b.getNorth()));
-  const west = b.getWest();
-  const east = b.getEast();
-  if (east - west >= 360) return [south, -180, north, 180];
-  const wrap = (lng: number) => (((lng % 360) + 540) % 360) - 180;
-  const lngMin = wrap(west);
-  const lngMax = wrap(east);
-  if (lngMax < lngMin) return [south, -180, north, 180];
-  return [south, lngMin, north, lngMax];
-}
 
 interface MapViewProps {
   pins: PinListEntry[];
@@ -60,6 +49,8 @@ export default function MapView({
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
+  const userMarkerRef = useRef<MaplibreMarker | null>(null);
+  const { position } = useGeolocation();
 
   const onBoundsRef = useRef(onBoundsChange);
   const onSelectRef = useRef(onSelectPin);
@@ -73,8 +64,10 @@ export default function MapView({
     const map = new MapLibreMap({
       container: containerRef.current!,
       style: MAP_STYLE,
-      center: [78.4867, 17.385],
+      // center: [78.4867, 17.385],
       zoom: 10,
+      minZoom: 5, // don't let users zoom out past city level
+      maxZoom: 18,
     });
     mapRef.current = map;
 
@@ -124,6 +117,28 @@ export default function MapView({
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!position || !map) return;
+    map.jumpTo({
+      center: [position.lng, position.lat],
+      zoom: Math.max(map.getZoom(), 12),
+    });
+    if (userMarkerRef.current) {
+      userMarkerRef.current.setLngLat([position.lng, position.lat]);
+      return;
+    }
+    const el = document.createElement("div");
+    el.className = "h-4 w-4 rounded-full bg-blue-500 shadow-md ring-4 ring-white";
+    userMarkerRef.current = new Marker({ element: el })
+      .setLngLat([position.lng, position.lat])
+      .addTo(map);
+    return () => {
+      userMarkerRef.current?.remove();
+      userMarkerRef.current = null;
+    };
+  }, [position]);
 
   useEffect(() => {
     const map = mapRef.current;

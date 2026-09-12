@@ -1,8 +1,3 @@
-export interface Category {
-  id: number;
-  name: string;
-}
-
 export interface PinPhoto {
   id: string;
   pin_id: string;
@@ -46,20 +41,15 @@ export interface NewPinPhoto {
   position: number;
 }
 
-export interface User {
+export interface CreatedPin {
   id: string;
-  email: string;
-  username: string;
-  avatar_url: string | null;
-  socials: Record<string, unknown>;
-  role: string;
+  user_id: string;
+  location: string;
+  geohash: string;
+  caption: string | null;
+  category_id: number;
+  is_hidden: boolean;
   created_at: string;
-  updated_at: string;
-}
-
-export interface AuthResponse {
-  user: User;
-  token: string;
 }
 
 export interface Bbox {

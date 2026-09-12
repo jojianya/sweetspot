@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { PinDetail } from "@/lib/types";
-import { formatTime } from "@/lib/format";
+import { formatTime } from "@/lib/utils";
 
 interface PinDetailPanelProps {
   pin: PinDetail;

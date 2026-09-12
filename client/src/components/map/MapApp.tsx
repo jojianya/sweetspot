@@ -1,18 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import MapView from "@/components/MapView";
-import CategoryBar from "@/components/CategoryBar";
-import PinDetailPanel from "@/components/PinDetailPanel";
-import CreatePinButton from "@/components/CreatePinButton";
-import {
-  fetchCategories,
-  fetchPin,
-  fetchPins,
-  type CreatedPin,
-} from "@/lib/api";
-import type { NewPinPhoto, PinDetail, PinListEntry } from "@/lib/types";
-import { parsePoint } from "@/lib/format";
+import MapView from "./MapView";
+import CategoryBar from "@/components/pins/CategoryBar";
+import PinDetailPanel from "@/components/pins/PinDetailPanel";
+import CreatePinButton from "@/components/pins/CreatePinButton";
+import { fetchCategories, fetchPin, fetchPins } from "@/lib/api";
+import type { CreatedPin, NewPinPhoto, PinDetail, PinListEntry } from "@/lib/types";
+import { parsePoint } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
 export default function MapApp() {

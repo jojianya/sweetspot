@@ -139,7 +139,16 @@ func CreatePin(repo *Repository, store *storage.Local) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusCreated, gin.H{"pin": pin})
+		photos := make([]gin.H, 0, len(photoURLs))
+		for i := range photoURLs {
+			photos = append(photos, gin.H{
+				"photo_url":     photoURLs[i],
+				"thumbnail_url": thumbURLs[i],
+				"position":      i,
+			})
+		}
+
+		c.JSON(http.StatusCreated, gin.H{"pin": pin, "photos": photos})
 	}
 }
 

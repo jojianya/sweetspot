@@ -24,9 +24,10 @@ Authorization: Bearer <token>
 | PATCH  | `/users/:id/role`       | Bearer token + **owner**          | Promote/demote user role                 |
 | GET    | `/categories`           | none                              | List pin categories                      |
 | GET    | `/pins`                 | none                              | List pins in a bounding box              |
-| GET    | `/pins/:id`             | none                              | Pin detail with ordered photos           |
+| GET    | `/pins/:id`             | none (owner/admin for hidden)     | Pin detail with ordered photos           |
 | POST   | `/pins`                 | Bearer token (rate-limited)       | Create a pin with photo uploads          |
 | POST   | `/pins/:id/report`      | Bearer token                      | Report a pin                             |
+| GET    | `/reports`              | Bearer token + **admin**          | List reports (filters + pagination)      |
 | PATCH  | `/reports/:id`          | Bearer token + **admin**          | Approve or dismiss a report              |
 | GET    | `/uploads/*`            | none                              | Static photo files                       |
 
@@ -155,17 +156,18 @@ Responses:
 
 Request (JSON):
 
-| Field | Type   | Required | Constraints      |
-| ----- | ------ | -------- | ---------------- |
-| role  | string | yes      | `user` or `admin`|
+| Field | Type   | Required | Constraints                      |
+| ----- | ------ | -------- | -------------------------------- |
+| role  | string | yes      | `user`, `admin`, or `owner`      |
 
-> Note: `owner` cannot be assigned via API. Last remaining owner cannot be
-> demoted (guard: `cannot demote the last owner`).
+> `owner` can only be assigned by an existing owner (guarded by `RequireOwner`).
+> An owner cannot change their own role (`cannot change your own role`). The last
+> remaining owner cannot be demoted by anyone (guard: `cannot demote the last owner`).
 
 Responses:
 
 - `200 OK` — updated `PublicUser`
-- `400 Bad Request` — invalid role or `cannot demote the last owner`
+- `400 Bad Request` — invalid role, `cannot change your own role`, or `cannot demote the last owner`
 - `401 Unauthorized` — missing/invalid token
 - `403 Forbidden` — `admin access required` style guard; `owner access required`
 - `404 Not Found` — `user not found`
@@ -235,7 +237,9 @@ Responses:
 
 ### GET `/pins/:id`
 
-Pin detail with author + category + ordered `photos` array. Public.
+Pin detail with author + category + ordered `photos` array. Public, except
+hidden pins (`is_hidden = true`, e.g. via an approved report): hidden pins
+return `404` for everyone except the pin owner and `admin`/`owner` roles.
 
 Responses:
 
@@ -300,7 +304,7 @@ curl -X POST http://localhost:8081/pins \
 
 Responses:
 
-- `201 Created` — pin (without photos array)
+- `201 Created` — pin (without photos array) plus a `photos` array (URLs + position) so the client can render immediately:
   ```json
   {
     "pin": {
@@ -312,7 +316,10 @@ Responses:
       "category_id": 1,
       "is_hidden": false,
       "created_at": "2026-09-10T14:13:19.321721Z"
-    }
+    },
+    "photos": [
+      { "photo_url": "http://localhost:8081/uploads/ab.webp", "thumbnail_url": "http://localhost:8081/uploads/ab_thumb.webp", "position": 0 }
+    ]
   }
   ```
 - `400 Bad Request` — not multipart, missing/invalid `lat`/`lng`/`category_id`,
@@ -400,6 +407,50 @@ Responses:
 - `403 Forbidden` — non-admin caller
 - `404 Not Found` — `report not found`
 - `409 Conflict` — `report already resolved`
+
+---
+
+### GET `/reports`
+
+**Auth: Bearer token + admin role** (admins and owners). List reports, newest
+first, with optional status filter and pagination.
+
+Query parameters:
+
+| Param  | Type    | Required | Description                                   |
+| ------ | ------- | -------- | --------------------------------------------- |
+| status | string  | no       | `pending`, `reviewed`, or `actioned`          |
+| limit  | integer | no       | 1–200, default 50                             |
+| offset | integer | no       | ≥ 0, default 0                                |
+
+Each entry includes the reporter's username and the reported pin's caption
+(via LEFT JOIN; null-safe when the user/pin is deleted):
+
+```json
+{
+  "reports": [
+    {
+      "id": "79c5087f-1fc3-4922-a39b-c0191e8f54da",
+      "pin_id": "c31a699c-b053-4750-9c0b-0bf22bcbcbdf",
+      "reporter_id": "966e7776-82b3-4096-b310-d41cae451a9b",
+      "reason": "Inappropriate content",
+      "status": "pending",
+      "resolved_by": null,
+      "resolved_at": null,
+      "created_at": "2026-09-10T14:55:56.360799Z",
+      "reporter_username": "cooluser",
+      "pin_caption": "Best food spot"
+    }
+  ]
+}
+```
+
+Responses:
+
+- `200 OK` — array of reports
+- `400 Bad Request` — invalid `status`/`limit`/`offset`
+- `401 Unauthorized` — missing/invalid token
+- `403 Forbidden` — non-admin caller
 
 ---
 

@@ -7,3 +7,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# Project conventions
+
+- House rule: never use `dangerouslySetInnerHTML` (or any raw-HTML rendering) on user-generated content — captions, usernames, socials JSON. React escapes by default; only breaks if you explicitly opt out of it. Just don't.

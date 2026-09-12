@@ -24,5 +24,5 @@ func (u *User) ToPublic() PublicUser {
 }
 
 type UpdateRoleRequest struct {
-	Role string `json:"role" binding:"required,oneof=user admin"`
+	Role string `json:"role" binding:"required,oneof=user admin owner"`
 }

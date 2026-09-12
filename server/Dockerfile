@@ -10,7 +10,6 @@ FROM alpine:3.20
 WORKDIR /app
 RUN apk add --no-cache vips
 COPY --from=builder /app/server .
-COPY --from=builder /app/.env .
 COPY --from=builder /app/migrations ./migrations
 EXPOSE 8080
 CMD ["./server"]

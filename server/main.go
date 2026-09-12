@@ -12,10 +12,12 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/auth"
 	"github.com/jojianya/sweetspot247-backend/internal/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/reports"
+	"github.com/jojianya/sweetspot247-backend/internal/session"
 	"github.com/jojianya/sweetspot247-backend/internal/storage"
 	"github.com/jojianya/sweetspot247-backend/internal/users"
 	"github.com/jojianya/sweetspot247-backend/pkg/logger"
 	"github.com/jojianya/sweetspot247-backend/pkg/ratelimit"
+	"github.com/jojianya/sweetspot247-backend/pkg/validid"
 )
 
 func main() {
@@ -63,6 +65,15 @@ func main() {
 
 	userRepo := users.NewRepository(pool)
 
+	sessions := session.New(cfg.RedisAddr)
+	ctxBG, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := sessions.Ping(ctxBG); err != nil {
+		lg.Warn("redis unreachable, logout disable", "addr", cfg.RedisAddr, "error", err.Error())
+	} else {
+		lg.Info("redis connected", "addr", cfg.RedisAddr)
+	}
+
 	authHandler := auth.NewRegisterHandler(userRepo, cfg.JWTSecret)
 	registerLimit := ratelimit.New(5, time.Minute)
 	r.POST("/auth/register", registerLimit.Middleware(), authHandler.Handle)
@@ -75,23 +86,26 @@ func main() {
 	loginIPLimit := ratelimit.New(20, time.Minute)
 	r.POST("/auth/login", loginIPLimit.Middleware(), loginHandler.Handle)
 
-	r.GET("/me", auth.AuthRequired(cfg.JWTSecret), auth.Me())
+	r.POST("/auth/logout", auth.AuthRequired(cfg.JWTSecret, sessions), auth.Logout(sessions))
 
-	r.GET("/users/:id", users.GetUser(userRepo))
+	r.GET("/me", auth.AuthRequired(cfg.JWTSecret, sessions), auth.Me(userRepo))
+
+	r.GET("/users/:id", validid.Middleware(), users.GetUser(userRepo))
 
 	pinRepo := pins.NewRepository(pool)
 	store := storage.NewLocal("./uploads", cfg.StorageBase)
 	r.GET("/categories", pins.ListCategories(pinRepo))
 	r.GET("/pins", pins.GetPins(pinRepo))
-	r.GET("/pins/:id", pins.GetPin(pinRepo))
+	r.GET("/pins/:id", validid.Middleware(), auth.OptionalAuth(cfg.JWTSecret, sessions), pins.GetPin(pinRepo, userRepo))
 
 	reportRepo := reports.NewRepository(pool)
-	r.POST("/pins/:id/report", auth.AuthRequired(cfg.JWTSecret), reports.CreateReport(reportRepo))
-	r.PATCH("/reports/:id", auth.AuthRequired(cfg.JWTSecret), auth.RequireAdmin(userRepo), reports.ReviewReport(reportRepo))
+	r.POST("/pins/:id/report", auth.AuthRequired(cfg.JWTSecret, sessions), validid.Middleware(), reports.CreateReport(reportRepo))
+	r.GET("/reports", auth.AuthRequired(cfg.JWTSecret, sessions), auth.RequireAdmin(userRepo), reports.ListReports(reportRepo))
+	r.PATCH("/reports/:id", auth.AuthRequired(cfg.JWTSecret, sessions), auth.RequireAdmin(userRepo), validid.Middleware(), reports.ReviewReport(reportRepo))
 	pinCreateLimit := ratelimit.New(10, time.Minute)
-	r.POST("/pins", pinCreateLimit.Middleware(), auth.AuthRequired(cfg.JWTSecret), pins.CreatePin(pinRepo, store))
+	r.POST("/pins", pinCreateLimit.Middleware(), auth.AuthRequired(cfg.JWTSecret, sessions), pins.CreatePin(pinRepo, store))
 
-	r.PATCH("/users/:id/role", auth.AuthRequired(cfg.JWTSecret), auth.RequireOwner(userRepo), users.UpdateRole(userRepo))
+	r.PATCH("/users/:id/role", auth.AuthRequired(cfg.JWTSecret, sessions), auth.RequireOwner(userRepo), validid.Middleware(), users.UpdateRole(userRepo, auth.GetUserID))
 
 	lg.Info("server starting", "port", cfg.Port, "log_level", cfg.LogLevel, "log_format", cfg.LogFormat)
 	if err := r.Run(":" + cfg.Port); err != nil {

@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func UpdateRole(repo *Repository) gin.HandlerFunc {
+func UpdateRole(repo *Repository, currentUserID func(*gin.Context) string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req UpdateRoleRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -16,6 +16,11 @@ func UpdateRole(repo *Repository) gin.HandlerFunc {
 		}
 
 		id := c.Param("id")
+
+		if actor := currentUserID(c); actor != "" && actor == id {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot change your own role"})
+			return
+		}
 
 		target, err := repo.GetByID(c.Request.Context(), id)
 		if err != nil {

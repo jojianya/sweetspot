@@ -48,6 +48,7 @@ services:
       REDIS_ADDR: redis:6379
       JWT_SECRET: change_me_to_a_long_random_secret
       STORAGE_BACKEND: local
+      STORAGE_BASE_URL: http://localhost:8081
     depends_on:
       postgres:
         condition: service_healthy

@@ -19,6 +19,7 @@ type Config struct {
 	LogFormat   string
 	JWTSecret   string
 	StorageBase string
+	RedisAddr   string
 }
 
 func Load() *Config {
@@ -37,6 +38,7 @@ func Load() *Config {
 		LogFormat:   getEnv("LOG_FORMAT", "text"),
 		JWTSecret:   getEnv("JWT_SECRET", ""),
 		StorageBase: getEnv("STORAGE_BASE_URL", ""),
+		RedisAddr:   getEnv("REDIS_ADDR", "localhost:6379"),
 	}
 }
 

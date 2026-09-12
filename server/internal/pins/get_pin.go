@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jojianya/sweetspot247-backend/internal/auth"
+	"github.com/jojianya/sweetspot247-backend/internal/users"
 )
 
 const pinListDefaultLimit = 200
@@ -45,6 +47,18 @@ func GetPins(repo *Repository) gin.HandlerFunc {
 			}
 			bbox[i] = v
 		}
+		if bbox[0] < -90 || bbox[0] > 90 || bbox[2] < -90 || bbox[2] > 90 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "latitudes must be between -90 and 90"})
+			return
+		}
+		if bbox[1] < -180 || bbox[1] > 180 || bbox[3] < -180 || bbox[3] > 180 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "longitudes must be between -180 and 180"})
+			return
+		}
+		if bbox[0] > bbox[2] || bbox[1] > bbox[3] {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bbox min must not exceed max (minLat,minLng,maxLat,maxLng)"})
+			return
+		}
 
 		var categoryID *int
 		if catStr := c.Query("category"); catStr != "" {
@@ -54,6 +68,18 @@ func GetPins(repo *Repository) gin.HandlerFunc {
 				return
 			}
 			categoryID = &id
+		}
+
+		if categoryID != nil {
+			exists, err := repo.CategoryExists(c.Request.Context(), *categoryID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+				return
+			}
+			if !exists {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "category not found"})
+				return
+			}
 		}
 
 		limit := pinListDefaultLimit
@@ -76,7 +102,7 @@ func GetPins(repo *Repository) gin.HandlerFunc {
 	}
 }
 
-func GetPin(repo *Repository) gin.HandlerFunc {
+func GetPin(repo *Repository, users *users.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		pin, err := repo.GetPin(c.Request.Context(), c.Param("id"))
 		if err != nil {
@@ -88,6 +114,27 @@ func GetPin(repo *Repository) gin.HandlerFunc {
 			return
 		}
 
+		if pin.IsHidden && !canViewHidden(c, users, pin) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "pin not found"})
+			return
+		}
+
 		c.JSON(http.StatusOK, gin.H{"pin": pin})
 	}
+}
+
+func canViewHidden(c *gin.Context, repo *users.Repository, pin PinDetail) bool {
+	viewerID := auth.GetUserID(c)
+	if viewerID == "" {
+		return false
+	}
+	if viewerID == pin.UserID.String() {
+		return true
+	}
+
+	viewer, err := repo.GetByID(c.Request.Context(), viewerID)
+	if err != nil {
+		return false
+	}
+	return viewer.Role == "admin" || viewer.Role == "owner"
 }

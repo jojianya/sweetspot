@@ -96,3 +96,42 @@ func (r *Repository) ReviewReport(ctx context.Context, reportID, action, resolve
 	}
 	return rep, nil
 }
+
+type ReportListEntry struct {
+	Report
+	ReporterUsername *string `json:"reporter_username"`
+	PinCaption       *string `json:"pin_caption"`
+}
+
+func (r *Repository) ListReports(ctx context.Context, status *string, limit, offset int) ([]ReportListEntry, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT r.id, r.pin_id, r.reporter_id, r.reason, r.status, r.resolved_by, r.resolved_at, r.created_at,
+		       u.username, p.caption
+		FROM reports r
+		LEFT JOIN users u ON u.id = r.reporter_id
+		LEFT JOIN pins p ON p.id = r.pin_id
+		WHERE ($1::text IS NULL OR r.status = $1)
+		ORDER BY r.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, status, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := []ReportListEntry{}
+	for rows.Next() {
+		var e ReportListEntry
+		if err := rows.Scan(
+			&e.ID, &e.PinID, &e.ReporterID, &e.Reason, &e.Status, &e.ResolvedBy, &e.ResolvedAt, &e.CreatedAt,
+			&e.ReporterUsername, &e.PinCaption,
+		); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+		return nil, err
+	}
+	return entries, nil
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import MapView from "./MapView";
+import MapView, { type MapLocation } from "./MapView";
 import CategoryBar from "@/components/pins/CategoryBar";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
@@ -20,6 +20,7 @@ export default function MapApp() {
   const [error, setError] = useState<string | null>(null);
   const [center, setCenter] = useState({ lat: 17.385, lng: 78.4867 });
   const [flyTo, setFlyTo] = useState<{ lng: number; lat: number } | null>(null);
+  const [pendingLocation, setPendingLocation] = useState<MapLocation | null>(null);
 
   const bboxRef = useRef<string | null>(null);
   const pendingRef = useRef(0);
@@ -97,6 +98,7 @@ export default function MapApp() {
       openDetail(pin.id);
       const { lng, lat } = parsePoint(pin.location);
       setFlyTo({ lng, lat });
+      setPendingLocation(null);
     },
     [openDetail]
   );
@@ -106,8 +108,10 @@ export default function MapApp() {
       <MapView
         pins={pins}
         flyTo={flyTo}
+        pendingLocation={pendingLocation}
         onBoundsChange={handleBoundsChange}
         onSelectPin={openDetail}
+        onSelectLocation={setPendingLocation}
       />
 
       <div className="absolute left-0 right-0 top-0 z-10">
@@ -137,10 +141,11 @@ export default function MapApp() {
       )}
 
       <CreatePinButton
-        lat={center.lat}
-        lng={center.lng}
+        lat={pendingLocation?.lat ?? center.lat}
+        lng={pendingLocation?.lng ?? center.lng}
         categories={categories}
         onCreated={handleCreated}
+        onSetLocation={setPendingLocation}
       />
     </div>
   );

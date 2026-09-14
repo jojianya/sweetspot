@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { createPin } from "@/lib/api";
 import type { CreatedPin, NewPinPhoto } from "@/lib/types";
+import type { MapLocation } from "@/components/map/MapView";
 import { useAuth } from "@/store/auth";
 
 const MAX_PHOTOS = 5;
@@ -17,6 +18,7 @@ interface CreatePinButtonProps {
     pin: CreatedPin,
     photos: NewPinPhoto[]
   ) => void;
+  onSetLocation: (location: MapLocation) => void;
 }
 
 export default function CreatePinButton({
@@ -24,6 +26,7 @@ export default function CreatePinButton({
   lng,
   categories,
   onCreated,
+  onSetLocation,
 }: CreatePinButtonProps) {
   const { token, isLoggedIn } = useAuth();
   const [open, setOpen] = useState(false);
@@ -31,6 +34,7 @@ export default function CreatePinButton({
   const [caption, setCaption] = useState("");
   const [categoryId, setCategoryId] = useState<number>(categories[0]?.id ?? 1);
   const [submitting, setSubmitting] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -52,6 +56,26 @@ export default function CreatePinButton({
     }
     setError(null);
     setFiles(valid);
+  };
+
+  const useCurrentLocation = () => {
+    if (!("geolocation" in navigator)) {
+      setError("Location is not available in this browser");
+      return;
+    }
+    setLocating(true);
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        onSetLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      (err) => {
+        setLocating(false);
+        setError(err.message || "Could not get your location");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
   };
 
   const submit = async () => {
@@ -179,6 +203,20 @@ export default function CreatePinButton({
                     ))}
                   </div>
                 )}
+
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm">
+                  <span className="truncate text-zinc-500">
+                    Posting at {lat.toFixed(5)}, {lng.toFixed(5)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={useCurrentLocation}
+                    disabled={locating}
+                    className="shrink-0 font-medium text-rose-600 hover:underline disabled:opacity-60"
+                  >
+                    {locating ? "Locating…" : "Use current location"}
+                  </button>
+                </div>
 
                 <select
                   value={categoryId}

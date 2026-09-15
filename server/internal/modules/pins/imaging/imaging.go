@@ -9,10 +9,16 @@ import (
 )
 
 const (
-	maxPhotoWidth = 1600
-	thumbSize     = 400
-	webpQuality   = 80
+	maxPhotoWidth        = 1600
+	thumbSize            = 400
+	webpQuality          = 80
+	maxPhotoDim          = 8000
+	maxConcurrentProcess = 2
 )
+
+// processSem bounds the number of concurrent libvips operations so a burst of
+// uploads cannot exhaust memory during decode/resize.
+var processSem = make(chan struct{}, maxConcurrentProcess)
 
 type Result struct {
 	Full  []byte
@@ -22,13 +28,23 @@ type Result struct {
 func Validate(data []byte) error {
 	switch http.DetectContentType(data) {
 	case "image/jpeg", "image/png":
-		return nil
 	default:
 		return errors.New("only jpg and png images are allowed")
 	}
+
+	meta, err := bimg.Metadata(data)
+	if err != nil {
+		return errors.New("could not read image metadata")
+	}
+	if meta.Size.Width > maxPhotoDim || meta.Size.Height > maxPhotoDim {
+		return fmt.Errorf("image dimensions exceed %dx%d", maxPhotoDim, maxPhotoDim)
+	}
+	return nil
 }
 
 func Process(data []byte) (Result, error) {
+	processSem <- struct{}{}
+	defer func() { <-processSem }()
 	full, err := bimg.Resize(data, bimg.Options{
 		Width:   maxPhotoWidth,
 		Quality: webpQuality,

@@ -13,7 +13,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
-	"github.com/jojianya/sweetspot247-backend/internal/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/internal/reports"

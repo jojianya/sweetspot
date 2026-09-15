@@ -8,7 +8,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/observability/logger"
-	"github.com/jojianya/sweetspot247-backend/internal/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"

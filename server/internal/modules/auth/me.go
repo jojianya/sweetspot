@@ -8,11 +8,11 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 )
 
-func Me(repo *users.Repository) gin.HandlerFunc {
+func Me(svc users.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"user_id": middleware.GetUserID(c),
-			"role":    middleware.CurrentRole(repo, c),
+			"role":    users.CurrentRole(svc, c),
 		})
 	}
 }

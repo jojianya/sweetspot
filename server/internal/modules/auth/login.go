@@ -14,12 +14,12 @@ import (
 var errInvalidCredentials = errors.New("invalid credentials")
 
 type LoginHandler struct {
-	users     *users.Repository
+	users     users.Service
 	jwtSecret string
 	emailLim  *middleware.Limiter
 }
 
-func NewLoginHandler(users *users.Repository, jwtSecret string, emailLim *middleware.Limiter) *LoginHandler {
+func NewLoginHandler(users users.Service, jwtSecret string, emailLim *middleware.Limiter) *LoginHandler {
 	return &LoginHandler{users: users, jwtSecret: jwtSecret, emailLim: emailLim}
 }
 

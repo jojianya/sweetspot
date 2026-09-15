@@ -1,13 +1,11 @@
 package middleware
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 )
@@ -88,34 +86,4 @@ func GetUserID(c *gin.Context) string {
 
 func GetRole(c *gin.Context) string {
 	return c.GetString(CtxRole)
-}
-
-func CurrentRole(repo *users.Repository, c *gin.Context) string {
-	roles, err := repo.GetByID(context.Background(), GetUserID(c))
-	if err != nil {
-		return ""
-	}
-	return roles.Role
-}
-
-func RequireAdmin(repo *users.Repository) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		role := CurrentRole(repo, c)
-		if role != "admin" && role != "owner" {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin access required"})
-			return
-		}
-		c.Next()
-	}
-}
-
-func RequireOwner(repo *users.Repository) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		role := CurrentRole(repo, c)
-		if role != "owner" {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "owner access required"})
-			return
-		}
-		c.Next()
-	}
 }

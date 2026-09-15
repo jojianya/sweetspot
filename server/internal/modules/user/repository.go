@@ -9,17 +9,24 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrNotFound = errors.New("user not found")
+type Repository interface {
+	Create(ctx context.Context, email, passwordHash, username string) (User, error)
+	GetByEmail(ctx context.Context, email string) (User, error)
+	GetByUsername(ctx context.Context, username string) (User, error)
+	GetByID(ctx context.Context, id string) (User, error)
+	CountOwners(ctx context.Context) (int, error)
+	UpdateRole(ctx context.Context, id, role string) (User, error)
+}
 
-type Repository struct {
+type postgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-func NewRepository(pool *pgxpool.Pool) *Repository {
-	return &Repository{pool: pool}
+func NewRepository(pool *pgxpool.Pool) Repository {
+	return &postgresRepository{pool: pool}
 }
 
-func (r *Repository) Create(ctx context.Context, email, passwordHash, username string) (User, error) {
+func (r *postgresRepository) Create(ctx context.Context, email, passwordHash, username string) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO users (email, password_hash, username)
@@ -34,7 +41,7 @@ func (r *Repository) Create(ctx context.Context, email, passwordHash, username s
 	return u, nil
 }
 
-func (r *Repository) GetByEmail(ctx context.Context, email string) (User, error) {
+func (r *postgresRepository) GetByEmail(ctx context.Context, email string) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at, password_hash
@@ -51,7 +58,7 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (User, error)
 	return u, nil
 }
 
-func (r *Repository) GetByUsername(ctx context.Context, username string) (User, error) {
+func (r *postgresRepository) GetByUsername(ctx context.Context, username string) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at
@@ -68,7 +75,7 @@ func (r *Repository) GetByUsername(ctx context.Context, username string) (User, 
 	return u, nil
 }
 
-func (r *Repository) GetByID(ctx context.Context, id string) (User, error) {
+func (r *postgresRepository) GetByID(ctx context.Context, id string) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at
@@ -85,7 +92,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (User, error) {
 	return u, nil
 }
 
-func (r *Repository) CountOwners(ctx context.Context) (int, error) {
+func (r *postgresRepository) CountOwners(ctx context.Context) (int, error) {
 	var n int
 	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role = 'owner'`).Scan(&n)
 	if err != nil {
@@ -94,7 +101,7 @@ func (r *Repository) CountOwners(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-func (r *Repository) UpdateRole(ctx context.Context, id, role string) (User, error) {
+func (r *postgresRepository) UpdateRole(ctx context.Context, id, role string) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
 		UPDATE users SET role = $2 WHERE id = $1

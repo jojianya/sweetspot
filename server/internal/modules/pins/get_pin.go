@@ -102,7 +102,7 @@ func GetPins(repo *Repository) gin.HandlerFunc {
 	}
 }
 
-func GetPin(repo *Repository, users *users.Repository) gin.HandlerFunc {
+func GetPin(repo *Repository, users users.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		pin, err := repo.GetPin(c.Request.Context(), c.Param("id"))
 		if err != nil {
@@ -123,7 +123,7 @@ func GetPin(repo *Repository, users *users.Repository) gin.HandlerFunc {
 	}
 }
 
-func canViewHidden(c *gin.Context, repo *users.Repository, pin PinDetail) bool {
+func canViewHidden(c *gin.Context, svc users.Service, pin PinDetail) bool {
 	viewerID := middleware.GetUserID(c)
 	if viewerID == "" {
 		return false
@@ -132,7 +132,7 @@ func canViewHidden(c *gin.Context, repo *users.Repository, pin PinDetail) bool {
 		return true
 	}
 
-	viewer, err := repo.GetByID(c.Request.Context(), viewerID)
+	viewer, err := svc.GetByID(c.Request.Context(), viewerID)
 	if err != nil {
 		return false
 	}

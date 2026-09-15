@@ -15,11 +15,11 @@ import (
 const tokenExpiry = 30 * 24 * time.Hour
 
 type RegisterHandler struct {
-	users     *users.Repository
+	users     users.Service
 	jwtSecret string
 }
 
-func NewRegisterHandler(users *users.Repository, jwtSecret string) *RegisterHandler {
+func NewRegisterHandler(users users.Service, jwtSecret string) *RegisterHandler {
 	return &RegisterHandler{users: users, jwtSecret: jwtSecret}
 }
 

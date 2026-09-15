@@ -11,21 +11,21 @@ import (
 )
 
 type Container struct {
-	Config     *config.Config
-	UserRepo   *users.Repository
-	PinRepo    *pins.Repository
-	ReportRepo *reports.Repository
-	Store      *storage.Local
-	Blacklist  *cache.Blacklist
+	Config      *config.Config
+	UserService users.Service
+	PinRepo     *pins.Repository
+	ReportRepo  *reports.Repository
+	Store       *storage.Local
+	Blacklist   *cache.Blacklist
 }
 
 func Build(cfg *config.Config, pool *pgxpool.Pool) *Container {
 	return &Container{
-		Config:     cfg,
-		UserRepo:   users.NewRepository(pool),
-		PinRepo:    pins.NewRepository(pool),
-		ReportRepo: reports.NewRepository(pool),
-		Store:      storage.NewLocal("./uploads", cfg.StorageBase),
-		Blacklist:  cache.New(cfg.RedisAddr),
+		Config:      cfg,
+		UserService: users.NewService(users.NewRepository(pool)),
+		PinRepo:     pins.NewRepository(pool),
+		ReportRepo:  reports.NewRepository(pool),
+		Store:       storage.NewLocal("./uploads", cfg.StorageBase),
+		Blacklist:   cache.New(cfg.RedisAddr),
 	}
 }

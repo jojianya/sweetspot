@@ -1,7 +1,8 @@
 .PHONY: build run test vet fmt lint tidy migrate-docker-up docker-down
 
 build:
-	go build ./cmd/api
+	mkdir -p bin
+	go build -o bin/server ./cmd/api
 
 run:
 	go run ./cmd/api

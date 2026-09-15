@@ -3,7 +3,6 @@ package di
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jojianya/sweetspot247-backend/internal/config"
-	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"

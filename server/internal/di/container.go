@@ -14,7 +14,7 @@ type Container struct {
 	Config      *config.Config
 	UserService users.Service
 	PinRepo     pins.Repository
-	ReportRepo  *reports.Repository
+	ReportRepo  reports.Repository
 	Store       *storage.Local
 	Blacklist   *cache.Blacklist
 }

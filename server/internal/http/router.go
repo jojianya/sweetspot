@@ -16,7 +16,6 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
-	"github.com/jojianya/sweetspot247-backend/pkg/validid"
 )
 
 func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog.Logger) *gin.Engine {
@@ -50,9 +49,12 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	pinHandler := pins.NewHandler(pins.NewService(c.PinRepo), c.UserService, c.Store)
 	pins.RegisterRoutes(r.Group(""), pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
-	r.POST("/pins/:id/report", middleware.AuthRequired(cfg.JWTSecret, c.Blacklist), validid.Middleware(), reports.CreateReport(c.ReportRepo))
-	r.GET("/reports", middleware.AuthRequired(cfg.JWTSecret, c.Blacklist), users.RequireAdmin(c.UserService), reports.ListReports(c.ReportRepo))
-	r.PATCH("/reports/:id", middleware.AuthRequired(cfg.JWTSecret, c.Blacklist), users.RequireAdmin(c.UserService), validid.Middleware(), reports.ReviewReport(c.ReportRepo))
+	reportHandler := reports.NewHandler(reports.NewService(c.ReportRepo))
+	reports.RegisterRoutes(r.Group(""), reportHandler, reports.RouteOptions{
+		JWTSecret:   cfg.JWTSecret,
+		Blacklist:   c.Blacklist,
+		UserService: c.UserService,
+	})
 
 	return r
 }

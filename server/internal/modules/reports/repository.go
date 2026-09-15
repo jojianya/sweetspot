@@ -9,22 +9,22 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var (
-	ErrPinNotFound     = errors.New("pin not found")
-	ErrReportNotFound  = errors.New("report not found")
-	ErrAlreadyReported = errors.New("pin already reported by this user")
-	ErrAlreadyResolved = errors.New("report already resolved")
-)
+type Repository interface {
+	PinExists(ctx context.Context, pinID string) (bool, error)
+	CreateReport(ctx context.Context, pinID, reporterID, reason string) (Report, error)
+	ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, error)
+	ListReports(ctx context.Context, status *string, limit, offset int) ([]ReportListEntry, error)
+}
 
-type Repository struct {
+type postgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-func NewRepository(pool *pgxpool.Pool) *Repository {
-	return &Repository{pool: pool}
+func NewRepository(pool *pgxpool.Pool) Repository {
+	return &postgresRepository{pool: pool}
 }
 
-func (r *Repository) PinExists(ctx context.Context, pinID string) (bool, error) {
+func (r *postgresRepository) PinExists(ctx context.Context, pinID string) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pins WHERE id = $1)`, pinID).Scan(&exists)
 	if err != nil {
@@ -33,7 +33,7 @@ func (r *Repository) PinExists(ctx context.Context, pinID string) (bool, error) 
 	return exists, nil
 }
 
-func (r *Repository) CreateReport(ctx context.Context, pinID, reporterID, reason string) (Report, error) {
+func (r *postgresRepository) CreateReport(ctx context.Context, pinID, reporterID, reason string) (Report, error) {
 	var rep Report
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO reports (pin_id, reporter_id, reason)
@@ -45,7 +45,7 @@ func (r *Repository) CreateReport(ctx context.Context, pinID, reporterID, reason
 	return rep, err
 }
 
-func (r *Repository) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, error) {
+func (r *postgresRepository) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, error) {
 	var rep Report
 
 	tx, err := r.pool.Begin(ctx)
@@ -97,13 +97,7 @@ func (r *Repository) ReviewReport(ctx context.Context, reportID, action, resolve
 	return rep, nil
 }
 
-type ReportListEntry struct {
-	Report
-	ReporterUsername *string `json:"reporter_username"`
-	PinCaption       *string `json:"pin_caption"`
-}
-
-func (r *Repository) ListReports(ctx context.Context, status *string, limit, offset int) ([]ReportListEntry, error) {
+func (r *postgresRepository) ListReports(ctx context.Context, status *string, limit, offset int) ([]ReportListEntry, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT r.id, r.pin_id, r.reporter_id, r.reason, r.status, r.resolved_by, r.resolved_at, r.created_at,
 		       u.username, p.caption

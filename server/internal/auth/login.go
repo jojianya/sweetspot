@@ -5,10 +5,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/users"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
-	"github.com/jojianya/sweetspot247-backend/pkg/ratelimit"
 )
 
 var errInvalidCredentials = errors.New("invalid credentials")
@@ -16,10 +16,10 @@ var errInvalidCredentials = errors.New("invalid credentials")
 type LoginHandler struct {
 	users     *users.Repository
 	jwtSecret string
-	emailLim  *ratelimit.Limiter
+	emailLim  *middleware.Limiter
 }
 
-func NewLoginHandler(users *users.Repository, jwtSecret string, emailLim *ratelimit.Limiter) *LoginHandler {
+func NewLoginHandler(users *users.Repository, jwtSecret string, emailLim *middleware.Limiter) *LoginHandler {
 	return &LoginHandler{users: users, jwtSecret: jwtSecret, emailLim: emailLim}
 }
 

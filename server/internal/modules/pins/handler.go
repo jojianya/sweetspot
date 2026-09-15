@@ -181,6 +181,10 @@ func (h *Handler) CreatePin(c *gin.Context) {
 
 	var caption *string
 	if v := c.PostForm("caption"); v != "" {
+		if len([]rune(v)) > 500 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "caption must be at most 500 characters"})
+			return
+		}
 		caption = &v
 	}
 

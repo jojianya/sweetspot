@@ -125,15 +125,18 @@ func setupRouter(usersSvc users.Service, reportRepo reports.Repository, bl *cach
 	r := gin.New()
 	r.Use(middleware.Recover())
 
+	jsonRoutes := r.Group("")
+	jsonRoutes.Use(middleware.BodyLimit(1 << 20))
+
 	authSvc := auth.NewService(usersSvc, testSecret)
 	authH := auth.NewHandler(authSvc, bl, middleware.New(1000, time.Minute))
-	auth.RegisterRoutes(r.Group(""), authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
+	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
 
 	userH := users.NewHandler(usersSvc)
-	users.RegisterRoutes(r.Group(""), userH, users.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
+	users.RegisterRoutes(jsonRoutes, userH, users.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
 
 	reportH := reports.NewHandler(reports.NewService(reportRepo))
-	reports.RegisterRoutes(r.Group(""), reportH, reports.RouteOptions{
+	reports.RegisterRoutes(jsonRoutes, reportH, reports.RouteOptions{
 		JWTSecret:   testSecret,
 		Blacklist:   bl,
 		UserService: usersSvc,
@@ -393,6 +396,23 @@ func TestReportEndpoints(t *testing.T) {
 		w := doJSON(t, r, http.MethodPost, "/pins/"+testUUID3+"/report", `{"reason":"sp"}`, map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("CreateReportReasonTooLong", func(t *testing.T) {
+		tok := newToken(t, testUUID2, users.RoleUser)
+		long := strings.Repeat("a", 1001)
+		w := doJSON(t, r, http.MethodPost, "/pins/"+testUUID3+"/report", `{"reason":"`+long+`"}`, map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("OversizedJSONBodyRejected", func(t *testing.T) {
+		big := strings.Repeat("a", 1<<20+1024)
+		w := doJSON(t, r, http.MethodPost, "/auth/register", `{"reason":"`+big+`"}`, nil)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for oversized body, got %d (%s)", w.Code, w.Body.String())
 		}
 	})
 

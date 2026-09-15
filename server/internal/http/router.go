@@ -36,21 +36,27 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		response.JSON(c, stdhttp.StatusOK, gin.H{"status": "ok", "db": dbStatus})
 	})
 
+	jsonRoutes := r.Group("")
+	jsonRoutes.Use(middleware.BodyLimit(1 << 20))
+
+	uploadRoutes := r.Group("")
+	uploadRoutes.Use(middleware.BodyLimit(64 << 20))
+
 	authHandler := auth.NewHandler(
 		auth.NewService(c.UserService, cfg.JWTSecret),
 		c.Blacklist,
 		middleware.New(5, time.Minute),
 	)
-	auth.RegisterRoutes(r.Group(""), authHandler, auth.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+	auth.RegisterRoutes(jsonRoutes, authHandler, auth.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
 	userHandler := users.NewHandler(c.UserService)
-	users.RegisterRoutes(r.Group(""), userHandler, users.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+	users.RegisterRoutes(jsonRoutes, userHandler, users.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
 	pinHandler := pins.NewHandler(pins.NewService(c.PinRepo), c.Store)
-	pins.RegisterRoutes(r.Group(""), pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+	pins.RegisterRoutes(uploadRoutes, pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
 	reportHandler := reports.NewHandler(reports.NewService(c.ReportRepo))
-	reports.RegisterRoutes(r.Group(""), reportHandler, reports.RouteOptions{
+	reports.RegisterRoutes(jsonRoutes, reportHandler, reports.RouteOptions{
 		JWTSecret:   cfg.JWTSecret,
 		Blacklist:   c.Blacklist,
 		UserService: c.UserService,

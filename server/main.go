@@ -8,12 +8,12 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/config"
-	"github.com/jojianya/sweetspot247-backend/db"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 	"github.com/jojianya/sweetspot247-backend/internal/auth"
 	"github.com/jojianya/sweetspot247-backend/internal/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/session"
-	"github.com/jojianya/sweetspot247-backend/internal/storage"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/internal/users"
 	"github.com/jojianya/sweetspot247-backend/pkg/logger"
 	"github.com/jojianya/sweetspot247-backend/pkg/ratelimit"
@@ -26,14 +26,14 @@ func main() {
 	lg := logger.Init(cfg.LogLevel, cfg.LogFormat)
 	logger.SetDefault(lg)
 
-	pool, err := db.Connect(cfg.DSN())
+	pool, err := database.Connect(cfg.DSN())
 	if err != nil {
 		lg.Error("could not connect to database", "error", err.Error())
 		panic(err)
 	}
 	defer pool.Close()
 
-	if err := db.RunMigrations(pool, "migrations"); err != nil {
+	if err := database.RunMigrations(pool, "internal/platform/database/migrations"); err != nil {
 		lg.Error("migration failed", "error", err.Error())
 		panic(err)
 	}

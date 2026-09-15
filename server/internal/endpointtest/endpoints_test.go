@@ -123,7 +123,7 @@ func newToken(t *testing.T, userID, role string) string {
 func setupRouter(usersSvc users.Service, reportRepo reports.Repository, bl *cache.Blacklist) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(middleware.Recover())
+	r.Use(middleware.Recover(), middleware.SecurityHeaders())
 
 	jsonRoutes := r.Group("")
 	jsonRoutes.Use(middleware.BodyLimit(1 << 20))
@@ -462,6 +462,21 @@ func TestReportEndpoints(t *testing.T) {
 			t.Fatalf("expected 403, got %d (%s)", w.Code, w.Body.String())
 		}
 	})
+}
+
+func TestSecurityHeadersPresent(t *testing.T) {
+	usersSvc := &mockUserService{
+		byEmail:    map[string]users.User{},
+		byUsername: map[string]users.User{},
+	}
+	r := setupRouter(usersSvc, &mockReportRepo{}, nil)
+
+	w := doJSON(t, r, http.MethodGet, "/me", "", nil)
+	for _, h := range []string{"X-Content-Type-Options", "X-Frame-Options", "Content-Security-Policy", "Referrer-Policy", "Strict-Transport-Security"} {
+		if w.Header().Get(h) == "" {
+			t.Fatalf("missing security header %q", h)
+		}
+	}
 }
 
 func strPtr(s string) *string { return &s }

@@ -22,7 +22,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.SetTrustedProxies(nil)
-	r.Use(middleware.Recover(), middleware.RequestLogger(lg, "/health"), middleware.CORS(cfg.CORSAllowedOrigins...))
+	r.Use(middleware.Recover(), middleware.RequestLogger(lg, "/health"), middleware.CORS(cfg.CORSAllowedOrigins...), middleware.SecurityHeaders())
 
 	r.Static("/uploads", "./uploads")
 

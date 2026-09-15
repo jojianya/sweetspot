@@ -4,7 +4,7 @@ RUN apk add --no-cache vips-dev build-base pkgconf
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -o server ./cmd/api
+RUN go build -p 2 -o server ./cmd/api
 
 FROM alpine:3.20
 WORKDIR /app

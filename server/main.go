@@ -15,7 +15,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/session"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/internal/users"
-	"github.com/jojianya/sweetspot247-backend/pkg/logger"
+	"github.com/jojianya/sweetspot247-backend/internal/observability/logger"
 	"github.com/jojianya/sweetspot247-backend/pkg/ratelimit"
 	"github.com/jojianya/sweetspot247-backend/pkg/validid"
 )

@@ -21,6 +21,7 @@ type Config struct {
 	JWTSecret          string
 	StorageBase        string
 	RedisAddr          string
+	RedisPassword      string
 	CORSAllowedOrigins []string
 }
 
@@ -41,6 +42,7 @@ func Load() *Config {
 		JWTSecret:          getEnv("JWT_SECRET", ""),
 		StorageBase:        getEnv("STORAGE_BASE_URL", ""),
 		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
 		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001")),
 	}
 }

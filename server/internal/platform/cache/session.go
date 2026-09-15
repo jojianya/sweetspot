@@ -13,8 +13,8 @@ type Blacklist struct {
 	client *redis.Client
 }
 
-func New(addr string) *Blacklist {
-	return &Blacklist{client: redis.NewClient(&redis.Options{Addr: addr})}
+func New(addr, password string) *Blacklist {
+	return &Blacklist{client: redis.NewClient(&redis.Options{Addr: addr, Password: password})}
 }
 
 func (b *Blacklist) Ping(ctx context.Context) error {

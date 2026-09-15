@@ -26,6 +26,6 @@ func Build(cfg *config.Config, pool *pgxpool.Pool) *Container {
 		PinRepo:     pins.NewRepository(pool),
 		ReportRepo:  reports.NewRepository(pool),
 		Store:       storage.NewLocal("./uploads", cfg.StorageBase),
-		Blacklist:   cache.New(cfg.RedisAddr),
+		Blacklist:   cache.New(cfg.RedisAddr, cfg.RedisPassword),
 	}
 }

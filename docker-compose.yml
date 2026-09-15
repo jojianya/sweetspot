@@ -33,7 +33,7 @@ services:
   server:
     build:
       context: ./server
-      dockerfile: Dockerfile
+      dockerfile: deployments/docker/server.Dockerfile
     container_name: goodspot247-server
     restart: unless-stopped
     ports:

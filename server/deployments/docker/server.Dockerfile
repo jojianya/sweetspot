@@ -4,12 +4,12 @@ RUN apk add --no-cache vips-dev build-base pkgconf
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -o server .
+RUN go build -o server ./cmd/api
 
 FROM alpine:3.20
 WORKDIR /app
 RUN apk add --no-cache vips
 COPY --from=builder /app/server .
-COPY --from=builder /app/migrations ./migrations
+COPY --from=builder /app/internal/platform/database/migrations ./internal/platform/database/migrations
 EXPOSE 8080
 CMD ["./server"]

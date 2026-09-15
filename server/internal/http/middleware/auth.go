@@ -1,4 +1,4 @@
-package auth
+package middleware
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jojianya/sweetspot247-backend/internal/session"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 )
 
@@ -18,7 +18,7 @@ const (
 	CtxJWTClaims = "jwt_claims"
 )
 
-func AuthRequired(jwtSecret string, bl *session.Blacklist) gin.HandlerFunc {
+func AuthRequired(jwtSecret string, bl *cache.Blacklist) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if !strings.HasPrefix(header, "Bearer ") {
@@ -50,7 +50,7 @@ func AuthRequired(jwtSecret string, bl *session.Blacklist) gin.HandlerFunc {
 	}
 }
 
-func OptionalAuth(jwtSecret string, bl *session.Blacklist) gin.HandlerFunc {
+func OptionalAuth(jwtSecret string, bl *cache.Blacklist) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if !strings.HasPrefix(header, "Bearer ") {
@@ -90,17 +90,17 @@ func GetRole(c *gin.Context) string {
 	return c.GetString(CtxRole)
 }
 
-func currentRole(repo *users.Repository, c *gin.Context) string {
-	user, err := repo.GetByID(context.Background(), GetUserID(c))
+func CurrentRole(repo *users.Repository, c *gin.Context) string {
+	roles, err := repo.GetByID(context.Background(), GetUserID(c))
 	if err != nil {
 		return ""
 	}
-	return user.Role
+	return roles.Role
 }
 
 func RequireAdmin(repo *users.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		role := currentRole(repo, c)
+		role := CurrentRole(repo, c)
 		if role != "admin" && role != "owner" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin access required"})
 			return
@@ -111,7 +111,7 @@ func RequireAdmin(repo *users.Repository) gin.HandlerFunc {
 
 func RequireOwner(repo *users.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		role := currentRole(repo, c)
+		role := CurrentRole(repo, c)
 		if role != "owner" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "owner access required"})
 			return

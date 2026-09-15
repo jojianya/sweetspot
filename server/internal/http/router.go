@@ -9,14 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jojianya/sweetspot247-backend/config"
-	"github.com/jojianya/sweetspot247-backend/internal/auth"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/internal/reports"
-	"github.com/jojianya/sweetspot247-backend/internal/session"
-	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/pkg/validid"
 )
 
@@ -27,7 +27,7 @@ func NewRouter(
 	pinRepo *pins.Repository,
 	reportRepo *reports.Repository,
 	store *storage.Local,
-	blacklist *session.Blacklist,
+	blacklist *cache.Blacklist,
 	lg *slog.Logger,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
@@ -54,22 +54,22 @@ func NewRouter(
 	loginIPLimit := middleware.New(20, time.Minute)
 	r.POST("/auth/login", loginIPLimit.Middleware(), loginHandler.Handle)
 
-	r.POST("/auth/logout", auth.AuthRequired(cfg.JWTSecret, blacklist), auth.Logout(blacklist))
-	r.GET("/me", auth.AuthRequired(cfg.JWTSecret, blacklist), auth.Me(userRepo))
+	r.POST("/auth/logout", middleware.AuthRequired(cfg.JWTSecret, blacklist), auth.Logout(blacklist))
+	r.GET("/me", middleware.AuthRequired(cfg.JWTSecret, blacklist), auth.Me(userRepo))
 
 	r.GET("/users/:id", validid.Middleware(), users.GetUser(userRepo))
-	r.PATCH("/users/:id/role", auth.AuthRequired(cfg.JWTSecret, blacklist), auth.RequireOwner(userRepo), validid.Middleware(), users.UpdateRole(userRepo, auth.GetUserID))
+	r.PATCH("/users/:id/role", middleware.AuthRequired(cfg.JWTSecret, blacklist), middleware.RequireOwner(userRepo), validid.Middleware(), users.UpdateRole(userRepo, middleware.GetUserID))
 
 	r.GET("/categories", pins.ListCategories(pinRepo))
 	r.GET("/pins", pins.GetPins(pinRepo))
-	r.GET("/pins/:id", validid.Middleware(), auth.OptionalAuth(cfg.JWTSecret, blacklist), pins.GetPin(pinRepo, userRepo))
+	r.GET("/pins/:id", validid.Middleware(), middleware.OptionalAuth(cfg.JWTSecret, blacklist), pins.GetPin(pinRepo, userRepo))
 
-	r.POST("/pins/:id/report", auth.AuthRequired(cfg.JWTSecret, blacklist), validid.Middleware(), reports.CreateReport(reportRepo))
-	r.GET("/reports", auth.AuthRequired(cfg.JWTSecret, blacklist), auth.RequireAdmin(userRepo), reports.ListReports(reportRepo))
-	r.PATCH("/reports/:id", auth.AuthRequired(cfg.JWTSecret, blacklist), auth.RequireAdmin(userRepo), validid.Middleware(), reports.ReviewReport(reportRepo))
+	r.POST("/pins/:id/report", middleware.AuthRequired(cfg.JWTSecret, blacklist), validid.Middleware(), reports.CreateReport(reportRepo))
+	r.GET("/reports", middleware.AuthRequired(cfg.JWTSecret, blacklist), middleware.RequireAdmin(userRepo), reports.ListReports(reportRepo))
+	r.PATCH("/reports/:id", middleware.AuthRequired(cfg.JWTSecret, blacklist), middleware.RequireAdmin(userRepo), validid.Middleware(), reports.ReviewReport(reportRepo))
 
 	pinCreateLimit := middleware.New(10, time.Minute)
-	r.POST("/pins", pinCreateLimit.Middleware(), auth.AuthRequired(cfg.JWTSecret, blacklist), pins.CreatePin(pinRepo, store))
+	r.POST("/pins", pinCreateLimit.Middleware(), middleware.AuthRequired(cfg.JWTSecret, blacklist), pins.CreatePin(pinRepo, store))
 
 	return r
 }

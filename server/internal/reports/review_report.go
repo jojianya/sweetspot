@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jojianya/sweetspot247-backend/internal/auth"
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 )
 
 func ReviewReport(repo *Repository) gin.HandlerFunc {
@@ -16,7 +16,7 @@ func ReviewReport(repo *Repository) gin.HandlerFunc {
 			return
 		}
 
-		report, err := repo.ReviewReport(c.Request.Context(), c.Param("id"), req.Action, auth.GetUserID(c))
+		report, err := repo.ReviewReport(c.Request.Context(), c.Param("id"), req.Action, middleware.GetUserID(c))
 		if err != nil {
 			switch {
 			case errors.Is(err, ErrReportNotFound):

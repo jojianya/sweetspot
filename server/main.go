@@ -6,13 +6,13 @@ import (
 
 	"github.com/jojianya/sweetspot247-backend/config"
 	"github.com/jojianya/sweetspot247-backend/internal/http"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/observability/logger"
 	"github.com/jojianya/sweetspot247-backend/internal/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/internal/reports"
-	"github.com/jojianya/sweetspot247-backend/internal/session"
-	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 	reportRepo := reports.NewRepository(pool)
 	store := storage.NewLocal("./uploads", cfg.StorageBase)
 
-	sessions := session.New(cfg.RedisAddr)
+	sessions := cache.New(cfg.RedisAddr)
 	ctxBG, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := sessions.Ping(ctxBG); err != nil {

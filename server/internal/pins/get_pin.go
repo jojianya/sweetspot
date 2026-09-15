@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jojianya/sweetspot247-backend/internal/auth"
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 )
 
@@ -124,7 +124,7 @@ func GetPin(repo *Repository, users *users.Repository) gin.HandlerFunc {
 }
 
 func canViewHidden(c *gin.Context, repo *users.Repository, pin PinDetail) bool {
-	viewerID := auth.GetUserID(c)
+	viewerID := middleware.GetUserID(c)
 	if viewerID == "" {
 		return false
 	}

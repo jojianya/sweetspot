@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jojianya/sweetspot247-backend/internal/session"
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 )
 
-func Logout(bl *session.Blacklist) gin.HandlerFunc {
+func Logout(bl *cache.Blacklist) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, ok := c.Get(CtxJWTClaims)
+		claims, ok := c.Get(middleware.CtxJWTClaims)
 		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			return

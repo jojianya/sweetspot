@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jojianya/sweetspot247-backend/internal/auth"
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/pkg/geohash"
 )
@@ -125,7 +125,7 @@ func CreatePin(repo *Repository, store *storage.Local) gin.HandlerFunc {
 		}
 
 		pin, err := repo.CreatePin(c.Request.Context(), NewPin{
-			UserID:        auth.GetUserID(c),
+			UserID:        middleware.GetUserID(c),
 			Lat:           lat,
 			Lng:           lng,
 			Caption:       caption,

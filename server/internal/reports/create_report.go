@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jojianya/sweetspot247-backend/internal/auth"
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 )
 
 func CreateReport(repo *Repository) gin.HandlerFunc {
@@ -29,7 +29,7 @@ func CreateReport(repo *Repository) gin.HandlerFunc {
 			return
 		}
 
-		report, err := repo.CreateReport(c.Request.Context(), pinID, auth.GetUserID(c), req.Reason)
+		report, err := repo.CreateReport(c.Request.Context(), pinID, middleware.GetUserID(c), req.Reason)
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23505" {

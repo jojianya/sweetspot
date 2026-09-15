@@ -1,7 +1,6 @@
 package users
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -27,7 +26,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 
 // CurrentRole resolves the caller role from the request context using the user service.
 func CurrentRole(svc Service, c *gin.Context) string {
-	user, err := svc.GetByID(context.Background(), middleware.GetUserID(c))
+	user, err := svc.GetByID(c.Request.Context(), middleware.GetUserID(c))
 	if err != nil {
 		return ""
 	}

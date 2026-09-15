@@ -31,20 +31,12 @@ func (h *Handler) Register(c *gin.Context) {
 
 	u, token, err := h.service.Register(c.Request.Context(), req)
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrEmailTaken):
-			c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
-			return
-		case errors.Is(err, ErrUsernameTaken):
-			c.JSON(http.StatusConflict, gin.H{"error": "username already taken"})
-			return
-		case errors.Is(err, ErrConflict):
+		if errors.Is(err, ErrConflict) {
 			c.JSON(http.StatusConflict, gin.H{"error": "email or username already taken"})
 			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-			return
 		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"user": u, "token": token})

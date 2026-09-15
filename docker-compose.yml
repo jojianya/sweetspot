@@ -54,6 +54,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - server_uploads:/app/uploads
 
   client:
     build:
@@ -70,3 +72,4 @@ services:
 
 volumes:
   postgres_data:
+  server_uploads:

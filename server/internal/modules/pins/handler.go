@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins/imaging"
-	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/pkg/geohash"
 )
@@ -28,12 +27,11 @@ type validatedFile struct {
 
 type Handler struct {
 	service Service
-	users   users.Service
 	store   *storage.Local
 }
 
-func NewHandler(service Service, userSvc users.Service, store *storage.Local) *Handler {
-	return &Handler{service: service, users: userSvc, store: store}
+func NewHandler(service Service, store *storage.Local) *Handler {
+	return &Handler{service: service, store: store}
 }
 
 func (h *Handler) ListCategories(c *gin.Context) {
@@ -132,7 +130,7 @@ func (h *Handler) GetPin(c *gin.Context) {
 		return
 	}
 
-	if pin.IsHidden && !canViewHidden(c, h.users, pin) {
+	if pin.IsHidden && !canViewHidden(c, pin) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "pin not found"})
 		return
 	}
@@ -140,7 +138,7 @@ func (h *Handler) GetPin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"pin": pin})
 }
 
-func canViewHidden(c *gin.Context, svc users.Service, pin PinDetail) bool {
+func canViewHidden(c *gin.Context, pin PinDetail) bool {
 	viewerID := middleware.GetUserID(c)
 	if viewerID == "" {
 		return false
@@ -149,11 +147,8 @@ func canViewHidden(c *gin.Context, svc users.Service, pin PinDetail) bool {
 		return true
 	}
 
-	viewer, err := svc.GetByID(c.Request.Context(), viewerID)
-	if err != nil {
-		return false
-	}
-	return viewer.Role == "admin" || viewer.Role == "owner"
+	role := middleware.GetRole(c)
+	return role == "admin" || role == "owner"
 }
 
 func (h *Handler) CreatePin(c *gin.Context) {

@@ -7,9 +7,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func CORS() gin.HandlerFunc {
+// CORS returns a CORS middleware configured to allow requests from the given
+// origins. If no origins are provided, it falls back to localhost-only allowed
+// origins for local development.
+func CORS(origins ...string) gin.HandlerFunc {
+	allowed := origins
+	if len(allowed) == 0 {
+		allowed = []string{"http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"}
+	}
+
 	return cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"},
+		AllowOrigins:     allowed,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},

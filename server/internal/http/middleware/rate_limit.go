@@ -20,6 +20,11 @@ type Limiter struct {
 	byKey  map[string]*entry
 }
 
+// maxKeysBounds caps the number of tracked keys. Once the limit is reached,
+// expired entries are swept on the next AllowKey call so the map cannot grow
+// unbounded with one-time visitors.
+const maxKeysBounds = 10000
+
 func New(limit int, window time.Duration) *Limiter {
 	return &Limiter{
 		limit:  limit,
@@ -34,6 +39,10 @@ func (l *Limiter) AllowKey(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if len(l.byKey) >= maxKeysBounds {
+		l.sweepExpired(now)
+	}
+
 	e, ok := l.byKey[key]
 	if !ok || now.After(e.resetAt) {
 		l.byKey[key] = &entry{count: 1, resetAt: now.Add(l.window)}
@@ -42,6 +51,14 @@ func (l *Limiter) AllowKey(key string) bool {
 
 	e.count++
 	return e.count <= l.limit
+}
+
+func (l *Limiter) sweepExpired(now time.Time) {
+	for k, e := range l.byKey {
+		if now.After(e.resetAt) {
+			delete(l.byKey, k)
+		}
+	}
 }
 
 func (l *Limiter) Allow(ip string) bool {

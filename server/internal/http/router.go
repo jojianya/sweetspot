@@ -22,7 +22,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
-	r.Use(middleware.Recover(), middleware.RequestLogger(lg, "/health"), middleware.CORS())
+	r.Use(middleware.Recover(), middleware.RequestLogger(lg, "/health"), middleware.CORS(cfg.CORSAllowedOrigins...))
 
 	r.Static("/uploads", "./uploads")
 
@@ -46,7 +46,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	userHandler := users.NewHandler(c.UserService)
 	users.RegisterRoutes(r.Group(""), userHandler, users.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
-	pinHandler := pins.NewHandler(pins.NewService(c.PinRepo), c.UserService, c.Store)
+	pinHandler := pins.NewHandler(pins.NewService(c.PinRepo), c.Store)
 	pins.RegisterRoutes(r.Group(""), pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
 	reportHandler := reports.NewHandler(reports.NewService(c.ReportRepo))

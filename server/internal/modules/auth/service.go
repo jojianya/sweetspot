@@ -29,18 +29,6 @@ func NewService(userSvc users.Service, jwtSecret string) Service {
 }
 
 func (s *service) Register(ctx context.Context, req RegisterRequest) (users.User, string, error) {
-	if _, err := s.users.GetByEmail(ctx, req.Email); err == nil {
-		return users.User{}, "", ErrEmailTaken
-	} else if !errors.Is(err, users.ErrNotFound) {
-		return users.User{}, "", err
-	}
-
-	if _, err := s.users.GetByUsername(ctx, req.Username); err == nil {
-		return users.User{}, "", ErrUsernameTaken
-	} else if !errors.Is(err, users.ErrNotFound) {
-		return users.User{}, "", err
-	}
-
 	hash, err := password.Hash(req.Password)
 	if err != nil {
 		return users.User{}, "", err

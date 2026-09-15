@@ -11,5 +11,5 @@ WORKDIR /app
 RUN apk add --no-cache vips
 COPY --from=builder /app/server .
 COPY --from=builder /app/internal/platform/database/migrations ./internal/platform/database/migrations
-EXPOSE 8080
+EXPOSE 8081
 CMD ["./server"]

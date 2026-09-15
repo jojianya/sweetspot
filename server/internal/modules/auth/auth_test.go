@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
 )
@@ -16,6 +17,12 @@ type stubUserService struct {
 }
 
 func (s *stubUserService) Create(_ context.Context, email, passwordHash, username string) (users.User, error) {
+	if _, ok := s.byEmail[email]; ok {
+		return users.User{}, &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint"}
+	}
+	if _, ok := s.byUsername[username]; ok {
+		return users.User{}, &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint"}
+	}
 	u := users.User{ID: "usr_new", Email: email, Username: username, Role: users.RoleUser, PasswordHash: passwordHash}
 	return u, nil
 }
@@ -79,8 +86,8 @@ func TestRegisterEmailTaken(t *testing.T) {
 		Password: "password123",
 		Username: "newuser",
 	})
-	if !errors.Is(err, ErrEmailTaken) {
-		t.Fatalf("expected ErrEmailTaken, got %v", err)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict, got %v", err)
 	}
 }
 
@@ -93,8 +100,8 @@ func TestRegisterUsernameTaken(t *testing.T) {
 		Password: "password123",
 		Username: "taken",
 	})
-	if !errors.Is(err, ErrUsernameTaken) {
-		t.Fatalf("expected ErrUsernameTaken, got %v", err)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict, got %v", err)
 	}
 }
 

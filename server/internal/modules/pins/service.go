@@ -1,0 +1,39 @@
+package pins
+
+import "context"
+
+type Service interface {
+	ListCategories(ctx context.Context) ([]Category, error)
+	CategoryExists(ctx context.Context, id int) (bool, error)
+	GetPin(ctx context.Context, id string) (PinDetail, error)
+	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
+	CreatePin(ctx context.Context, pin NewPin) (Pin, error)
+}
+
+type service struct {
+	repo Repository
+}
+
+func NewService(repo Repository) Service {
+	return &service{repo: repo}
+}
+
+func (s *service) ListCategories(ctx context.Context) ([]Category, error) {
+	return s.repo.ListCategories(ctx)
+}
+
+func (s *service) CategoryExists(ctx context.Context, id int) (bool, error) {
+	return s.repo.CategoryExists(ctx, id)
+}
+
+func (s *service) GetPin(ctx context.Context, id string) (PinDetail, error) {
+	return s.repo.GetPin(ctx, id)
+}
+
+func (s *service) ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error) {
+	return s.repo.ListPins(ctx, bbox, categoryID, limit)
+}
+
+func (s *service) CreatePin(ctx context.Context, pin NewPin) (Pin, error) {
+	return s.repo.CreatePin(ctx, pin)
+}

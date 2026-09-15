@@ -8,24 +8,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrCategoryNotFound = errors.New("category not found")
-var ErrNotFound = errors.New("pin not found")
-
-type Repository struct {
-	pool *pgxpool.Pool
-}
-
-func NewRepository(pool *pgxpool.Pool) *Repository {
-	return &Repository{pool: pool}
-}
-
-func (r *Repository) CategoryExists(ctx context.Context, id int) (bool, error) {
-	var exists bool
-	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1)`, id).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
+type Repository interface {
+	CategoryExists(ctx context.Context, id int) (bool, error)
+	CreatePin(ctx context.Context, pin NewPin) (Pin, error)
+	ListCategories(ctx context.Context) ([]Category, error)
+	GetPin(ctx context.Context, id string) (PinDetail, error)
+	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
 }
 
 type NewPin struct {
@@ -39,7 +27,24 @@ type NewPin struct {
 	Geohash       string
 }
 
-func (r *Repository) CreatePin(ctx context.Context, pin NewPin) (Pin, error) {
+type postgresRepository struct {
+	pool *pgxpool.Pool
+}
+
+func NewRepository(pool *pgxpool.Pool) Repository {
+	return &postgresRepository{pool: pool}
+}
+
+func (r *postgresRepository) CategoryExists(ctx context.Context, id int) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1)`, id).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+func (r *postgresRepository) CreatePin(ctx context.Context, pin NewPin) (Pin, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Pin{}, err
@@ -74,7 +79,7 @@ func (r *Repository) CreatePin(ctx context.Context, pin NewPin) (Pin, error) {
 	return p, nil
 }
 
-func (r *Repository) ListCategories(ctx context.Context) ([]Category, error) {
+func (r *postgresRepository) ListCategories(ctx context.Context) ([]Category, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id, name FROM categories ORDER BY id`)
 	if err != nil {
 		return nil, err
@@ -95,15 +100,7 @@ func (r *Repository) ListCategories(ctx context.Context) ([]Category, error) {
 	return categories, nil
 }
 
-type PinDetail struct {
-	Pin
-	Category  *string    `json:"category"`
-	Username  *string    `json:"username"`
-	AvatarURL *string    `json:"avatar_url"`
-	Photos    []PinPhoto `json:"photos"`
-}
-
-func (r *Repository) GetPin(ctx context.Context, id string) (PinDetail, error) {
+func (r *postgresRepository) GetPin(ctx context.Context, id string) (PinDetail, error) {
 	var d PinDetail
 
 	err := r.pool.QueryRow(ctx, `
@@ -150,13 +147,7 @@ func (r *Repository) GetPin(ctx context.Context, id string) (PinDetail, error) {
 	return d, nil
 }
 
-type PinListEntry struct {
-	Pin
-	CoverURL string  `json:"cover_url"`
-	Username *string `json:"username"`
-}
-
-func (r *Repository) ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error) {
+func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error) {
 	args := []any{bbox[1], bbox[0], bbox[3], bbox[2]}
 	if categoryID != nil {
 		args = append(args, *categoryID)

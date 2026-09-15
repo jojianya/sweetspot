@@ -47,16 +47,12 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	userHandler := users.NewHandler(c.UserService)
 	users.RegisterRoutes(r.Group(""), userHandler, users.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
-	r.GET("/categories", pins.ListCategories(c.PinRepo))
-	r.GET("/pins", pins.GetPins(c.PinRepo))
-	r.GET("/pins/:id", validid.Middleware(), middleware.OptionalAuth(cfg.JWTSecret, c.Blacklist), pins.GetPin(c.PinRepo, c.UserService))
+	pinHandler := pins.NewHandler(pins.NewService(c.PinRepo), c.UserService, c.Store)
+	pins.RegisterRoutes(r.Group(""), pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
 	r.POST("/pins/:id/report", middleware.AuthRequired(cfg.JWTSecret, c.Blacklist), validid.Middleware(), reports.CreateReport(c.ReportRepo))
 	r.GET("/reports", middleware.AuthRequired(cfg.JWTSecret, c.Blacklist), users.RequireAdmin(c.UserService), reports.ListReports(c.ReportRepo))
 	r.PATCH("/reports/:id", middleware.AuthRequired(cfg.JWTSecret, c.Blacklist), users.RequireAdmin(c.UserService), validid.Middleware(), reports.ReviewReport(c.ReportRepo))
-
-	pinCreateLimit := middleware.New(10, time.Minute)
-	r.POST("/pins", pinCreateLimit.Middleware(), middleware.AuthRequired(cfg.JWTSecret, c.Blacklist), pins.CreatePin(c.PinRepo, c.Store))
 
 	return r
 }

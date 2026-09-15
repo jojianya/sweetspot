@@ -30,3 +30,17 @@ type PinPhoto struct {
 	Position     int16       `json:"position"`
 	CreatedAt    time.Time   `json:"created_at"`
 }
+
+type PinDetail struct {
+	Pin
+	Category  *string    `json:"category"`
+	Username  *string    `json:"username"`
+	AvatarURL *string    `json:"avatar_url"`
+	Photos    []PinPhoto `json:"photos"`
+}
+
+type PinListEntry struct {
+	Pin
+	CoverURL string  `json:"cover_url"`
+	Username *string `json:"username"`
+}

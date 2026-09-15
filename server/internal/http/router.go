@@ -16,7 +16,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
-	"github.com/jojianya/sweetspot247-backend/internal/reports"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/pkg/validid"
 )
 

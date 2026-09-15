@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/auth"
-	"github.com/jojianya/sweetspot247-backend/internal/users"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 )
 
 const pinListDefaultLimit = 200

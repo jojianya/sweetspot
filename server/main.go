@@ -12,7 +12,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/internal/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/session"
-	"github.com/jojianya/sweetspot247-backend/internal/users"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 )
 
 func main() {

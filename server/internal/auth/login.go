@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
-	"github.com/jojianya/sweetspot247-backend/internal/users"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
 )

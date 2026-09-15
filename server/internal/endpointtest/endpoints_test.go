@@ -418,3 +418,67 @@ func TestReportEndpoints(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+func TestSpoofedHeaderCannotBypassRateLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	_ = r.SetTrustedProxies(nil)
+	r.Use(middleware.Recover())
+
+	lim := middleware.New(1, time.Minute)
+	r.POST("/auth/register", lim.Middleware(), func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	if w := doJSON(t, r, http.MethodPost, "/auth/register", `{}`, nil); w.Code != http.StatusOK {
+		t.Fatalf("expected 200 on first request, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w := doJSON(t, r, http.MethodPost, "/auth/register", `{}`, nil); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 on second request, got %d (%s)", w.Code, w.Body.String())
+	}
+	for _, spoofed := range []string{"10.0.0.1", "10.0.0.2, 10.0.0.3", "203.0.113.9"} {
+		w := doJSON(t, r, http.MethodPost, "/auth/register", `{}`, map[string]string{"X-Forwarded-For": spoofed})
+		if w.Code != http.StatusTooManyRequests {
+			t.Fatalf("expected 429 with spoofed %q, got %d (%s)", spoofed, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestLoginLockoutAfterFailures(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	_ = r.SetTrustedProxies(nil)
+	r.Use(middleware.Recover())
+
+	hash, _ := passwordHash("password123")
+	usersSvc := &mockUserService{
+		byEmail: map[string]users.User{"lock@example.com": {ID: testUUID1, Email: "lock@example.com", PasswordHash: hash, Role: users.RoleUser}},
+	}
+	authSvc := auth.NewService(usersSvc, testSecret)
+	emailLim := middleware.New(5, time.Minute)
+	authH := auth.NewHandler(authSvc, nil, emailLim)
+	auth.RegisterRoutes(r.Group(""), authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
+
+	for i := 0; i < 5; i++ {
+		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"lock@example.com","password":"wrong"}`, nil)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: expected 401, got %d (%s)", i+1, w.Code, w.Body.String())
+		}
+	}
+
+	w := doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"lock@example.com","password":"wrong"}`, nil)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 once locked, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	w = doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"lock@example.com","password":"password123"}`, nil)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 for correct password while locked, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	emailLim.Reset("lock@example.com")
+	w = doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"lock@example.com","password":"password123"}`, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 after Reset, got %d (%s)", w.Code, w.Body.String())
+	}
+}

@@ -61,8 +61,28 @@ func (l *Limiter) sweepExpired(now time.Time) {
 	}
 }
 
-func (l *Limiter) Allow(ip string) bool {
-	return l.AllowKey(ip)
+// Allow reports whether the key is within its window's request limit.
+// It increments the counter for the key and returns true if the result is within limit.
+func (l *Limiter) Allow(key string) bool {
+	return l.AllowKey(key)
+}
+
+// Locked reports whether the key is currently blocked: at least `limit`
+// attempts have been recorded within the active window. Call Reset after
+// success to release the lockout.
+func (l *Limiter) Locked(key string) bool {
+	now := time.Now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	e, ok := l.byKey[key]
+	return ok && !now.After(e.resetAt) && e.count >= l.limit
+}
+
+// Reset removes all state for the given key, releasing any lockout.
+func (l *Limiter) Reset(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.byKey, key)
 }
 
 func (l *Limiter) Middleware() gin.HandlerFunc {

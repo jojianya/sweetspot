@@ -14,12 +14,28 @@ type RouteOptions struct {
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
-	registerLimit := middleware.New(5, time.Minute)
-	rg.POST("/auth/register", registerLimit.Middleware(), h.Register)
+	registerIP := middleware.New(5, time.Minute)
+	registerGlobal := middleware.New(20, time.Minute)
 
-	loginIPLimit := middleware.New(20, time.Minute)
-	rg.POST("/auth/login", loginIPLimit.Middleware(), h.Login)
+	loginIP := middleware.New(20, time.Minute)
+	loginGlobal := middleware.New(60, time.Minute)
+
+	rg.POST("/auth/register",
+		registerGlobal.MiddlewareKeyed(globalKey("register")),
+		registerIP.Middleware(),
+		h.Register)
+
+	rg.POST("/auth/login",
+		loginGlobal.MiddlewareKeyed(globalKey("login")),
+		loginIP.Middleware(),
+		h.Login)
 
 	rg.POST("/auth/logout", middleware.AuthRequired(opts.JWTSecret, opts.Blacklist), h.Logout)
 	rg.GET("/me", middleware.AuthRequired(opts.JWTSecret, opts.Blacklist), h.Me)
+}
+
+// globalKey is a constant-function key so the MiddlewareKeyed limiter applies a
+// single counter across all clients rather than per source IP.
+func globalKey(name string) func(*gin.Context) string {
+	return func(*gin.Context) string { return name }
 }

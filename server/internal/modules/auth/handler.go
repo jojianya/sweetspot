@@ -49,19 +49,26 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	if h.emailLim != nil && !h.emailLim.AllowKey(req.Email) {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, try again later"})
+	if h.emailLim != nil && h.emailLim.Locked(req.Email) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "account locked, try again later"})
 		return
 	}
 
 	u, token, err := h.service.Login(c.Request.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
+			if h.emailLim != nil {
+				h.emailLim.AllowKey(req.Email)
+			}
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
+	}
+
+	if h.emailLim != nil {
+		h.emailLim.Reset(req.Email)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"user": u, "token": token})

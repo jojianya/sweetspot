@@ -20,8 +20,8 @@ import (
 
 func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog.Logger) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-
 	r := gin.New()
+	r.SetTrustedProxies(nil)
 	r.Use(middleware.Recover(), middleware.RequestLogger(lg, "/health"), middleware.CORS(cfg.CORSAllowedOrigins...))
 
 	r.Static("/uploads", "./uploads")

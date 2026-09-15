@@ -37,15 +37,12 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		response.JSON(c, stdhttp.StatusOK, gin.H{"status": "ok", "db": dbStatus})
 	})
 
-	registerLimit := middleware.New(5, time.Minute)
-	r.POST("/auth/register", registerLimit.Middleware(), auth.NewRegisterHandler(c.UserService, cfg.JWTSecret).Handle)
-
-	loginHandler := auth.NewLoginHandler(c.UserService, cfg.JWTSecret, middleware.New(5, time.Minute))
-	loginIPLimit := middleware.New(20, time.Minute)
-	r.POST("/auth/login", loginIPLimit.Middleware(), loginHandler.Handle)
-
-	r.POST("/auth/logout", middleware.AuthRequired(cfg.JWTSecret, c.Blacklist), auth.Logout(c.Blacklist))
-	r.GET("/me", middleware.AuthRequired(cfg.JWTSecret, c.Blacklist), auth.Me(c.UserService))
+	authHandler := auth.NewHandler(
+		auth.NewService(c.UserService, cfg.JWTSecret),
+		c.Blacklist,
+		middleware.New(5, time.Minute),
+	)
+	auth.RegisterRoutes(r.Group(""), authHandler, auth.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
 	userHandler := users.NewHandler(c.UserService)
 	users.RegisterRoutes(r.Group(""), userHandler, users.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})

@@ -280,6 +280,33 @@ func TestUserEndpoints(t *testing.T) {
 		if _, leak := body["password_hash"]; leak {
 			t.Fatal("password_hash leaked in public user response")
 		}
+		if _, leak := body["email"]; leak {
+			t.Fatal("email leaked in anonymous public user response")
+		}
+	})
+
+	t.Run("GetSelfIncludesEmail", func(t *testing.T) {
+		ownTok := newToken(t, testUUID2, users.RoleUser)
+		w := doJSON(t, r, http.MethodGet, "/users/"+testUUID2, "", map[string]string{"Authorization": "Bearer " + ownTok})
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+		body := decodeBody(t, w)
+		if body["email"] != "b@example.com" {
+			t.Fatalf("expected own email in response, got %v", body["email"])
+		}
+	})
+
+	t.Run("GetOtherUserOmitsEmail", func(t *testing.T) {
+		otherTok := newToken(t, testUUID2, users.RoleUser)
+		w := doJSON(t, r, http.MethodGet, "/users/"+testUUID1, "", map[string]string{"Authorization": "Bearer " + otherTok})
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+		body := decodeBody(t, w)
+		if _, leak := body["email"]; leak {
+			t.Fatal("email leaked to another authenticated user")
+		}
 	})
 
 	t.Run("GetUserNotFound", func(t *testing.T) {

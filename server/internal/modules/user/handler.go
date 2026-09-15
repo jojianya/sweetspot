@@ -27,6 +27,10 @@ func (h *Handler) Get(c *gin.Context) {
 		return
 	}
 
+	if viewerID := middleware.GetUserID(c); viewerID != "" && viewerID == user.ID {
+		c.JSON(http.StatusOK, user.ToPrivate())
+		return
+	}
 	c.JSON(http.StatusOK, user.ToPublic())
 }
 

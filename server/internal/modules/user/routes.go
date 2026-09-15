@@ -15,7 +15,7 @@ type RouteOptions struct {
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
-	rg.GET("/users/:id", validid.Middleware(), h.Get)
+	rg.GET("/users/:id", middleware.OptionalAuth(opts.JWTSecret, opts.Blacklist), validid.Middleware(), h.Get)
 	rg.PATCH("/users/:id/role",
 		middleware.AuthRequired(opts.JWTSecret, opts.Blacklist),
 		RequireOwner(h.service),

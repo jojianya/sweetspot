@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const MigrationsDir = "internal/platform/database/migrations"
+
 func RunMigrations(pool *pgxpool.Pool, migrationsDir string) error {
 	ctx := context.Background()
 

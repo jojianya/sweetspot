@@ -51,7 +51,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (users.User
 }
 
 func (s *service) Login(ctx context.Context, req LoginRequest) (users.User, string, error) {
-	u, err := s.users.GetByEmail(ctx, req.Email)
+	u, err := s.users.GetByLogin(ctx, req.Identifier)
 	if err != nil {
 		if errors.Is(err, users.ErrNotFound) {
 			return users.User{}, "", ErrInvalidCredentials

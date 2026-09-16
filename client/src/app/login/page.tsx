@@ -8,7 +8,7 @@ import { login } from "@/lib/api";
 import { useAuth } from "@/store/auth";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -18,12 +18,12 @@ export default function LoginPage() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!email.trim()) return setError("Email is required");
+    if (!identifier.trim()) return setError("Enter your email or username");
     if (!password) return setError("Password is required");
 
     setSubmitting(true);
     try {
-      const { user, token } = await login(email.trim(), password);
+      const { user, token } = await login(identifier.trim(), password);
       setAuth(user, token);
       router.push("/");
     } catch (err) {
@@ -53,19 +53,19 @@ export default function LoginPage() {
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label
-              htmlFor="email"
+              htmlFor="identifier"
               className="mb-1 block text-sm font-medium text-zinc-700"
             >
-              Email
+              Email or username
             </label>
             <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="identifier"
+              type="text"
+              autoComplete="username"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               className="w-full rounded-xl border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none"
-              placeholder="you@example.com"
+              placeholder="you@example.com or yourname"
             />
           </div>
 

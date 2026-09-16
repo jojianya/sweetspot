@@ -6,6 +6,7 @@ type Service interface {
 	Create(ctx context.Context, email, passwordHash, username string) (User, error)
 	GetByEmail(ctx context.Context, email string) (User, error)
 	GetByUsername(ctx context.Context, username string) (User, error)
+	GetByLogin(ctx context.Context, identifier string) (User, error)
 	GetByID(ctx context.Context, id string) (User, error)
 	UpdateRole(ctx context.Context, actorID, userID, role string) (User, error)
 }
@@ -28,6 +29,10 @@ func (s *service) GetByEmail(ctx context.Context, email string) (User, error) {
 
 func (s *service) GetByUsername(ctx context.Context, username string) (User, error) {
 	return s.repo.GetByUsername(ctx, username)
+}
+
+func (s *service) GetByLogin(ctx context.Context, identifier string) (User, error) {
+	return s.repo.GetByLogin(ctx, identifier)
 }
 
 func (s *service) GetByID(ctx context.Context, id string) (User, error) {

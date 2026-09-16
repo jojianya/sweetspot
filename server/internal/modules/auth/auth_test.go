@@ -43,6 +43,16 @@ func (s *stubUserService) GetByUsername(_ context.Context, username string) (use
 	return u, nil
 }
 
+func (s *stubUserService) GetByLogin(_ context.Context, identifier string) (users.User, error) {
+	if u, ok := s.byEmail[identifier]; ok {
+		return u, nil
+	}
+	if u, ok := s.byUsername[identifier]; ok {
+		return u, nil
+	}
+	return users.User{}, users.ErrNotFound
+}
+
 func (s *stubUserService) GetByID(_ context.Context, id string) (users.User, error) {
 	u, ok := s.users[id]
 	if !ok {
@@ -116,8 +126,8 @@ func TestLoginSuccess(t *testing.T) {
 		},
 	})
 	u, token, err := svc.Login(context.Background(), LoginRequest{
-		Email:    "a@example.com",
-		Password: "password123",
+		Identifier: "a@example.com",
+		Password:   "password123",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -127,6 +137,28 @@ func TestLoginSuccess(t *testing.T) {
 	}
 	if token == "" {
 		t.Fatal("expected a token")
+	}
+}
+
+func TestLoginByUsername(t *testing.T) {
+	hash, err := password.Hash("password123")
+	if err != nil {
+		t.Fatalf("failed to hash password: %v", err)
+	}
+	svc := newTestService(&stubUserService{
+		byUsername: map[string]users.User{
+			"alice": {ID: "u1", Email: "a@example.com", Username: "alice", Role: users.RoleUser, PasswordHash: hash},
+		},
+	})
+	u, _, err := svc.Login(context.Background(), LoginRequest{
+		Identifier: "alice",
+		Password:   "password123",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if u.ID != "u1" {
+		t.Fatalf("expected user u1, got %s", u.ID)
 	}
 }
 
@@ -141,19 +173,19 @@ func TestLoginInvalidPassword(t *testing.T) {
 		},
 	})
 	_, _, err = svc.Login(context.Background(), LoginRequest{
-		Email:    "a@example.com",
-		Password: "wrong-password",
+		Identifier: "a@example.com",
+		Password:   "wrong-password",
 	})
 	if !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
 	}
 }
 
-func TestLoginUnknownEmail(t *testing.T) {
+func TestLoginUnknownIdentifier(t *testing.T) {
 	svc := newTestService(&stubUserService{})
 	_, _, err := svc.Login(context.Background(), LoginRequest{
-		Email:    "nobody@example.com",
-		Password: "password123",
+		Identifier: "nobody@example.com",
+		Password:   "password123",
 	})
 	if !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)

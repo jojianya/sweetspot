@@ -1,8 +1,11 @@
 import api from "./client";
 import type { AuthResponse } from "@/lib/types";
 
-export async function login(email: string, password: string): Promise<AuthResponse> {
-  const { data } = await api.post<AuthResponse>("/auth/login", { email, password });
+export async function login(identifier: string, password: string): Promise<AuthResponse> {
+  const { data } = await api.post<AuthResponse>("/auth/login", {
+    identifier,
+    password,
+  });
   return data;
 }
 

@@ -36,6 +36,13 @@ func (m *mockRepository) GetByUsername(ctx context.Context, username string) (Us
 	return m.created, nil
 }
 
+func (m *mockRepository) GetByLogin(ctx context.Context, identifier string) (User, error) {
+	if m.byEmailErr != nil {
+		return User{}, m.byEmailErr
+	}
+	return m.created, nil
+}
+
 func (m *mockRepository) GetByID(_ context.Context, id string) (User, error) {
 	u, ok := m.users[id]
 	if !ok {

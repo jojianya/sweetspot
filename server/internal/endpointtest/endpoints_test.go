@@ -63,6 +63,16 @@ func (m *mockUserService) GetByUsername(_ context.Context, username string) (use
 	return u, nil
 }
 
+func (m *mockUserService) GetByLogin(_ context.Context, identifier string) (users.User, error) {
+	if u, ok := m.byEmail[identifier]; ok {
+		return u, nil
+	}
+	if u, ok := m.byUsername[identifier]; ok {
+		return u, nil
+	}
+	return users.User{}, users.ErrNotFound
+}
+
 func (m *mockUserService) GetByID(ctx context.Context, id string) (users.User, error) {
 	u, ok := m.users[id]
 	if !ok {
@@ -211,7 +221,20 @@ func TestAuthEndpoints(t *testing.T) {
 	t.Run("LoginSuccess", func(t *testing.T) {
 		hash, _ := passwordHash("password123")
 		usersSvc.byEmail["a@example.com"] = users.User{ID: testUUID1, Email: "a@example.com", PasswordHash: hash, Role: users.RoleUser}
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"a@example.com","password":"password123"}`, nil)
+		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com","password":"password123"}`, nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+		body := decodeBody(t, w)
+		if _, ok := body["token"]; !ok {
+			t.Fatalf("expected token, got %v", body)
+		}
+	})
+
+	t.Run("LoginByUsername", func(t *testing.T) {
+		hash, _ := passwordHash("password123")
+		usersSvc.byUsername["alice"] = users.User{ID: testUUID1, Email: "a@example.com", Username: "alice", PasswordHash: hash, Role: users.RoleUser}
+		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"alice","password":"password123"}`, nil)
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
 		}
@@ -222,14 +245,14 @@ func TestAuthEndpoints(t *testing.T) {
 	})
 
 	t.Run("LoginWrongPassword", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"a@example.com","password":"wrongpass"}`, nil)
+		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com","password":"wrongpass"}`, nil)
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
 		}
 	})
 
 	t.Run("LoginMalformedBody", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"a@example.com"}`, nil)
+		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com"}`, nil)
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
 		}
@@ -522,24 +545,24 @@ func TestLoginLockoutAfterFailures(t *testing.T) {
 	auth.RegisterRoutes(r.Group(""), authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
 	for i := 0; i < 5; i++ {
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"lock@example.com","password":"wrong"}`, nil)
+		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"wrong"}`, nil)
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("attempt %d: expected 401, got %d (%s)", i+1, w.Code, w.Body.String())
 		}
 	}
 
-	w := doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"lock@example.com","password":"wrong"}`, nil)
+	w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"wrong"}`, nil)
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 once locked, got %d (%s)", w.Code, w.Body.String())
 	}
 
-	w = doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"lock@example.com","password":"password123"}`, nil)
+	w = doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"password123"}`, nil)
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 for correct password while locked, got %d (%s)", w.Code, w.Body.String())
 	}
 
 	emailLim.Reset("lock@example.com")
-	w = doJSON(t, r, http.MethodPost, "/auth/login", `{"email":"lock@example.com","password":"password123"}`, nil)
+	w = doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"password123"}`, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 after Reset, got %d (%s)", w.Code, w.Body.String())
 	}

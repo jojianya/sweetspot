@@ -22,4 +22,6 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 
 	createLimit := middleware.New(10, time.Minute)
 	rg.POST("/pins", createLimit.Middleware(), middleware.AuthRequired(opts.JWTSecret, opts.Blacklist), h.CreatePin)
+
+	rg.DELETE("/pins/:id", validid.Middleware(), middleware.AuthRequired(opts.JWTSecret, opts.Blacklist), h.DeletePin)
 }

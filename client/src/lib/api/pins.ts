@@ -56,3 +56,7 @@ export async function searchPins(
   });
   return pinListEntrySchema.array().parse(data.pins);
 }
+
+export async function deletePin(id: string): Promise<void> {
+  await api.delete(`/pins/${id}`);
+}

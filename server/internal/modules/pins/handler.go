@@ -157,6 +157,30 @@ func canViewHidden(c *gin.Context, pin PinDetail) bool {
 	return role == "admin" || role == "owner"
 }
 
+func (h *Handler) DeletePin(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	if err := h.service.DeletePin(c.Request.Context(), c.Param("id"), userID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "pin not found"})
+			return
+		}
+		if errors.Is(err, ErrForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "you can only delete your own pins"})
+			return
+		}
+		slog.Error("delete pin", "err", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 func (h *Handler) CreatePin(c *gin.Context) {
 	form, err := c.MultipartForm()
 	if err != nil {

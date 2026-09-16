@@ -12,6 +12,7 @@ import (
 type Repository interface {
 	CategoryExists(ctx context.Context, id int) (bool, error)
 	CreatePin(ctx context.Context, pin NewPin) (Pin, error)
+	DeletePin(ctx context.Context, id, userID string) error
 	ListCategories(ctx context.Context) ([]Category, error)
 	GetPin(ctx context.Context, id string) (PinDetail, error)
 	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
@@ -80,6 +81,25 @@ func (r *postgresRepository) CreatePin(ctx context.Context, pin NewPin) (Pin, er
 		return Pin{}, err
 	}
 	return p, nil
+}
+
+func (r *postgresRepository) DeletePin(ctx context.Context, id, userID string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE pins SET is_hidden = true WHERE id = $1 AND user_id = $2`, id, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 1 {
+		return nil
+	}
+
+	var exists bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pins WHERE id = $1)`, id).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return ErrForbidden
+	}
+	return ErrNotFound
 }
 
 func (r *postgresRepository) ListCategories(ctx context.Context) ([]Category, error) {

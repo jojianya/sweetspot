@@ -7,7 +7,7 @@ import LocateButton from "./LocateButton";
 import CategoryBar from "@/components/pins/CategoryBar";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
-import { fetchCategories } from "@/lib/api";
+import { fetchCategories, deletePin } from "@/lib/api";
 import { usePins } from "@/hooks/usePins";
 import { usePinDetail } from "@/hooks/usePinDetail";
 import type { Category, CreatedPin, NewPinPhoto, PinListEntry } from "@/lib/types";
@@ -25,9 +25,10 @@ export default function MapApp() {
   const [postingMode, setPostingMode] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  const { pins, loading, error: pinsError, addPin } = usePins(bbox, selectedCategory);
-  const reportDetailError = useCallback((message: string) => setDetailError(message), []);
-  const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
+const { pins, loading, error: pinsError, addPin, removePin } = usePins(bbox, selectedCategory);
+const { user } = useAuth();
+const reportDetailError = useCallback((message: string) => setDetailError(message), []);
+const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
 
   const loadCategories = useCallback(async () => {
     try {
@@ -131,6 +132,15 @@ export default function MapApp() {
     setPostingMode(false);
   }, []);
 
+  const handleDeletePin = useCallback(
+    async (id: string) => {
+      await deletePin(id);
+      removePin(id);
+      setSelectedPinId(null);
+    },
+    [removePin]
+  );
+
   const bannerError = categoriesError ?? pinsError ?? detailError;
 
   return (
@@ -203,7 +213,13 @@ export default function MapApp() {
       )}
 
       {selectedPinId && detail && (
-        <PinDetailPanel key={detail.id} pin={detail} onClose={() => setSelectedPinId(null)} />
+        <PinDetailPanel
+          key={detail.id}
+          pin={detail}
+          currentUserId={user?.id ?? null}
+          onDelete={handleDeletePin}
+          onClose={() => setSelectedPinId(null)}
+        />
       )}
 
       {postingMode && (

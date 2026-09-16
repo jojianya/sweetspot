@@ -53,5 +53,9 @@ export function usePins(bbox: string | null, category: number | null) {
     );
   }, []);
 
-  return { pins, loading, error, addPin };
+  const removePin = useCallback((id: string) => {
+    setPins((prev) => prev.filter((p) => p.id !== id));
+  }, []);
+
+  return { pins, loading, error, addPin, removePin };
 }

@@ -21,6 +21,7 @@ type mockPinRepository struct {
 	existsErr     error
 	userExists    bool
 	userExistsErr error
+	deleteErr     error
 }
 
 func (m *mockPinRepository) ListCategories(context.Context) ([]Category, error) {
@@ -45,6 +46,10 @@ func (m *mockPinRepository) SearchPins(context.Context, string, int) ([]PinListE
 
 func (m *mockPinRepository) CreatePin(context.Context, NewPin) (Pin, error) {
 	return m.created, m.createPinErr
+}
+
+func (m *mockPinRepository) DeletePin(context.Context, string, string) error {
+	return m.deleteErr
 }
 
 func (m *mockPinRepository) UserExists(context.Context, string) (bool, error) {
@@ -126,5 +131,29 @@ func TestUserExistsDelegates(t *testing.T) {
 	}
 	if !exists {
 		t.Fatal("expected user to exist")
+	}
+}
+
+func TestDeletePinDelegates(t *testing.T) {
+	svc := NewService(&mockPinRepository{})
+	err := svc.DeletePin(context.Background(), "pin-1", "user-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDeletePinPropagatesNotFound(t *testing.T) {
+	svc := NewService(&mockPinRepository{deleteErr: ErrNotFound})
+	err := svc.DeletePin(context.Background(), "missing", "user-1")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeletePinPropagatesForbidden(t *testing.T) {
+	svc := NewService(&mockPinRepository{deleteErr: ErrForbidden})
+	err := svc.DeletePin(context.Background(), "pin-1", "other-user")
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden, got %v", err)
 	}
 }

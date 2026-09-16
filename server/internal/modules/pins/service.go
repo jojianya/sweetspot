@@ -5,6 +5,7 @@ import "context"
 type Service interface {
 	ListCategories(ctx context.Context) ([]Category, error)
 	CategoryExists(ctx context.Context, id int) (bool, error)
+	DeletePin(ctx context.Context, id, userID string) error
 	GetPin(ctx context.Context, id string) (PinDetail, error)
 	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
 	SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error)
@@ -42,6 +43,10 @@ func (s *service) SearchPins(ctx context.Context, query string, limit int) ([]Pi
 
 func (s *service) CreatePin(ctx context.Context, pin NewPin) (Pin, error) {
 	return s.repo.CreatePin(ctx, pin)
+}
+
+func (s *service) DeletePin(ctx context.Context, id, userID string) error {
+	return s.repo.DeletePin(ctx, id, userID)
 }
 
 func (s *service) UserExists(ctx context.Context, id string) (bool, error) {

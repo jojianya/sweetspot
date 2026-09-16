@@ -6,14 +6,23 @@ import { formatTime } from "@/lib/utils";
 
 interface PinDetailPanelProps {
   pin: PinDetail;
+  currentUserId: string | null;
+  onDelete: (id: string) => Promise<void>;
   onClose: () => void;
 }
 
-export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
+export default function PinDetailPanel({
+  pin,
+  currentUserId,
+  onDelete,
+  onClose,
+}: PinDetailPanelProps) {
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const photo = pin.photos[index];
   const count = pin.photos.length;
+  const isOwner = pin.user_id !== "" && pin.user_id === currentUserId;
 
   useEffect(() => {
     if (!lightbox) return;
@@ -30,27 +39,64 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, count]);
 
+  const handleDelete = async () => {
+    if (deleting) return;
+    if (!window.confirm("Delete this pin? This can't be undone.")) return;
+    setDeleting(true);
+    try {
+      await onDelete(pin.id);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <>
       <div className="absolute inset-y-0 right-0 z-10 flex w-full max-w-sm flex-col bg-white shadow-2xl shadow-zinc-900/20">
         <header className="flex items-center justify-between px-4 py-3">
           <h2 className="text-lg font-semibold text-zinc-900">Pin</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
-            aria-label="Close"
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
+          <div className="flex items-center gap-1">
+            {isOwner && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded-full p-1.5 text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                aria-label="Delete pin"
+                title="Delete pin"
+              >
+                <svg
+                  className={"h-5 w-5" + (deleting ? " animate-pulse" : "")}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"
+                  />
+                </svg>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+              aria-label="Close"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          </button>
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto pb-4">

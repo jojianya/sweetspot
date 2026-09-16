@@ -10,7 +10,6 @@ This describes the end-to-end path a person takes through the app, from opening 
 2. **Browse the map** — the client fetches pins for the current viewport via `GET /pins?bbox=...&category=...` (public endpoint, hidden pins excluded).
 3. **View pin details** — tapping a marker opens a detail view (photo(s), caption, category, user, timestamp). Still no auth required.
 4. **Filter by category** — optional, via `GET /categories` + chip selection; re-fetches pins with `&category=...`.
-5. **Live updates while browsing** — the client opens a WebSocket connection, subscribes to the visible geohash cells, and receives `pin_batch` messages as new pins appear nearby — no refresh needed.
 
 At this point, a guest can fully explore the app with zero commitment.
 
@@ -22,7 +21,7 @@ At this point, a guest can fully explore the app with zero commitment.
 7. **Branch on auth state:**
    - **Not logged in** → shown a login/register prompt instead of the pin form.
    - **Already logged in** → goes straight to the create-pin form.
-8. **Register or log in** (if needed) — `POST /auth/register` or `POST /auth/login`, JWT stored client-side (memory + secure storage/httpOnly cookie). New accounts default to `role = 'user'`.
+8. **Register or log in** (if needed) — `POST /auth/register` or `POST /auth/login`, JWT stored client-side via Zustand `persist` in `localStorage` under the `goodspot-auth` key (deliberate dev choice over httpOnly cookies since the API is a separate origin and the token travels in the `Authorization: Bearer` header). New accounts default to `role = 'user'`.
 
 This is the only mandatory gate for regular use of the app — everything before it, and the reporting flow below, are the only other places auth matters.
 
@@ -30,12 +29,13 @@ This is the only mandatory gate for regular use of the app — everything before
 
 ## 3. Creating a pin
 
-9. **Fill out the create-pin form** — photo picker (one or more photos), category select, optional caption, plus the tapped lat/lng.
+9. **Fill out the create-pin form** — photo picker (one or more photos, up to 5), category select, optional caption, plus the tapped lat/lng.
 10. **Submit** — `POST /pins` with the JWT in the `Authorization` header, as `multipart/form-data` (photos + fields together).
-11. **Server-side validation** — lat/lng range, category exists, each file's type/size checked, photo count checked against the max, before anything is saved.
-12. **Pin saved** — pin row and its `pin_photos` rows written to Postgres/PostGIS in one transaction; photos stored (local disk in dev, Cloudflare R2 in production).
-13. **Event published** — the new pin's geohash cell is pushed to Redis; the Realtime Hub picks it up and batches it into the next broadcast window (500ms–1s).
-14. **Pin appears live** — the creator sees it immediately (optimistic UI update); anyone else with that geohash cell in view sees it appear via the WebSocket `pin_batch` message, no refresh needed.
+11. **Server-side validation** — lat/lng range, category exists, each file's type (JPG/PNG by magic bytes), size (≤10MB), dimensions (≤8000×8000 px), and photo count (1–5) checked before anything is saved.
+12. **Photos processed** — each image is converted to WebP (downscaled to ≤1600px, q80) with a 400px square thumbnail generated alongside (libvips via bimg).
+13. **Pin saved** — pin row and its `pin_photos` rows (with `photo_url` + `thumbnail_url`) written to Postgres/PostGIS in one transaction; files stored on the local filesystem (Cloudflare R2 planned for production).
+14. **Pin appears** — the creator sees it immediately (optimistic UI update); other users see it when they next load/reload the map viewport containing it.
+    > **Phase 5 (planned):** the new pin's geohash cell will be pushed to Redis; the Realtime Hub will batch it into the next broadcast window (500ms–1s) so anyone with that cell in view sees it appear via WebSocket `pin_batch` — no refresh needed.
 
 ---
 
@@ -72,8 +72,6 @@ Guest opens app
       │
       ▼
 Browse map (public) ──► View pin detail (public) ──► Filter by category (public)
-      │                                                        │
-      │◄───────────── live pin updates via WebSocket ──────────┘
       │
       ▼
 Tap "+" to add a pin
@@ -82,13 +80,17 @@ Tap "+" to add a pin
       │                                      │
       └── Already logged in ─────────────────┤
                                               ▼
-                                   Fill pin form (1+ photos) & submit
+                                   Fill pin form (1–5 photos) & submit
                                               │
                                               ▼
-                                   Pin + photos saved + published to Redis
+                                   Photos validated & processed (WebP + thumbnail)
                                               │
                                               ▼
-                                   Live on other users' maps
+                                   Pin + photos saved in one transaction
+                                              │
+                                              ▼
+                                   Pin visible on other users' maps on next load
+                                   [Phase 5: pushed live via WebSocket]
 
 (Separate, optional path — any logged-in user, any time)
 View pin ──► Report pin ──► Stored in `reports` table ──► Admin reviews via PATCH /reports/:id ──► Pin hidden (approved) or report dismissed

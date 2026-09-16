@@ -14,7 +14,7 @@
 
 - Let users pin a location and attach a photo to it
 - Let users discover pins by exploring a map, not scrolling a feed
-- Deliver real-time updates as new pins/activity appear nearby
+- Deliver real-time updates as new pins/activity appear nearby — **deferred to Phase 5**
 - Build a foundation that supports live, in-the-moment engagement (live event pins, livestreaming) at high concurrency
 
 ## 4. Target Users
@@ -36,7 +36,7 @@
 | Upload photo(s)           | One or more photos tied to that specific pin (multi-photo upload, ordered)                                                                                          |
 | Viewport-based discovery | View pins within the current map view                                                                                                                                |
 | Auth                     | Register / login required only to create a pin; browsing the map and viewing pin details is open to guests                                                          |
-| Real-time updates        | New pins appear live via WebSocket, no refresh needed                                                                                                                |
+| Real-time updates        | New pins appear live via WebSocket, no refresh needed — **deferred to Phase 5 (not yet implemented)**                                                               |
 | Location-based discovery | Core browsing model is the map, not a feed                                                                                                                           |
 | Categories               | Each pin has a fixed, required category (e.g. Food, Nature, Event, Nightlife), for filtering/discovery                                                              |
 | Content reporting        | Users can report a pin; an **admin** reviews and actions reports in-app (hides the pin if warranted) — see §5.1a                                                    |
@@ -73,7 +73,7 @@
 - _As a content creator_, I want to pin one or more photos at a specific location, so my content is discoverable by anyone exploring that area.
 - _As an event attendee_, I want to see live activity at an event in real time, so I know what's happening right now, not what happened hours ago.
 - _As a small business_, I want to eventually promote a sponsored pin at my location, so I can attract nearby users.
-- _As any user_, I want new pins to appear on my map automatically while I'm browsing, without needing to refresh.
+- _As any user_, I want new pins to appear on my map automatically while I'm browsing, without needing to refresh. — **post-MVP (Phase 5)**
 - _As an admin_, I want to review reported pins and hide the ones that violate policy, so the map stays trustworthy.
 - _As the owner_, I want to promote trusted users to admin, so moderation doesn't depend on a single person.
 
@@ -81,7 +81,7 @@
 
 - # of pins created / day
 - # of active viewport sessions / day (map opens + browsing duration)
-- Real-time update latency (pin post → visible to nearby viewers)
+- Real-time update latency (pin post → visible to nearby viewers) — **post-MVP (Phase 5)**
 - Retention: % of users who pin or view again within 7 days
 - (Post-launch, live features) peak concurrent viewers per hotspot handled without degradation — captured per-stream via `streams.peak_viewer_count`
 
@@ -89,13 +89,13 @@
 
 - Backend: **Go** — chosen for real-time concurrency demands (live pins, livestreaming) over Node/Express; see [[goodspot247]] architecture notes for full reasoning
 - Database: PostgreSQL + PostGIS for geospatial queries
-- Real-time: WebSocket-based, geohash-partitioned rooms, batched broadcasts, Redis pub/sub for horizontal scaling
-- Livestreaming (future): WebRTC via LiveKit (Go-based SFU)
-- Frontend: Next.js (web) + React Native (mobile), MapLibre GL for map rendering
+- Real-time: WebSocket-based, geohash-partitioned rooms, batched broadcasts, Redis pub/sub for horizontal scaling — **planned (Phase 5), not yet implemented**
+- Livestreaming (future): WebRTC via LiveKit (Go-based SFU) — **planned (Phase 8), not yet implemented**
+- Frontend: Next.js (web) — React Native (mobile) is a future consideration
 
 ## 9. Open Questions
 
 - Photo moderation approach beyond user reporting (automated pre-screening) — not yet defined; MVP ships with user reports reviewed by an admin in-app, with the owner role bootstrapped manually via the database
 - Monetization model for sponsored/business pins — not yet defined
-- Whether livestreaming ships as MVP+1 or later, pending validation of core pin/discovery loop first
+- Whether livestreaming ships as MVP+1 or later, pending validation of core pin/discovery loop first — **decided: Phase 8, post-MVP**
 - Whether the owner should ever be able to demote themselves or another owner-equivalent, and how to prevent the app from ending up with zero owners

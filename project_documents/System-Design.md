@@ -8,8 +8,8 @@
 - Anyone (including guests, no login) can browse the map and view pin details
 - Users can pin a location + upload one or more photos + select a fixed, required category
 - Users can view/filter pins within their current map viewport, optionally by category
-- Users receive real-time updates as new pins appear nearby
-- Users can go live at a pinned location; others can watch + chat
+- Users receive real-time updates as new pins appear nearby — **planned (Phase 5), not yet implemented**
+- Users can go live at a pinned location; others can watch + chat — **planned (Phase 8), not yet implemented**
 - Admins can review reported pins and hide ones that violate policy; the owner can promote/demote admins
 - (Future) Likes, comments, trending spots, sponsored pins, analytics
 
@@ -37,28 +37,33 @@
 ### REST endpoints
 
 ```
-POST   /auth/register
-POST   /auth/login
+POST   /auth/register           — [rate-limited] create account, returns JWT
+POST   /auth/login              — [rate-limited] authenticate, returns JWT
+POST   /auth/logout             — [auth required] blacklist JWT
 
 GET    /pins?bbox=lat1,lng1,lat2,lng2&category=food   — [public] pins within viewport, optional category filter (hidden pins excluded)
-GET    /pins/:id                 — [public]
-GET    /categories               — [public] fixed list of categories for the create-pin UI
-POST   /pins                     — [auth required] create a pin (1+ photos + lat/lng + caption + category)
+GET    /pins/:id                — [public, owner/admin for hidden pins]
+GET    /categories              — [public] fixed list of categories for the create-pin UI
+POST   /pins                    — [auth required, rate-limited] create a pin (1–5 photos via multipart + lat/lng + caption + category)
 
-POST   /streams                  — [auth required] start a livestream at a pin
-GET    /streams/:id              — [public] get stream info + join token
-POST   /streams/:id/end          — [auth required]
+GET    /users/:id               — [optional auth] public profile (email only visible to the account owner)
+PATCH  /users/:id/role          — [owner only] promote/demote a user's role (user/admin/owner)
 
-GET    /users/:id                — [public]
+POST   /pins/:id/report         — [auth required] report a pin (content moderation)
+GET    /reports                  — [admin or owner] list reports (filters + pagination)
+PATCH  /reports/:id             — [admin or owner] review a report: approve (hides the pin) or dismiss
 
-POST   /pins/:id/report          — [auth required] report a pin (content moderation)
-PATCH  /reports/:id              — [admin or owner] review a report: approve (hides the pin, sets pins.is_hidden) or dismiss
-PATCH  /users/:id/role           — [owner only] promote/demote a user's role (user/admin)
+GET    /health                  — liveness + DB connectivity check
+GET    /uploads/*               — static photo files (public)
+
+POST   /streams                 — [Phase 8, planned] start a livestream at a pin
+GET    /streams/:id             — [Phase 8, planned] get stream info + join token
+POST   /streams/:id/end         — [Phase 8, planned]
 ```
 
 Roles are `user` (default), `admin`, and `owner`. There is exactly one owner-bootstrap path: the first owner is set directly against the `users` table via `psql`/DBeaver — no endpoint grants it. From there, the owner promotes trusted users to admin through `PATCH /users/:id/role`. Admins handle day-to-day report review through `PATCH /reports/:id`; nothing about report review requires direct database access anymore, though it remains available as a fallback.
 
-### WebSocket events
+### WebSocket events — **Phase 5, planned, not yet implemented**
 
 ```
 Client → Server
@@ -101,7 +106,7 @@ CREATE TABLE pins (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
     location    GEOGRAPHY(POINT, 4326) NOT NULL,
-    geohash     TEXT NOT NULL,           -- precomputed, for room assignment
+    geohash     TEXT NOT NULL,           -- precomputed, for room assignment (Phase 5)
     caption     TEXT,
     category_id INT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,  -- fixed, required category
     is_hidden   BOOLEAN NOT NULL DEFAULT false,   -- set true when an admin actions a report
@@ -112,26 +117,28 @@ CREATE INDEX pins_geohash_idx ON pins (geohash);
 CREATE INDEX pins_category_idx ON pins (category_id);
 
 CREATE TABLE pin_photos (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    pin_id     UUID NOT NULL REFERENCES pins(id) ON DELETE CASCADE,
-    photo_url  TEXT NOT NULL,
-    position   SMALLINT NOT NULL DEFAULT 0,   -- display order; position 0 = cover photo
-    created_at TIMESTAMPTZ DEFAULT now()
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pin_id        UUID NOT NULL REFERENCES pins(id) ON DELETE CASCADE,
+    photo_url     TEXT NOT NULL,
+    thumbnail_url TEXT,                  -- added in migration 0006; 400px square thumbnail for map/list views
+    position      SMALLINT NOT NULL DEFAULT 0,   -- display order; position 0 = cover photo
+    created_at    TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX pin_photos_pin_id_idx ON pin_photos (pin_id);
 CREATE UNIQUE INDEX pin_photos_pin_id_position_idx ON pin_photos (pin_id, position);
 
-CREATE TABLE streams (
-    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    pin_id            UUID REFERENCES pins(id) ON DELETE SET NULL,
-    broadcaster_id    UUID REFERENCES users(id) ON DELETE SET NULL,
-    livekit_room_name TEXT NOT NULL UNIQUE,
-    status            TEXT NOT NULL CHECK (status IN ('live','ended')) DEFAULT 'live',
-    peak_viewer_count INT NOT NULL DEFAULT 0,
-    started_at        TIMESTAMPTZ DEFAULT now(),
-    ended_at          TIMESTAMPTZ
-);
-CREATE INDEX streams_status_idx ON streams (status) WHERE status = 'live';
+-- Migration 0005_streams.sql (Phase 8, planned):
+-- CREATE TABLE streams (
+--     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     pin_id            UUID REFERENCES pins(id) ON DELETE SET NULL,
+--     broadcaster_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+--     livekit_room_name TEXT NOT NULL UNIQUE,
+--     status            TEXT NOT NULL CHECK (status IN ('live','ended')) DEFAULT 'live',
+--     peak_viewer_count INT NOT NULL DEFAULT 0,
+--     started_at        TIMESTAMPTZ DEFAULT now(),
+--     ended_at          TIMESTAMPTZ
+-- );
+-- CREATE INDEX streams_status_idx ON streams (status) WHERE status = 'live';
 
 CREATE TABLE reports (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -146,19 +153,19 @@ CREATE TABLE reports (
 );
 
 -- future tables: likes, comments, sponsored_pins, analytics_events
--- photo_url (on pin_photos) points to local filesystem in dev, Cloudflare R2 in production (see build order)
--- migration order: 0001 extensions, 0002 users, 0003 categories+pins+pin_photos, 0004 reports, 0005 streams
+-- photo_url / thumbnail_url on pin_photos points to local filesystem in dev, Cloudflare R2 in production (see build order)
+-- migration order: 0001 extensions, 0002 users, 0003 categories+pins+pin_photos, 0004 reports, 0005 streams (scaffold), 0006 pin_photos.thumbnail_url
 ```
 
 **Why `photo_url` moved off `pins` into `pin_photos`:** MVP scope expanded to support multiple photos per pin. A single `TEXT` column can't hold more than one URL, so photos became their own table (one row per photo), joined back to `pins` via `pin_id`, ordered by `position`.
 
 **Why `category_id` is `NOT NULL` with `ON DELETE RESTRICT`:** the PRD defines category as required. `RESTRICT` means a category can't be deleted while any pin still references it, so the "required" guarantee can never be silently broken by a category disappearing out from under existing pins.
 
-**Why geohash column, not just PostGIS GIST index:** the GIST index is for precise "pins within this bounding box" queries (used by the REST viewport endpoint). The `geohash` column is a coarser bucket used purely for **WebSocket room assignment** — cheap to group clients by, avoids running a spatial query on every broadcast.
+**Why geohash column, not just PostGIS GIST index:** the GIST index is for precise "pins within this bounding box" queries (used by the REST viewport endpoint). The `geohash` column is a coarser bucket used purely for **WebSocket room assignment** (Phase 5) — cheap to group clients by, avoids running a spatial query on every broadcast.
 
 ---
 
-## 4. Real-Time Fan-Out Design (the core scaling piece)
+## 4. Real-Time Fan-Out Design (the core scaling piece) — **Phase 5, planned, not yet implemented**
 
 ### Room assignment
 
@@ -191,7 +198,7 @@ CREATE TABLE reports (
 
 ---
 
-## 5. Livestreaming Design
+## 5. Livestreaming Design — **Phase 8, planned, not yet implemented**
 
 ```
 Broadcaster taps "Go Live"
@@ -221,20 +228,23 @@ Viewer count
 
 | Scenario                                                           | Handling                                                                                                                                                        |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Go instance crashes mid-broadcast                                  | Client WebSocket reconnects, re-subscribes to cells; Redis Pub/Sub means other instances unaffected                                                             |
-| Pin saved but Redis publish fails/is skipped                        | Known gap: pin exists in Postgres but never broadcasts live. Planned fix: transactional outbox table + poller, so the DB write and the "announce it" step can't get split apart |
-| Photo upload fails mid-way                                          | Client retries; pin (and its `pin_photos` rows) isn't created until all photo URLs are confirmed stored in R2 (local disk in dev) — inserted in one DB transaction |
-| Unauthenticated user attempts a gated action (create pin, go live) | Middleware rejects with 401 before handler logic runs; client shows login/register prompt                                                                       |
-| Non-admin attempts to review a report, or non-owner attempts a role change | Middleware rejects with 403 before handler logic runs                                                                                                     |
-| Viewport query on sparse data                                      | Standard bounding-box query, no special handling needed at this scale                                                                                           |
-| Viewport query on dense hotspot (thousands of pins in view)        | Paginate / limit + cluster pins client-side (marker clustering) rather than returning all points                                                                |
-| LiveKit room fails to start                                        | Return error to broadcaster before they think they're live; don't create a "phantom" stream row                                                                 |
-| Redis goes down                                                    | Real-time updates degrade to single-instance-only (if only one instance up) or pause; core REST API (pins, auth) keeps working since it doesn't depend on Redis |
+| Go instance crashes mid-broadcast                                  | **Phase 5:** Client WebSocket reconnects, re-subscribes to cells; Redis Pub/Sub means other instances unaffected. **Currently N/A (no WebSocket yet).** |
+| Pin saved but Redis publish fails/is skipped                        | **Phase 5, known gap:** pin exists in Postgres but never broadcasts live. Planned fix: transactional outbox table + poller |
+| Photo upload fails mid-way                                          | ✅ Client retries; pin (and its `pin_photos` rows) isn't created until all photos are validated and saved — inserted in one DB transaction |
+| Unauthenticated user attempts a gated action (create pin, go live) | ✅ Middleware rejects with 401 before handler logic runs; client shows login/register prompt                                                                       |
+| Non-admin attempts to review a report, or non-owner attempts a role change | ✅ Middleware rejects with 403 before handler logic runs                                                                                                     |
+| Viewport query on sparse data                                      | ✅ Standard bounding-box query, no special handling needed at this scale                                                                                           |
+| Viewport query on dense hotspot (thousands of pins in view)        | ✅ Paginate via `LIMIT` param (default 200, max 200); marker clustering planned for frontend                                                                    |
+| LiveKit room fails to start                                        | **Phase 8:** Return error to broadcaster before they think they're live; don't create a "phantom" stream row                                                                 |
+| Redis goes down                                                    | ✅ Real-time updates degrade to single-instance-only (if only one instance up) or pause; core REST API (pins, auth) keeps working since it doesn't depend on Redis (currently Redis is only used for JWT blacklist, so logout is temporarily affected) |
 
 ---
 
-## 7. What's Deliberately Deferred (not MVP)
+## 7. What's Deliberately Deferred (not yet implemented)
 
+- WebSocket real-time layer (Phase 5) — code scaffolded, not built
+- Livestreaming via LiveKit (Phase 8) — code scaffolded, not built
+- Cloudflare R2 storage (Phase 6) — env vars documented, not wired
 - Multi-region deployment
 - Dedicated microservice split (Realtime Hub as separate service from API) — start as one Go binary, split only if profiling shows a real need
 - Full Kafka-style event streaming — Redis Pub/Sub is sufficient at MVP/early-growth scale

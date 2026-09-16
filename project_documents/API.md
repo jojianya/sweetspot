@@ -19,6 +19,7 @@ Authorization: Bearer <token>
 | GET    | `/health`               | none                              | Liveness + DB connectivity check         |
 | POST   | `/auth/register`        | none (rate-limited)               | Create account, returns JWT              |
 | POST   | `/auth/login`           | none (rate-limited)               | Authenticate, returns JWT                |
+| POST   | `/auth/logout`          | Bearer token                      | Blacklist current JWT                    |
 | GET    | `/me`                   | Bearer token                      | Current user ID + role from token        |
 | GET    | `/users/:id`            | none                              | Public user profile                      |
 | PATCH  | `/users/:id/role`       | Bearer token + **owner**          | Promote/demote user role                 |
@@ -32,15 +33,17 @@ Authorization: Bearer <token>
 | GET    | `/uploads/*`            | none                              | Static photo files                       |
 
 **Roles:** `user` < `admin` < `owner`. `RequireAdmin` allows `admin` and `owner`.
-`RequireOwner` allows only `owner`. Role is re-validated against the DB on every request.
+`RequireOwner` allows only `owner`. Role-gated middleware (`RequireAdmin`/`RequireOwner`)
+re-validates the caller's role against the DB on every request; the base `AuthRequired`
+middleware reads the role from JWT claims.
 
-**Rate limits** (per IP unless noted):
+**Rate limits** (in-memory, per instance):
 
-| Endpoint     | Limit                  |
-| ------------ | ---------------------- |
-| POST /auth/register | 5 / minute      |
-| POST /auth/login    | 20 / minute (IP) + 5 / minute (email) |
-| POST /pins          | 10 / minute      |
+| Endpoint     | Limit                            |
+| ------------ | --------------------------------- |
+| POST /auth/register | 5 / min / IP + 20 / min global |
+| POST /auth/login    | 20 / min / IP + 60 / min global + per-email lockout after 5 failed attempts / min (resets on success) |
+| POST /pins          | 10 / min / IP                  |
 
 ---
 
@@ -48,7 +51,7 @@ Authorization: Bearer <token>
 
 ### POST `/auth/register`
 
-Create a new account. Email is stored lowercased. Rate limit: 5/min per IP.
+Create a new account. Email is stored lowercased. Rate limit: 5/min per IP + 20/min global.
 
 Request (JSON):
 
@@ -87,14 +90,15 @@ Responses:
   }
   ```
 - `400 Bad Request` — invalid body/missing field (`{"error": "..."}`)
-- `409 Conflict` — `email already registered` / `username already taken`
+- `409 Conflict` — `email or username already taken` (single generic message; does not reveal which is taken)
 - `429 Too Many Requests` — `too many requests, try again later`
 
 ---
 
 ### POST `/auth/login`
 
-Authenticate. Rate limits: 20/min per IP + 5/min per email.
+Authenticate. Rate limits: 20/min per IP + 60/min global + per-email lockout after
+5 failed attempts within a minute (`account locked, try again later`; resets on success).
 
 Request (JSON):
 
@@ -108,7 +112,18 @@ Responses:
 - `200 OK` — same shape as `/auth/register` (`user` + `token`)
 - `400 Bad Request` — invalid body
 - `401 Unauthorized` — `invalid email or password` (generic; does not reveal which)
-- `429 Too Many Requests` — `too many requests, try again later`
+- `429 Too Many Requests` — `too many requests, try again later` (rate limit) or `account locked, try again later` (email lockout)
+
+---
+
+### POST `/auth/logout`
+
+**Auth: Bearer token.** Invalidate the current JWT by blacklisting its `jti` in Redis for the token's remaining TTL. After this call, the token can no longer authenticate any request.
+
+Responses:
+
+- `200 OK` — `{"message": "logged out"}`
+- `401 Unauthorized` — `invalid or expired token`
 
 ---
 
@@ -132,13 +147,17 @@ Responses:
 
 Public profile. Never exposes `password_hash`.
 
+Visibility: the response differs depending on the viewer:
+
+- **Anyone (guests and other users)** — `PublicUser`: `id`, `username`, `avatar_url`, `socials`, `role`, `created_at`. The `email` field is **never** included.
+- **The account owner themselves** (sends a Bearer token for their own `:id`) — `PrivateUser`: the public profile plus `email`.
+
 Responses:
 
-- `200 OK` — `PublicUser` (no `updated_at`)
+- `200 OK` — `PublicUser` for everyone else; `PrivateUser` for the account owner
   ```json
   {
     "id": "966e7776-82b3-4096-b310-d41cae451a9b",
-    "email": "user@example.com",
     "username": "cooluser",
     "avatar_url": null,
     "socials": {},
@@ -146,6 +165,7 @@ Responses:
     "created_at": "2026-09-10T12:00:00Z"
   }
   ```
+  (For the account owner, an additional `"email": "user@example.com"` field is included.)
 - `404 Not Found` — `user not found`
 
 ---
@@ -288,8 +308,8 @@ Form fields:
 | lat         | string    | yes      | float, -90..90                       |
 | lng         | string    | yes      | float, -180..180                     |
 | category_id | string    | yes      | int, must exist in `/categories`     |
-| caption     | string    | no       | free text                            |
-| photos      | file(s)   | yes      | 1–5 files, jpg/png only, ≤10MB each, magic bytes validated |
+| caption     | string    | no       | free text, ≤500 chars                |
+| photos      | file(s)   | yes      | 1–5 files, jpg/png only, ≤10MB each, ≤8000×8000 px, magic bytes validated |
 
 Example (curl):
 
@@ -323,7 +343,8 @@ Responses:
   }
   ```
 - `400 Bad Request` — not multipart, missing/invalid `lat`/`lng`/`category_id`,
-  no photos, >5 photos, photo >10MB, non-jpg/png file (`only jpg and png images are allowed`)
+  no photos, >5 photos, photo >10MB, non-jpg/png file (`only jpg and png images are allowed`),
+  image larger than 8000×8000 px (`image dimensions exceed 8000x8000`), caption >500 chars
 - `401 Unauthorized` — missing/invalid token
 - `429 Too Many Requests` — rate limit
 
@@ -458,11 +479,11 @@ Responses:
 
 ### GET `/uploads/*`
 
-Serve uploaded photo files. Public. Path comes from the stored `photo_url`
-(e.g. `http://localhost:8081/uploads/<id>.jpg`).
+Serve uploaded photo files. Public. Path comes from the stored `photo_url` / `thumbnail_url`
+(e.g. `http://localhost:8081/uploads/<id>.webp`).
 
-Redis (if used) and the R2 driver are not wired yet — storage is local-only
-(`./uploads` directory in the server working directory).
+Storage is local-only (`./uploads` directory in the server working directory). The Redis
+Pub/Sub and R2 drivers are not wired yet.
 
 ---
 

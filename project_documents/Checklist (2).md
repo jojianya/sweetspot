@@ -16,8 +16,8 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 ### 0.2 Project scaffolding
 
 - [x] `mkdir goodspot247-backend && cd goodspot247-backend`
-- [x] `go mod init github.com/yourusername/goodspot247-backend`
-- [x] Create folder structure: `config/`, `db/`, `pkg/jwt/`, `pkg/password/`, `pkg/geohash/`, `pkg/ratelimit/`, `storage/`, `internal/users/`, `internal/auth/`, `internal/pins/`, `internal/reports/`, `internal/realtime/`, `internal/streams/`
+- [x] `go mod init github.com/jojianya/sweetspot247-backend`
+- [x] Create folder structure — **actual layout used:** `cmd/api/`, `internal/app/`, `internal/config/`, `internal/di/`, `internal/http/` (+ `middleware/`, `response/`), `internal/modules/{auth,pins,reports,user,realtime,streams}/`, `internal/observability/`, `internal/platform/{database,cache,storage}/`, `pkg/{jwt,password,geohash,validid}/` (the originally planned `config/`, `db/`, `storage/`, `pkg/ratelimit/` top-level folders were consolidated into this structure during the modular refactor)
 - [x] `go get github.com/gin-gonic/gin`
 - [x] `go get github.com/joho/godotenv`
 - [x] Create `.env` file (add to `.gitignore` immediately)
@@ -77,7 +77,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 1.4 Register endpoint
 
-- [x] `internal/auth/register.go` -> `Register` handler
+- [x] `internal/modules/auth/handler.go` -> `Register` handler (module files consolidated into `handler.go`/`service.go`/`routes.go` during the modular refactor — `register.go` was the pre-refactor file name)
 - [x] Request struct (`internal/auth/dto.go`) with `binding` validation tags (email format, password min length, username min/max length)
 - [x] Check email uniqueness before insert (lowercase the email first — Postgres `UNIQUE` is case-sensitive, so `Dave@x.com`/`dave@x.com` won't collide otherwise)
 - [x] Check username uniqueness before insert
@@ -85,7 +85,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [x] New users default to `role = 'user'` — never accept `role` from the request body
 - [x] Return user (without password hash) + JWT on success
 - [x] Route: `POST /auth/register`
-- [x] Wire up basic rate limiting on this route now using the `pkg/ratelimit/` scaffold from Phase 0 (e.g. per-IP, N attempts/minute) — cheaper to add alongside the handler than to retrofit once traffic exists; Phase 7.3 just re-verifies it's in place before launch
+- [x] Wire up basic rate limiting on this route now using the in-memory rate limiter (`internal/http/middleware/rate_limit.go`) — per-IP + global caps, cheaper to add alongside the handler than to retrofit once traffic exists; Phase 7.3 just re-verifies it's in place before launch
 - [x] Test in Postman: valid registration -> 201 + token
 - [x] Test in Postman: duplicate email (including different casing) -> proper error, not a crash
 - [x] Test in Postman: invalid email format -> 400 with validation message
@@ -93,18 +93,18 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 1.5 Login endpoint
 
-- [x] `internal/auth/login.go` -> `Login` handler
+- [x] `internal/modules/auth/handler.go` -> `Login` handler
 - [x] Look up user by (lowercased) email, compare password hash
 - [x] Return JWT on success, generic error on failure (don't leak "email not found" vs "wrong password" — same message for both, security best practice)
 - [x] Route: `POST /auth/login`
-- [x] Wire up rate limiting on this route (same `pkg/ratelimit/` scaffold, but stricter than register — e.g. per-IP _and_ per-email, since this is the actual brute-force target)
+- [x] Wire up rate limiting on this route (same in-memory limiter, but stricter than register — per-IP _and_ per-email lockout, since this is the actual brute-force target)
 - [x] Test in Postman: correct credentials -> 200 + token
 - [x] Test in Postman: wrong password -> 401, generic message
 - [x] Test in Postman: rate limit trips after N rapid failed attempts -> 429
 
 ### 1.6 Auth middleware
 
-- [x] `internal/auth/middleware.go` — reads `Authorization: Bearer <token>` header, validates JWT, sets user ID + role in context
+- [x] `internal/http/middleware/auth.go` — reads `Authorization: Bearer <token>` header, validates JWT, sets user ID + role in context; **role-gated `RequireAdmin`/`RequireOwner` live in `internal/modules/user/routes.go`** and re-validate the role against the DB on every request
 - [x] Write a temporary `GET /me` protected test route that returns the authenticated user's ID + role from context
 - [x] Test in Postman: `/me` with valid token -> 200
 - [x] Test in Postman: `/me` with no token -> 401
@@ -112,16 +112,16 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 1.7 Public user profile
 
-- [x] `internal/users/get_user.go` -> `GetUser` handler, `internal/users/dto.go` -> `PublicUser` (strips password hash)
+- [x] `internal/modules/user/handler.go` -> `GetUser` handler, `internal/modules/user/dto.go` -> `PublicUser`/`PrivateUser` (strips password hash; email only visible to the account owner)
 - [x] Route: `GET /users/:id` (public, no auth middleware)
 - [x] Test in Postman: returns public profile fields only, never password_hash
 
 ### 1.8 Roles & permission middleware
 
-- [x] `internal/auth/middleware.go` -> `RequireAdmin` (passes for `role = 'admin'` or `role = 'owner'`)
-- [x] `internal/auth/middleware.go` -> `RequireOwner` (passes only for `role = 'owner'`)
+- [x] `internal/modules/user/routes.go` -> `RequireAdmin` (passes for `role = 'admin'` or `role = 'owner'`)
+- [x] `internal/modules/user/routes.go` -> `RequireOwner` (passes only for `role = 'owner'`)
 - [x] Bootstrap the very first owner directly in the database. **Policy (revised):** `owner` is now also assignable via the API by an existing owner (self-demotion is blocked with `cannot change your own role`), so a second owner can be created in-app instead of only via SQL: `UPDATE users SET role = 'owner' WHERE email = '<you>';`
-- [x] `internal/users/update_role.go` -> `UpdateRole` handler — body: `{ "role": "user" | "admin" | "owner" }` (owner only assignable by an owner; an owner may not change their own role)
+- [x] `internal/modules/user/handler.go` -> `UpdateRole` handler — body: `{ "role": "user" | "admin" | "owner" }` (owner only assignable by an owner; an owner may not change their own role)
 - [x] Route: `PATCH /users/:id/role` — protected by `RequireOwner`
 - [x] Decide the last-owner policy before shipping — don't leave this open: either (a) `UpdateRole`/demotion logic rejects any change that would leave zero owners, or (b) explicitly accept the risk and document a manual DB-recovery path (who has prod DB access, how a new owner gets bootstrapped if the only owner account is lost/compromised). A single point of failure with no recovery plan is a launch risk, not a nice-to-have — **Chosen: option (a).** `UpdateRole` rejects demotions of the last owner (`cannot demote the last owner`) **and** blocks owners from changing their own role (`cannot change your own role`), so the sole-owner account can never be demoted or self-demoted. A second owner can be created via the API (owner → owner) or by direct DB bootstrap.
 - [x] Test in Postman: owner promotes a user to admin -> 200, role updated
@@ -145,26 +145,27 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 - [x] Index on `pins.category_id`
 - [x] Index on `pin_photos.pin_id`
 - [x] Unique index on `pin_photos (pin_id, position)`
-- [x] `internal/pins/model.go` — Pin + Category + PinPhoto structs
-- [x] Pick + install a geohash library (e.g. `github.com/mmcloughlin/geohash`)
+- [x] `internal/modules/pins/model.go` — Pin + Category + PinPhoto structs
+- [x] Pick + install a geohash library (`github.com/mmcloughlin/geohash`, wrapped in `pkg/geohash/`)
+- [x] Migration `0006_pin_photo_thumbnails.sql` adds `pin_photos.thumbnail_url` (400px square thumbnail) and backfills from `photo_url`
 
 ### 2.2 Categories endpoint
 
-- [x] `internal/pins/get_pin.go` -> `GetCategories` handler (categories are read alongside pins in this module, no separate feature folder)
+- [x] `internal/modules/pins/handler.go` -> `ListCategories` handler (categories are read alongside pins in this module, no separate feature folder)
 - [x] Route: `GET /categories` (public, no auth middleware)
 - [x] Test in Postman: returns seeded list
 
 ### 2.3 Create pin endpoint
 
-- [x] `internal/pins/upload_pin.go` -> `CreatePin` handler
-- [x] Request struct (`internal/pins/dto.go`): lat, lng, caption (optional), category_id (required), photo_urls (placeholder list of strings for now — real multi-file upload comes in Phase 3)
+- [x] `internal/modules/pins/handler.go` -> `CreatePin` handler
+- [x] Request struct (`internal/modules/pins/dto.go`): lat, lng, caption (optional), category_id (required) — `CreatePinRequest` JSON DTO is now dead code since the flow moved to multipart in Phase 3
 - [x] Decide + validate a max photo count per pin (e.g. 5)
 - [x] Validate lat/lng ranges, category_id exists
 - [x] Compute geohash from lat/lng, store alongside `GEOGRAPHY(POINT)`
 - [x] Insert the `pins` row and all `pin_photos` rows (with `position` = array index) in **one DB transaction**, so a pin can never end up with zero photos or orphaned photo rows
 - [x] Apply auth middleware to this route
 - [x] Route: `POST /pins`
-- [x] Wire up basic rate limiting on this route now (same `pkg/ratelimit/` scaffold as register) — prevents pin-spam abuse before it's a problem, not after
+- [x] Wire up basic rate limiting on this route now (same in-memory limiter as register) — prevents pin-spam abuse before it's a problem, not after
 - [x] Test in Postman: valid pin with token, multiple photo URLs -> 201, all photos attached
 - [x] Test in Postman: no token -> 401
 - [x] Test in Postman: invalid category_id -> 400
@@ -174,7 +175,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 2.4 Get pins (viewport query)
 
-- [x] `internal/pins/get_pin.go` -> `GetPins` handler
+- [x] `internal/modules/pins/handler.go` -> `GetPins` handler
 - [x] Parse `bbox` query param (4 floats)
 - [x] PostGIS bounding-box query (`ST_MakeEnvelope` + `ST_Within`, or `&&` operator), filtered to `is_hidden = false`
 - [x] Optional `category` query param -> add `WHERE category_id = ...`
@@ -189,7 +190,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 2.5 Get single pin
 
-- [x] `internal/pins/get_pin.go` -> `GetPin` handler — joins `pin_photos` (ordered by `position`) and `users` (for `username`/`avatar_url`)
+- [x] `internal/modules/pins/handler.go` -> `GetPin` handler — joins `pin_photos` (ordered by `position`; includes `thumbnail_url`) and `users` (for `username`/`avatar_url`)
 - [x] Route: `GET /pins/:id` (public)
 - [x] Test in Postman: valid ID -> pin details with an ordered photo array
 - [x] Test in Postman: invalid/nonexistent ID -> 404
@@ -204,12 +205,12 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 - [x] Write migration `0004_reports.sql`: `id`, `pin_id` (`ON DELETE CASCADE`), `reporter_id` (`ON DELETE SET NULL`), `reason`, `status` (`NOT NULL`, `CHECK IN ('pending','reviewed','actioned')`, default `'pending'`), `resolved_by` (`ON DELETE SET NULL` — which admin/owner actioned it), `resolved_at`, `created_at`
 - [x] Unique constraint `UNIQUE (pin_id, reporter_id)` — one report per user per pin
-- [x] `internal/reports/model.go`
+- [x] `internal/modules/reports/model.go`
 
 ### 2.5.2 Create report endpoint
 
-- [x] `internal/reports/create_report.go` -> `CreateReport` handler
-- [x] Request struct (`internal/reports/dto.go`): reason (required)
+- [x] `internal/modules/reports/handler.go` -> `CreateReport` handler
+- [x] Request struct (`internal/modules/reports/dto.go`): reason (required, ≥3 chars)
 - [x] Apply auth middleware — reporting requires login
 - [x] Route: `POST /pins/:id/report`
 - [x] Test in Postman: valid report with token -> 201
@@ -219,7 +220,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 2.5.3 Report review endpoint (admin role)
 
-- [x] `internal/reports/review_report.go` -> `ReviewReport` handler — body: `{ "action": "approve" | "dismiss" }`
+- [x] `internal/modules/reports/handler.go` -> `ReviewReport` handler — body: `{ "action": "approve" | "dismiss" }`, uses `SELECT ... FOR UPDATE` row locking in the repository to prevent double-resolution races
 - [x] **Approve** -> `pins.is_hidden = true`, `reports.status = 'actioned'`, set `resolved_by` (from JWT) + `resolved_at`
 - [x] **Dismiss** -> `reports.status = 'reviewed'`, set `resolved_by` + `resolved_at`, pin untouched
 - [x] Route: `PATCH /reports/:id` — protected by `RequireAdmin` (Phase 1.8)
@@ -236,7 +237,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 ### 3.1 Local storage handler
 
-- [x] `storage/local.go` — save an uploaded file to `./uploads/`, return local path/URL
+- [x] `storage/local.go` — save an uploaded file to `./uploads/`, return local path/URL — **actual:** `internal/platform/storage/local.go` (+ `fileid.go` for server-generated random hex IDs)
 - [x] Add static file serving: `r.Static("/uploads", "./uploads")`
 - [x] Add `./uploads` to `.gitignore`
 
@@ -256,9 +257,10 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 This app is photo-heavy and map-based — unprocessed multi-photo uploads at up to 10MB each will hurt storage costs and load times fast once there's real traffic. Do this now, before Phase 4 puts real images in front of real users, not as a later optimization pass.
 
-- [x] `go get github.com/disintegration/imaging` (or similar)
-- [x] Resize to a max dimension (e.g. 1600px) and compress uploaded images before saving
-- [x] Generate a thumbnail size alongside the full size for map/list views, if feasible now (otherwise note as a Phase 6 follow-up once on R2/CDN)
+- [x] `go get github.com/h2non/bimg` — **chosen:** libvips via `bimg` (CGO binding; requires libvips installed), implemented in `internal/modules/pins/imaging/imaging.go`
+- [x] Resize to a max dimension (1600px) and compress uploaded images to WebP q80 before saving
+- [x] Generate a 400px square thumbnail alongside the full size for map/list views (stored in `pin_photos.thumbnail_url`, migration `0006`)
+- [x] Reject images above 8000×8000 px (checked via metadata before decode) and cap concurrent libvips processes at 2
 - [x] Test in Postman: uploaded image is resized/compressed on disk, not stored at original size
 
 **Phase 3 done when:** Real photo files (one or more per pin) can be uploaded via Postman form-data, resized/compressed, saved locally, and retrieved via their stored URLs in the correct order.
@@ -276,7 +278,7 @@ This app is photo-heavy and map-based — unprocessed multi-photo uploads at up 
 
 ### 4.2 Map screen
 
-- [x] Basic MapLibre map component, centered on user's location (or default city) — default city Hyderabad (17.385, 78.4867), OpenFreeMap "liberty" style (no API key)
+- [x] Basic MapLibre map component, centered on user's location (or default city) — **MapTiler "toner-lite" style (requires `NEXT_PUBLIC_MAPTILER_API_KEY`)**, centered via geolocation (default city Hyderabad 17.385, 78.4867 was left commented out)
 - [x] Fetch pins on load via `GET /pins?bbox=...` (compute bbox from current map view) — bbox `minLat,minLng,maxLat,maxLng`
 - [x] Render pins as markers — GeoJSON circle layer (clickable)
 - [x] Re-fetch on `moveend`/`zoomend` map events — `moveend` only
@@ -414,8 +416,8 @@ This app is photo-heavy and map-based — unprocessed multi-photo uploads at up 
 
 ### 8.2 Streams table + endpoints
 
-- [ ] Write migration `0005_streams.sql`: `id`, `pin_id`, `broadcaster_id`, `livekit_room_name` (`NOT NULL UNIQUE`), `status` (`NOT NULL`, `CHECK IN ('live','ended')`, default `'live'`), `peak_viewer_count` (`INT NOT NULL DEFAULT 0`), `started_at`, `ended_at`
-- [ ] Partial index: `CREATE INDEX streams_status_idx ON streams (status) WHERE status = 'live';`
+- [x] Migration `0005_streams.sql` (already written and applied during the refactor): `id`, `pin_id`, `broadcaster_id`, `livekit_room_name` (`NOT NULL UNIQUE`), `status` (`NOT NULL`, `CHECK IN ('live','ended')`, default `'live'`), `peak_viewer_count` (`INT NOT NULL DEFAULT 0`), `started_at`, `ended_at`
+- [x] Partial index: `CREATE INDEX streams_status_idx ON streams (status) WHERE status = 'live';`
 - [ ] `internal/streams/handler.go` -> `POST /streams` — creates LiveKit room, returns broadcaster token
 - [ ] `internal/streams/handler.go` -> `GET /streams/:id` — returns stream info + viewer token
 - [ ] `internal/streams/handler.go` -> `POST /streams/:id/end` — closes room, updates status

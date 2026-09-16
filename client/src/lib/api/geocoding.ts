@@ -25,7 +25,7 @@ export async function searchPlaces(
     key: MAPTILER_KEY,
     language: "en",
     limit: "6",
-    types: "place,address,street,locality,neighborhood,region,country",
+    types: "place,municipality,municipal_district,locality,neighbourhood,address,road,county,region,country",
   });
   if (proximity) params.set("proximity", `${proximity.lng},${proximity.lat}`);
 

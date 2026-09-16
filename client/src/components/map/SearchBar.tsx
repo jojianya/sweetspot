@@ -32,14 +32,18 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
       setLoading(true);
       setIsOpen(true);
       try {
-        const [places, pins] = await Promise.all([
+        const [placesRes, pinsRes] = await Promise.allSettled([
           searchPlaces(q, center, signal),
           searchPins(q, 5, signal),
         ]);
         if (signal?.aborted) return;
         const items: ResultItem[] = [];
-        for (const p of places) items.push({ kind: "place", place: p });
-        for (const p of pins) items.push({ kind: "pin", pin: p });
+        if (placesRes.status === "fulfilled") {
+          for (const p of placesRes.value) items.push({ kind: "place", place: p });
+        }
+        if (pinsRes.status === "fulfilled") {
+          for (const p of pinsRes.value) items.push({ kind: "pin", pin: p });
+        }
         setResults(items);
         setIsOpen(items.length > 0);
       } catch {

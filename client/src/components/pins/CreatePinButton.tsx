@@ -133,7 +133,7 @@ export default function CreatePinButton({
       </button>
 
       {open && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-zinc-900">

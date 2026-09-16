@@ -52,7 +52,7 @@ export default function PinDetailPanel({
 
   return (
     <>
-      <div className="absolute inset-y-0 right-0 z-10 flex w-full max-w-sm flex-col bg-white shadow-2xl shadow-zinc-900/20">
+      <div className="absolute inset-y-0 right-0 z-40 flex w-full max-w-sm flex-col bg-white shadow-2xl shadow-zinc-900/20">
         <header className="flex items-center justify-between px-4 py-3">
           <h2 className="text-lg font-semibold text-zinc-900">Pin</h2>
           <div className="flex items-center gap-1">

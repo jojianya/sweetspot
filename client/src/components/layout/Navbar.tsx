@@ -21,9 +21,12 @@ export default function Navbar() {
   };
 
   return (
-    <header className="relative z-40 border-b border-zinc-200/70 bg-white/80 backdrop-blur">
+    <header className="pointer-events-none absolute inset-x-0 top-0 z-30">
       <div className="flex items-center justify-between px-4 py-3">
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link
+          href="/"
+          className="pointer-events-auto flex items-center gap-2.5 [text-shadow:0_1px_2px_rgba(255,255,255,0.9)]"
+        >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-rose-700 text-white shadow-md shadow-rose-600/30">
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z" />
@@ -34,10 +37,10 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-2.5">
+        <nav className="pointer-events-auto flex items-center gap-2.5">
           {isLoggedIn && user ? (
             <>
-              <div className="hidden items-center gap-2.5 sm:flex">
+              <div className="hidden items-center gap-2.5 sm:flex [text-shadow:0_1px_2px_rgba(255,255,255,0.9)]">
                 {user.avatar_url ? (
                   <img
                     src={user.avatar_url}
@@ -54,7 +57,7 @@ export default function Navbar() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-full border border-zinc-300 px-3.5 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+                className="rounded-full border border-zinc-300 bg-white/90 px-3.5 py-1.5 text-sm font-medium text-zinc-700 shadow-sm backdrop-blur transition-colors hover:bg-white"
               >
                 Log out
               </button>
@@ -63,7 +66,7 @@ export default function Navbar() {
             <>
               <Link
                 href="/login"
-                className="rounded-full border border-zinc-300 px-3.5 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+                className="rounded-full border border-zinc-300 bg-white/90 px-3.5 py-1.5 text-sm font-medium text-zinc-700 shadow-sm backdrop-blur transition-colors hover:bg-white"
               >
                 Log in
               </Link>

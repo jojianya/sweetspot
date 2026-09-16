@@ -26,38 +26,41 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const centerRef = useRef(center);
+  useEffect(() => {
+    centerRef.current = center;
+  });
+  const selectedRef = useRef(false);
 
-  const doSearch = useCallback(
-    async (q: string, signal?: AbortSignal) => {
-      setLoading(true);
-      setIsOpen(true);
-      try {
-        const [placesRes, pinsRes] = await Promise.allSettled([
-          searchPlaces(q, center, signal),
-          searchPins(q, 5, signal),
-        ]);
-        if (signal?.aborted) return;
-        const items: ResultItem[] = [];
-        if (placesRes.status === "fulfilled") {
-          for (const p of placesRes.value) items.push({ kind: "place", place: p });
-        }
-        if (pinsRes.status === "fulfilled") {
-          for (const p of pinsRes.value) items.push({ kind: "pin", pin: p });
-        }
-        setResults(items);
-        setIsOpen(items.length > 0);
-      } catch {
-        if (signal?.aborted) return;
-        setResults([]);
-        setIsOpen(false);
-      } finally {
-        setLoading(false);
+  const doSearch = useCallback(async (q: string, signal?: AbortSignal) => {
+    setLoading(true);
+    setIsOpen(true);
+    try {
+      const [placesRes, pinsRes] = await Promise.allSettled([
+        searchPlaces(q, centerRef.current, signal),
+        searchPins(q, 5, signal),
+      ]);
+      if (signal?.aborted) return;
+      const items: ResultItem[] = [];
+      if (placesRes.status === "fulfilled") {
+        for (const p of placesRes.value) items.push({ kind: "place", place: p });
       }
-    },
-    [center]
-  );
+      if (pinsRes.status === "fulfilled") {
+        for (const p of pinsRes.value) items.push({ kind: "pin", pin: p });
+      }
+      setResults(items);
+      setIsOpen(items.length > 0);
+    } catch {
+      if (signal?.aborted) return;
+      setResults([]);
+      setIsOpen(false);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
+    if (selectedRef.current) return;
     abortRef.current?.abort();
     if (query.trim().length < 2) return;
     const controller = new AbortController();
@@ -80,6 +83,7 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
   }, []);
 
   const select = (item: ResultItem) => {
+    selectedRef.current = true;
     if (item.kind === "place" && item.place) {
       onSelectPlace(item.place.center, item.place.bbox);
       setQuery(item.place.text);
@@ -87,6 +91,7 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
       onSelectPin(item.pin);
       setQuery(item.pin.caption ?? item.pin.username ?? "Pin");
     }
+    setResults([]);
     setIsOpen(false);
     setActiveIndex(-1);
   };
@@ -110,6 +115,7 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
   };
 
   const clear = () => {
+    selectedRef.current = false;
     setQuery("");
     setIsOpen(false);
     setResults([]);
@@ -133,6 +139,7 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
           value={query}
           onChange={(e) => {
             const q = e.target.value;
+            selectedRef.current = false;
             setQuery(q);
             setActiveIndex(-1);
             if (q.trim().length < 2) {

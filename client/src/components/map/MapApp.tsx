@@ -1,107 +1,98 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import MapView, { type MapLocation } from "./MapView";
 import CategoryBar from "@/components/pins/CategoryBar";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
-import { fetchCategories, fetchPin, fetchPins } from "@/lib/api";
-import type { CreatedPin, NewPinPhoto, PinDetail, PinListEntry } from "@/lib/types";
+import { fetchCategories } from "@/lib/api";
+import { usePins } from "@/hooks/usePins";
+import { usePinDetail } from "@/hooks/usePinDetail";
+import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
 export default function MapApp() {
-  const [pins, setPins] = useState<PinListEntry[]>([]);
-  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<PinDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [bbox, setBbox] = useState<string | null>(null);
   const [center, setCenter] = useState({ lat: 17.385, lng: 78.4867 });
   const [flyTo, setFlyTo] = useState<{ lng: number; lat: number } | null>(null);
   const [pendingLocation, setPendingLocation] = useState<MapLocation | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
-  const bboxRef = useRef<string | null>(null);
-  const pendingRef = useRef(0);
+  const { pins, loading, error: pinsError, addPin } = usePins(bbox, selectedCategory);
+  const reportDetailError = useCallback((message: string) => setDetailError(message), []);
+  const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
 
-  const loadPins = useCallback(async () => {
-    const bbox = bboxRef.current;
-    if (!bbox) return;
-    const req = ++pendingRef.current;
-    setLoading(true);
-    setError(null);
+  const loadCategories = useCallback(async () => {
     try {
-      const data = await fetchPins(bbox, selectedCategory, useAuth.getState().token);
-      if (req === pendingRef.current) setPins(data);
+      setCategories(await fetchCategories());
     } catch (e) {
-      if (req === pendingRef.current) setError((e as Error).message);
-    } finally {
-      if (req === pendingRef.current) setLoading(false);
+      setCategoriesError(e instanceof Error ? e.message : "something went wrong");
     }
-  }, [selectedCategory]);
-
-  useEffect(() => {
-    fetchCategories()
-      .then(setCategories)
-      .catch((e) => setError((e as Error).message));
   }, []);
 
   useEffect(() => {
-    loadPins();
-  }, [loadPins]);
+    let cancelled = false;
+    fetchCategories()
+      .then((data) => {
+        if (!cancelled) setCategories(data);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setCategoriesError(
+            e instanceof Error ? e.message : "something went wrong"
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const retryCategories = useCallback(() => {
+    setCategoriesError(null);
+    void loadCategories();
+  }, [loadCategories]);
 
   const handleBoundsChange = useCallback(
-    (bbox: string, c: { lat: number; lng: number }) => {
-      bboxRef.current = bbox;
+    (bboxValue: string, c: { lat: number; lng: number }) => {
+      setBbox(bboxValue);
       setCenter(c);
       setFlyTo(null);
-      void loadPins();
     },
-    [loadPins]
+    []
   );
-
-  const openDetail = useCallback(async (id: string) => {
-    setSelectedPinId(id);
-    setDetail(null);
-    try {
-      const d = await fetchPin(id, useAuth.getState().token);
-      setDetail(d);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, []);
 
   const handleCreated = useCallback(
     (pin: CreatedPin, photos: NewPinPhoto[]) => {
       const cover = photos[0]?.thumbnail_url ?? photos[0]?.photo_url ?? "";
       const username = useAuth.getState().user?.username ?? "";
-      setPins((prev) =>
-        prev.some((p) => p.id === pin.id)
-          ? prev
-          : [
-              {
-                id: pin.id,
-                user_id: pin.user_id,
-                location: pin.location,
-                geohash: pin.geohash,
-                caption: pin.caption,
-                category_id: pin.category_id,
-                is_hidden: pin.is_hidden,
-                created_at: pin.created_at,
-                cover_url: cover,
-                username,
-              },
-              ...prev,
-            ]
-      );
-      openDetail(pin.id);
-      const { lng, lat } = parsePoint(pin.location);
-      setFlyTo({ lng, lat });
+      addPin({
+        id: pin.id,
+        user_id: pin.user_id,
+        location: pin.location,
+        geohash: pin.geohash,
+        caption: pin.caption,
+        category_id: pin.category_id,
+        is_hidden: pin.is_hidden,
+        created_at: pin.created_at,
+        cover_url: cover,
+        username,
+      });
+      setSelectedPinId(pin.id);
+      const point = parsePoint(pin.location);
+      if (point) setFlyTo(point);
       setPendingLocation(null);
+      setDetailError(null);
     },
-    [openDetail]
+    [addPin]
   );
+
+  const bannerError = categoriesError ?? pinsError ?? detailError;
 
   return (
     <div className="absolute inset-0">
@@ -110,7 +101,7 @@ export default function MapApp() {
         flyTo={flyTo}
         pendingLocation={pendingLocation}
         onBoundsChange={handleBoundsChange}
-        onSelectPin={openDetail}
+        onSelectPin={setSelectedPinId}
         onSelectLocation={setPendingLocation}
       />
 
@@ -127,17 +118,26 @@ export default function MapApp() {
           Loading pins…
         </div>
       )}
-      {error && (
+      {bannerError && (
         <div
           role="alert"
           className="absolute left-3 top-20 z-10 rounded bg-rose-50 px-2 py-1 text-xs text-rose-600 shadow"
         >
-          {error}
+          {bannerError}
+          {categoriesError && (
+            <button
+              type="button"
+              onClick={retryCategories}
+              className="ml-2 font-semibold underline"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
 
       {selectedPinId && detail && (
-        <PinDetailPanel pin={detail} onClose={() => setSelectedPinId(null)} />
+        <PinDetailPanel key={detail.id} pin={detail} onClose={() => setSelectedPinId(null)} />
       )}
 
       <CreatePinButton

@@ -5,9 +5,18 @@ import type { User } from "@/lib/types";
 interface AuthState {
   user: User | null;
   token: string | null;
-  isLoggedIn: boolean;
   setAuth: (user: User, token: string) => void;
   clearAuth: () => void;
+}
+
+function pruneUser(user: User | null) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    avatar_url: user.avatar_url,
+    role: user.role,
+  };
 }
 
 export const useAuth = create<AuthState>()(
@@ -15,10 +24,15 @@ export const useAuth = create<AuthState>()(
     (set) => ({
       user: null,
       token: null,
-      isLoggedIn: false,
-      setAuth: (user, token) => set({ user, token, isLoggedIn: true }),
-      clearAuth: () => set({ user: null, token: null, isLoggedIn: false }),
+      setAuth: (user, token) => set({ user, token }),
+      clearAuth: () => set({ user: null, token: null }),
     }),
-    { name: "goodspot-auth" }
+    {
+      name: "goodspot-auth",
+      partialize: (state) => ({
+        token: state.token,
+        user: pruneUser(state.user),
+      }),
+    }
   )
 );

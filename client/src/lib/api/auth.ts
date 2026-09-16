@@ -1,4 +1,4 @@
-import api, { bearer } from "./client";
+import api from "./client";
 import type { AuthResponse } from "@/lib/types";
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
@@ -19,6 +19,6 @@ export async function register(
   return data;
 }
 
-export async function logout(token: string | null): Promise<void> {
-  await api.post("/auth/logout", null, { headers: bearer(token) });
+export async function logout(): Promise<void> {
+  await api.post("/auth/logout");
 }

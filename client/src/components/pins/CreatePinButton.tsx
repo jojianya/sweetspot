@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { createPin } from "@/lib/api";
-import type { CreatedPin, NewPinPhoto } from "@/lib/types";
+import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
 import type { MapLocation } from "@/components/map/MapView";
 import { useAuth } from "@/store/auth";
 
@@ -13,7 +13,7 @@ const MAX_PHOTO_SIZE = 10 * 1024 * 1024;
 interface CreatePinButtonProps {
   lat: number;
   lng: number;
-  categories: { id: number; name: string }[];
+  categories: Category[];
   onCreated: (
     pin: CreatedPin,
     photos: NewPinPhoto[]
@@ -28,7 +28,8 @@ export default function CreatePinButton({
   onCreated,
   onSetLocation,
 }: CreatePinButtonProps) {
-  const { token, isLoggedIn } = useAuth();
+  const { token } = useAuth();
+  const isLoggedIn = token !== null;
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [caption, setCaption] = useState("");
@@ -87,7 +88,7 @@ export default function CreatePinButton({
     setSubmitting(true);
     setError(null);
     try {
-      const result = await createPin(token, {
+      const result = await createPin({
         lat,
         lng,
         categoryId,

@@ -6,12 +6,13 @@ import { logout } from "@/lib/api";
 import { useAuth } from "@/store/auth";
 
 export default function Navbar() {
-  const { user, token, isLoggedIn, clearAuth } = useAuth();
+  const { user, token, clearAuth } = useAuth();
   const router = useRouter();
+  const isLoggedIn = token !== null;
 
   const handleLogout = async () => {
     try {
-      await logout(token);
+      await logout();
     } catch {
       // token may already be blacklisted; clear locally regardless
     }

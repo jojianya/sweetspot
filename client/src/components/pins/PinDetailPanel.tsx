@@ -44,6 +44,8 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
             <img
               src={photo.photo_url}
               alt={pin.caption ?? "Pin photo"}
+              loading="lazy"
+              decoding="async"
               className="aspect-square w-full object-cover"
             />
             {count > 1 && (
@@ -106,6 +108,8 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
                 <img
                   src={p.thumbnail_url}
                   alt={`Thumbnail ${i + 1}`}
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover"
                 />
               </button>

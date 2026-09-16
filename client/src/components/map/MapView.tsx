@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Map as MapLibreMap,
   Marker,
@@ -64,6 +64,7 @@ export default function MapView({
   const userMarkerRef = useRef<MaplibreMarker | null>(null);
   const pendingMarkerRef = useRef<MaplibreMarker | null>(null);
   const { position } = useGeolocation();
+  const [styleReady, setStyleReady] = useState(false);
 
   const onBoundsRef = useRef(onBoundsChange);
   const onSelectRef = useRef(onSelectPin);
@@ -125,6 +126,7 @@ export default function MapView({
         lat: map.getCenter().lat,
         lng: map.getCenter().lng,
       });
+      setStyleReady(true);
     });
 
     map.on("moveend", () => {
@@ -185,22 +187,24 @@ export default function MapView({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map || !styleReady) return;
 
     const source = map.getSource("pins");
     if (!source) return;
 
-    const features: GeoFeature[] = pins.map((p) => {
-      const { lng, lat } = parsePoint(p.location);
-      return {
+    const features: GeoFeature[] = [];
+    for (const p of pins) {
+      const point = parsePoint(p.location);
+      if (!point) continue;
+      features.push({
         type: "Feature",
-        geometry: { type: "Point", coordinates: [lng, lat] },
+        geometry: { type: "Point", coordinates: [point.lng, point.lat] },
         properties: { id: p.id },
-      };
-    });
+      });
+    }
 
     (source as GeoJSONSource).setData({ type: "FeatureCollection", features });
-  }, [pins]);
+  }, [pins, styleReady]);
 
   useEffect(() => {
     const map = mapRef.current;

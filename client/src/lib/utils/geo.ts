@@ -1,14 +1,21 @@
 import type { LngLatBounds } from "maplibre-gl";
 
-export function parsePoint(point: string): { lng: number; lat: number } {
+export function parsePoint(point: string): { lng: number; lat: number } | null {
   const m = point.match(/POINT\s*\(\s*(-?[\d.]+)\s+(-?[\d.]+)/i);
-  if (!m) return { lng: 0, lat: 0 };
-  return { lng: parseFloat(m[1]), lat: parseFloat(m[2]) };
-}
-
-export function formatBboxCenter(latlng: string[]): { lat: number; lng: number } {
-  const [minLat, minLng, maxLat, maxLng] = latlng.map(Number);
-  return { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 };
+  if (!m) return null;
+  const lng = parseFloat(m[1]);
+  const lat = parseFloat(m[2]);
+  if (
+    Number.isNaN(lng) ||
+    Number.isNaN(lat) ||
+    lng < -180 ||
+    lng > 180 ||
+    lat < -90 ||
+    lat > 90
+  ) {
+    return null;
+  }
+  return { lng, lat };
 }
 
 export function boundsToValidBbox(b: LngLatBounds): [number, number, number, number] {

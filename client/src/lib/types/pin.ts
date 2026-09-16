@@ -17,7 +17,7 @@ export interface PinListEntry {
   is_hidden: boolean;
   created_at: string;
   cover_url: string;
-  username: string;
+  username: string | null;
 }
 
 export interface PinDetail {
@@ -30,7 +30,7 @@ export interface PinDetail {
   is_hidden: boolean;
   created_at: string;
   category: string | null;
-  username: string;
+  username: string | null;
   avatar_url: string | null;
   photos: PinPhoto[];
 }
@@ -50,11 +50,4 @@ export interface CreatedPin {
   category_id: number;
   is_hidden: boolean;
   created_at: string;
-}
-
-export interface Bbox {
-  minLat: number;
-  minLng: number;
-  maxLat: number;
-  maxLng: number;
 }

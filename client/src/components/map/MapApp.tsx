@@ -138,6 +138,7 @@ export default function MapApp() {
       <MapView
         pins={pins}
         flyTo={flyTo}
+        selectedPinId={selectedPinId}
         onBoundsChange={handleBoundsChange}
         onSelectPin={handleSelectPin}
         onMapClick={handleMapClick}
@@ -154,13 +155,13 @@ export default function MapApp() {
         </div>
       )}
 
-      <div className="absolute left-0 right-0 top-0 z-10 flex flex-col items-center gap-2 px-4 pt-2">
+      <div className="absolute left-0 right-0 top-0 z-10 flex flex-col items-center gap-1 px-4 pt-2.5">
         <SearchBar
           center={center}
           onSelectPlace={handleSearchPlace}
           onSelectPin={handleSearchPin}
         />
-        <div className="w-full">
+        <div className="w-full rounded-2xl bg-white/70 px-1 py-1 shadow-lg shadow-zinc-900/5 backdrop-blur ring-1 ring-zinc-200/60">
           <CategoryBar
             categories={categories}
             selected={selectedCategory}
@@ -192,6 +193,12 @@ export default function MapApp() {
               Retry
             </button>
           )}
+        </div>
+      )}
+
+      {!loading && !bannerError && pins.length === 0 && (
+        <div className="absolute bottom-6 left-4 z-10 rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-500 shadow ring-1 ring-zinc-200/70 backdrop-blur">
+          No pins in this area yet
         </div>
       )}
 

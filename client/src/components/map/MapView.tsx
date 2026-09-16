@@ -26,6 +26,7 @@ export interface MapLocation {
 interface MapViewProps {
   pins: PinListEntry[];
   flyTo: { lng: number; lat: number } | null;
+  selectedPinId: string | null;
   onBoundsChange: (bbox: string, center: { lat: number; lng: number }) => void;
   onSelectPin: (id: string) => void;
   onMapClick: () => void;
@@ -34,22 +35,79 @@ interface MapViewProps {
 interface GeoFeature {
   type: "Feature";
   geometry: { type: "Point"; coordinates: [number, number] };
-  properties: { id: string };
+  properties: {
+    id: string;
+    caption: string;
+    username: string;
+    cover: string;
+  };
 }
-
-const EMPTY_GEOJSON: GeoJSONLike = {
-  type: "FeatureCollection",
-  features: [],
-};
 
 type GeoJSONLike = {
   type: "FeatureCollection";
   features: GeoFeature[];
 };
 
+const EMPTY_GEOJSON: GeoJSONLike = {
+  type: "FeatureCollection",
+  features: [],
+};
+
+function makePinIcon(
+  size: number,
+  color: string,
+  ringColor: string | null,
+  dotColor: string
+): ImageData {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const cx = size / 2;
+  const cy = size * 0.3;
+  const r = size * 0.26;
+  const tipY = size * 0.97;
+
+  ctx.fillStyle = color;
+  ctx.strokeStyle = ringColor ?? color;
+  ctx.lineWidth = size * 0.07;
+  if (ringColor) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + size * 0.05, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx, tipY);
+    ctx.lineTo(cx - r * 0.85, cy + r * 0.45);
+    ctx.lineTo(cx + r * 0.85, cy + r * 0.45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, tipY);
+  ctx.lineTo(cx - r * 0.85, cy + r * 0.45);
+  ctx.lineTo(cx + r * 0.85, cy + r * 0.45);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = dotColor;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.38, 0, Math.PI * 2);
+  ctx.fill();
+
+  return ctx.getImageData(0, 0, size, size);
+}
+
 export default function MapView({
   pins,
   flyTo,
+  selectedPinId,
   onBoundsChange,
   onSelectPin,
   onMapClick,
@@ -59,6 +117,11 @@ export default function MapView({
   const userMarkerRef = useRef<MaplibreMarker | null>(null);
   const { position } = useGeolocation();
   const [styleReady, setStyleReady] = useState(false);
+  const [hover, setHover] = useState<{
+    pin: PinListEntry;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const onBoundsRef = useRef(onBoundsChange);
   const onSelectRef = useRef(onSelectPin);
@@ -74,43 +137,80 @@ export default function MapView({
     const map = new MapLibreMap({
       container: containerRef.current!,
       style: MAP_STYLE,
-      // center: [78.4867, 17.385],
       zoom: 10,
-      minZoom: 5, // don't let users zoom out past city level
+      minZoom: 5,
       maxZoom: 18,
     });
     mapRef.current = map;
 
     map.on("load", () => {
+      map.addImage("pin-default", makePinIcon(64, "#e11d48", null, "#ffffff"));
+      map.addImage(
+        "pin-selected",
+        makePinIcon(64, "#9f1239", "#ffffff", "#ffffff")
+      );
+
       map.addSource("pins", { type: "geojson", data: EMPTY_GEOJSON });
       map.addLayer({
-        id: "pin-circles",
-        type: "circle",
+        id: "pins-base",
+        type: "symbol",
         source: "pins",
-        paint: {
-          "circle-radius": 9,
-          "circle-color": "#e11d48",
-          "circle-stroke-width": 2.5,
-          "circle-stroke-color": "#ffffff",
+        layout: {
+          "icon-image": "pin-default",
+          "icon-size": 0.75,
+          "icon-anchor": "bottom",
+        },
+      });
+      map.addLayer({
+        id: "pins-selected",
+        type: "symbol",
+        source: "pins",
+        layout: {
+          "icon-image": "pin-selected",
+          "icon-size": 1.05,
+          "icon-anchor": "bottom",
         },
       });
 
-      map.on("click", "pin-circles", (e) => {
-        const feature = e.features?.[0];
-        const id = feature?.properties?.id;
+      const pinLayers = ["pins-base", "pins-selected"];
+      map.on("click", pinLayers as never, (e) => {
+        const id = e.features?.[0]?.properties?.id;
         if (id) onSelectRef.current(String(id));
       });
-      map.on("mouseenter", "pin-circles", () => {
+      map.on("mouseenter", pinLayers as never, () => {
         map.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", "pin-circles", () => {
+      map.on("mouseleave", pinLayers as never, () => {
         map.getCanvas().style.cursor = "";
+        setHover(null);
+      });
+      map.on("mousemove", "pins-base", (e) => {
+        const feature = e.features?.[0];
+        const props = feature?.properties;
+        if (!props?.id) {
+          setHover(null);
+          return;
+        }
+        setHover({
+          pin: {
+            id: String(props.id),
+            user_id: "",
+            location: "",
+            geohash: "",
+            caption: props.caption || null,
+            category_id: 0,
+            is_hidden: false,
+            created_at: "",
+            cover_url: props.cover || "",
+            username: props.username || null,
+          },
+          x: e.point.x,
+          y: e.point.y,
+        });
       });
 
       map.on("click", (e) => {
-        const hit = map.queryRenderedFeatures(e.point, {
-          layers: ["pin-circles"],
-        });
+        const hit = map.queryRenderedFeatures(e.point, { layers: pinLayers });
         if (hit.length > 0) return;
         onMapClickRef.current();
       });
@@ -173,7 +273,12 @@ export default function MapView({
       features.push({
         type: "Feature",
         geometry: { type: "Point", coordinates: [point.lng, point.lat] },
-        properties: { id: p.id },
+        properties: {
+          id: p.id,
+          caption: p.caption ?? "",
+          username: p.username ?? "",
+          cover: p.cover_url,
+        },
       });
     }
 
@@ -189,5 +294,50 @@ export default function MapView({
     });
   }, [flyTo]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleReady) return;
+    const hasBase = map.getLayer("pins-base");
+    const hasSelected = map.getLayer("pins-selected");
+    if (!hasBase || !hasSelected) return;
+
+    map.setFilter(
+      "pins-base",
+      selectedPinId ? ["!=", ["get", "id"], selectedPinId] : ["all"]
+    );
+    map.setFilter(
+      "pins-selected",
+      selectedPinId ? ["==", ["get", "id"], selectedPinId] : ["all"]
+    );
+  }, [selectedPinId, styleReady]);
+
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      {hover && hover.pin.cover_url && (
+        <div
+          className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+12px)]"
+          style={{ left: hover.x + 18, top: hover.y }}
+        >
+          <div className="flex w-56 items-center gap-2.5 rounded-xl bg-white/95 p-2 shadow-lg ring-1 ring-zinc-200 backdrop-blur">
+            <img
+              src={hover.pin.cover_url}
+              alt=""
+              className="h-11 w-11 shrink-0 rounded-lg object-cover"
+            />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-zinc-900">
+                {hover.pin.caption ?? "Untitled"}
+              </p>
+              {hover.pin.username && (
+                <p className="truncate text-xs text-zinc-500">
+                  @{hover.pin.username}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

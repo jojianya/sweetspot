@@ -21,45 +21,62 @@ export default function Navbar() {
   };
 
   return (
-    <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3">
-      <Link href="/" className="flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-600 text-lg text-white">
-          ⁂
-        </span>
-        <span className="text-lg font-semibold text-zinc-900">Goodspot</span>
-      </Link>
+    <header className="relative z-40 border-b border-zinc-200/70 bg-white/80 backdrop-blur">
+      <div className="flex items-center justify-between px-4 py-3">
+        <Link href="/" className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-rose-700 text-white shadow-md shadow-rose-600/30">
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z" />
+            </svg>
+          </span>
+          <span className="text-lg font-semibold tracking-tight text-zinc-900">
+            Goodspot
+          </span>
+        </Link>
 
-      <nav className="flex items-center gap-3">
-        {isLoggedIn && user ? (
-          <>
-            <span className="hidden text-sm text-zinc-600 sm:inline">
-              @{user.username}
-            </span>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              Log out
-            </button>
-          </>
-        ) : (
-          <>
-            <Link
-              href="/login"
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/register"
-              className="rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-700"
-            >
-              Join
-            </Link>
-          </>
-        )}
-      </nav>
+        <nav className="flex items-center gap-2.5">
+          {isLoggedIn && user ? (
+            <>
+              <div className="hidden items-center gap-2.5 sm:flex">
+                {user.avatar_url ? (
+                  <img
+                    src={user.avatar_url}
+                    alt=""
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-sm font-semibold text-rose-700">
+                    {user.username.charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <span className="text-sm text-zinc-600">@{user.username}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-full border border-zinc-300 px-3.5 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+              >
+                Log out
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="rounded-full border border-zinc-300 px-3.5 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/register"
+                className="rounded-full bg-gradient-to-r from-rose-600 to-rose-500 px-3.5 py-1.5 text-sm font-medium text-white shadow-md shadow-rose-600/25 transition-transform hover:shadow-lg hover:shadow-rose-600/30 active:scale-95"
+              >
+                Join
+              </Link>
+            </>
+          )}
+        </nav>
+      </div>
     </header>
   );
 }

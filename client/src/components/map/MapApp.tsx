@@ -20,7 +20,7 @@ export default function MapApp() {
   const [bbox, setBbox] = useState<string | null>(null);
   const [center, setCenter] = useState({ lat: 17.385, lng: 78.4867 });
   const [flyTo, setFlyTo] = useState<{ lng: number; lat: number } | null>(null);
-  const [pendingLocation, setPendingLocation] = useState<MapLocation | null>(null);
+  const [postingMode, setPostingMode] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const { pins, loading, error: pinsError, addPin } = usePins(bbox, selectedCategory);
@@ -67,6 +67,23 @@ export default function MapApp() {
     []
   );
 
+  const handleMapClick = useCallback(() => {
+    setPostingMode((p) => !p);
+    setSelectedPinId((id) => {
+      if (id) setDetailError(null);
+      return null;
+    });
+  }, []);
+
+  const handleSelectPin = useCallback((id: string) => {
+    setSelectedPinId(id);
+    setPostingMode(false);
+  }, []);
+
+  const handleSetLocation = useCallback((location: MapLocation) => {
+    setFlyTo(location);
+  }, []);
+
   const handleCreated = useCallback(
     (pin: CreatedPin, photos: NewPinPhoto[]) => {
       const cover = photos[0]?.thumbnail_url ?? photos[0]?.photo_url ?? "";
@@ -86,7 +103,7 @@ export default function MapApp() {
       setSelectedPinId(pin.id);
       const point = parsePoint(pin.location);
       if (point) setFlyTo(point);
-      setPendingLocation(null);
+      setPostingMode(false);
       setDetailError(null);
     },
     [addPin]
@@ -99,11 +116,21 @@ export default function MapApp() {
       <MapView
         pins={pins}
         flyTo={flyTo}
-        pendingLocation={pendingLocation}
         onBoundsChange={handleBoundsChange}
-        onSelectPin={setSelectedPinId}
-        onSelectLocation={setPendingLocation}
+        onSelectPin={handleSelectPin}
+        onMapClick={handleMapClick}
       />
+
+      {postingMode && (
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+          aria-hidden
+        >
+          <div className="absolute h-0.5 w-16 bg-rose-600 shadow-[0_0_4px_rgba(255,255,255,0.9)]" />
+          <div className="absolute h-16 w-0.5 bg-rose-600 shadow-[0_0_4px_rgba(255,255,255,0.9)]" />
+          <div className="absolute h-2.5 w-2.5 rounded-full border-2 border-rose-600" />
+        </div>
+      )}
 
       <div className="absolute left-0 right-0 top-0 z-10">
         <CategoryBar
@@ -140,13 +167,15 @@ export default function MapApp() {
         <PinDetailPanel key={detail.id} pin={detail} onClose={() => setSelectedPinId(null)} />
       )}
 
-      <CreatePinButton
-        lat={pendingLocation?.lat ?? center.lat}
-        lng={pendingLocation?.lng ?? center.lng}
-        categories={categories}
-        onCreated={handleCreated}
-        onSetLocation={setPendingLocation}
-      />
+      {postingMode && (
+        <CreatePinButton
+          lat={center.lat}
+          lng={center.lng}
+          categories={categories}
+          onCreated={handleCreated}
+          onSetLocation={handleSetLocation}
+        />
+      )}
     </div>
   );
 }

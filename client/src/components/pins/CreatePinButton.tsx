@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createPin } from "@/lib/api";
 import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
@@ -38,6 +38,21 @@ export default function CreatePinButton({
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const previews = useMemo(
+    () => files.map((f) => URL.createObjectURL(f)),
+    [files]
+  );
+
+  useEffect(() => {
+    return () => {
+      previews.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [previews]);
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleFiles = (list: FileList | null) => {
     if (!list) return;
@@ -126,7 +141,7 @@ export default function CreatePinButton({
               </h2>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => { setOpen(false); setFiles([]); setCaption(""); }}
                 className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100"
                 aria-label="Close"
               >
@@ -194,12 +209,21 @@ export default function CreatePinButton({
                     {files.map((f, i) => (
                       <div
                         key={`${f.name}-${i}`}
-                        className="flex items-center gap-2 rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-600"
+                        className="group relative h-20 w-20 overflow-hidden rounded-lg border border-zinc-200"
                       >
-                        {f.name}
-                        <span className="text-zinc-400">
-                          {(f.size / 1024 / 1024).toFixed(1)}MB
-                        </span>
+                        <img
+                          src={previews[i]}
+                          alt={f.name}
+                          className="h-full w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeFile(i)}
+                          className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                          aria-label={`Remove ${f.name}`}
+                        >
+                          ×
+                        </button>
                       </div>
                     ))}
                   </div>

@@ -3,6 +3,7 @@ package pins
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -207,12 +208,14 @@ func (h *Handler) CreatePin(c *gin.Context) {
 
 		src, err := fh.Open()
 		if err != nil {
+			slog.Error("create pin: open uploaded file", "error", err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read uploaded file"})
 			return
 		}
 		data, err := io.ReadAll(src)
 		src.Close()
 		if err != nil {
+			slog.Error("create pin: read uploaded file", "error", err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read uploaded file"})
 			return
 		}
@@ -233,6 +236,7 @@ func (h *Handler) CreatePin(c *gin.Context) {
 
 	exists, err := h.service.CategoryExists(c.Request.Context(), categoryID)
 	if err != nil {
+		slog.Error("create pin: category exists", "category_id", categoryID, "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
@@ -246,11 +250,13 @@ func (h *Handler) CreatePin(c *gin.Context) {
 	for _, vf := range validated {
 		url, err := h.store.Save(vf.data, vf.ext)
 		if err != nil {
+			slog.Error("create pin: save photo", "error", err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save uploaded file"})
 			return
 		}
 		thumbURL, err := h.store.Save(vf.thumb, vf.ext)
 		if err != nil {
+			slog.Error("create pin: save thumbnail", "error", err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save uploaded file"})
 			return
 		}
@@ -269,6 +275,13 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		Geohash:       geohash.Encode(lat, lng),
 	})
 	if err != nil {
+		slog.Error("create pin: database insert",
+			"user_id", middleware.GetUserID(c),
+			"lat", lat,
+			"lng", lng,
+			"category_id", categoryID,
+			"photos", len(photoURLs),
+			"error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}

@@ -5,7 +5,7 @@ import MapView, { type MapLocation } from "./MapView";
 import SearchBar from "./SearchBar";
 import LocateButton from "./LocateButton";
 import Navbar from "@/components/layout/Navbar";
-import CategoryBar from "@/components/pins/CategoryBar";
+import CategoryDropdown from "@/components/pins/CategoryDropdown";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
 import { fetchCategories, deletePin } from "@/lib/api";
@@ -173,13 +173,11 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
             onSelectPlace={handleSearchPlace}
             onSelectPin={handleSearchPin}
           />
-          <div className="w-full rounded-2xl bg-white/70 px-1 py-1 shadow-lg shadow-zinc-900/5 backdrop-blur ring-1 ring-zinc-200/60">
-            <CategoryBar
-              categories={categories}
-              selected={selectedCategory}
-              onSelect={setSelectedCategory}
-            />
-          </div>
+          <CategoryDropdown
+            categories={categories}
+            selected={selectedCategory}
+            onSelect={setSelectedCategory}
+          />
         </div>
       </Navbar>
 

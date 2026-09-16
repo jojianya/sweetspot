@@ -3,6 +3,7 @@ package pins
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,6 +15,8 @@ type Repository interface {
 	ListCategories(ctx context.Context) ([]Category, error)
 	GetPin(ctx context.Context, id string) (PinDetail, error)
 	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
+	SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error)
+	UserExists(ctx context.Context, id string) (bool, error)
 }
 
 type NewPin struct {
@@ -193,4 +196,52 @@ func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, cate
 		return nil, err
 	}
 	return entries, nil
+}
+
+func (r *postgresRepository) SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error) {
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
+		       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username
+		FROM pins p
+		LEFT JOIN LATERAL (
+			SELECT photo_url, thumbnail_url FROM pin_photos
+			WHERE pin_id = p.id
+			ORDER BY position
+			LIMIT 1
+		) pp ON true
+		LEFT JOIN users u ON u.id = p.user_id
+		WHERE p.is_hidden = false
+		  AND (p.caption ILIKE '%' || $1 || '%' OR u.username ILIKE '%' || $1 || '%')
+		ORDER BY p.created_at DESC
+		LIMIT $2
+	`, escaped, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := []PinListEntry{}
+	for rows.Next() {
+		var e PinListEntry
+		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
+			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.CreatedAt, &e.CoverURL, &e.Username); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+		return nil, err
+	}
+	return entries, nil
+}
+
+func (r *postgresRepository) UserExists(ctx context.Context, id string) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, id).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
 }

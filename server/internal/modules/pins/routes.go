@@ -17,6 +17,7 @@ type RouteOptions struct {
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 	rg.GET("/categories", h.ListCategories)
 	rg.GET("/pins", h.GetPins)
+	rg.GET("/pins/search", h.SearchPins)
 	rg.GET("/pins/:id", validid.Middleware(), middleware.OptionalAuth(opts.JWTSecret, opts.Blacklist), h.GetPin)
 
 	createLimit := middleware.New(10, time.Minute)

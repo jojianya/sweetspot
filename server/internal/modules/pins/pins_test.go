@@ -13,10 +13,14 @@ type mockPinRepository struct {
 	pinDetailErr  error
 	pins          []PinListEntry
 	pinsErr       error
+	searched      []PinListEntry
+	searchErr     error
 	created       Pin
 	createPinErr  error
 	exists        bool
 	existsErr     error
+	userExists    bool
+	userExistsErr error
 }
 
 func (m *mockPinRepository) ListCategories(context.Context) ([]Category, error) {
@@ -35,8 +39,16 @@ func (m *mockPinRepository) ListPins(context.Context, [4]float64, *int, int) ([]
 	return m.pins, m.pinsErr
 }
 
+func (m *mockPinRepository) SearchPins(context.Context, string, int) ([]PinListEntry, error) {
+	return m.searched, m.searchErr
+}
+
 func (m *mockPinRepository) CreatePin(context.Context, NewPin) (Pin, error) {
 	return m.created, m.createPinErr
+}
+
+func (m *mockPinRepository) UserExists(context.Context, string) (bool, error) {
+	return m.userExists, m.userExistsErr
 }
 
 func TestListCategories(t *testing.T) {
@@ -92,5 +104,27 @@ func TestCategoryExists(t *testing.T) {
 	}
 	if !exists {
 		t.Fatal("expected category to exist")
+	}
+}
+
+func TestSearchPinsDelegates(t *testing.T) {
+	svc := NewService(&mockPinRepository{searched: []PinListEntry{}})
+	got, err := svc.SearchPins(context.Background(), "art", 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty results, got %+v", got)
+	}
+}
+
+func TestUserExistsDelegates(t *testing.T) {
+	svc := NewService(&mockPinRepository{userExists: true})
+	exists, err := svc.UserExists(context.Background(), "user-id")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected user to exist")
 	}
 }

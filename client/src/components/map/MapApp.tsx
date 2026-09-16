@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import MapView, { type MapLocation } from "./MapView";
+import SearchBar from "./SearchBar";
 import CategoryBar from "@/components/pins/CategoryBar";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
 import { fetchCategories } from "@/lib/api";
 import { usePins } from "@/hooks/usePins";
 import { usePinDetail } from "@/hooks/usePinDetail";
-import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
+import type { Category, CreatedPin, NewPinPhoto, PinListEntry } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
@@ -109,6 +110,21 @@ export default function MapApp() {
     [addPin]
   );
 
+  const handleSearchPin = useCallback((entry: PinListEntry) => {
+    const point = parsePoint(entry.location);
+    if (point) setFlyTo(point);
+    setSelectedPinId(entry.id);
+    setPostingMode(false);
+  }, []);
+
+  const handleSearchPlace = useCallback(
+    (c: { lat: number; lng: number }) => {
+      setFlyTo(c);
+      setPostingMode(false);
+    },
+    []
+  );
+
   const bannerError = categoriesError ?? pinsError ?? detailError;
 
   return (
@@ -132,12 +148,19 @@ export default function MapApp() {
         </div>
       )}
 
-      <div className="absolute left-0 right-0 top-0 z-10">
-        <CategoryBar
-          categories={categories}
-          selected={selectedCategory}
-          onSelect={setSelectedCategory}
+      <div className="absolute left-0 right-0 top-0 z-10 flex flex-col items-center gap-2 px-4 pt-2">
+        <SearchBar
+          center={center}
+          onSelectPlace={handleSearchPlace}
+          onSelectPin={handleSearchPin}
         />
+        <div className="w-full">
+          <CategoryBar
+            categories={categories}
+            selected={selectedCategory}
+            onSelect={setSelectedCategory}
+          />
+        </div>
       </div>
 
       {loading && (

@@ -44,3 +44,15 @@ export async function createPin(form: {
     photos: newPinPhotoSchema.array().parse(data.photos),
   };
 }
+
+export async function searchPins(
+  query: string,
+  limit = 10,
+  signal?: AbortSignal
+): Promise<PinListEntry[]> {
+  const { data } = await api.get<{ pins: unknown }>("/pins/search", {
+    params: { q: query, limit },
+    signal,
+  });
+  return pinListEntrySchema.array().parse(data.pins);
+}

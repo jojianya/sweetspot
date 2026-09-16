@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
@@ -18,6 +19,10 @@ import (
 const (
 	pinListDefaultLimit = 200
 	maxPhotoSize        = 10 << 20
+
+	searchDefaultLimit = 10
+	searchMaxLimit     = 25
+	searchMaxQueryLen  = 100
 )
 
 type validatedFile struct {
@@ -159,6 +164,18 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		return
 	}
 
+	userID := middleware.GetUserID(c)
+	userExists, err := h.service.UserExists(c.Request.Context(), userID)
+	if err != nil {
+		slog.Error("create pin: user exists", "user_id", userID, "error", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+	if !userExists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "account no longer exists, please sign in again"})
+		return
+	}
+
 	lat, err := strconv.ParseFloat(c.PostForm("lat"), 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "lat must be a number"})
@@ -296,4 +313,35 @@ func (h *Handler) CreatePin(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"pin": pin, "photos": photos})
+}
+
+func (h *Handler) SearchPins(c *gin.Context) {
+	q := strings.TrimSpace(c.Query("q"))
+	if q == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "q query param is required"})
+		return
+	}
+	if utf8.RuneCountInString(q) > searchMaxQueryLen {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "q must be at most 100 characters"})
+		return
+	}
+
+	limit := searchDefaultLimit
+	if l := c.Query("limit"); l != "" {
+		n, err := strconv.Atoi(l)
+		if err != nil || n < 1 || n > searchMaxLimit {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be an integer between 1 and 25"})
+			return
+		}
+		limit = n
+	}
+
+	pins, err := h.service.SearchPins(c.Request.Context(), q, limit)
+	if err != nil {
+		slog.Error("search pins", "query", q, "error", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"pins": pins})
 }

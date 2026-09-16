@@ -7,7 +7,9 @@ type Service interface {
 	CategoryExists(ctx context.Context, id int) (bool, error)
 	GetPin(ctx context.Context, id string) (PinDetail, error)
 	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
+	SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error)
 	CreatePin(ctx context.Context, pin NewPin) (Pin, error)
+	UserExists(ctx context.Context, id string) (bool, error)
 }
 
 type service struct {
@@ -34,6 +36,14 @@ func (s *service) ListPins(ctx context.Context, bbox [4]float64, categoryID *int
 	return s.repo.ListPins(ctx, bbox, categoryID, limit)
 }
 
+func (s *service) SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error) {
+	return s.repo.SearchPins(ctx, query, limit)
+}
+
 func (s *service) CreatePin(ctx context.Context, pin NewPin) (Pin, error) {
 	return s.repo.CreatePin(ctx, pin)
+}
+
+func (s *service) UserExists(ctx context.Context, id string) (bool, error) {
+	return s.repo.UserExists(ctx, id)
 }

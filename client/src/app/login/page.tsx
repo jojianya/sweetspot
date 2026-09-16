@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Navbar from "@/components/layout/Navbar";
 import { login } from "@/lib/api";
 import { useAuth } from "@/store/auth";
 
@@ -33,7 +34,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-rose-50 via-white to-orange-50 px-4 py-12">
+    <>
+      <Navbar />
+      <div className="flex flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-rose-50 via-white to-orange-50 px-4 py-12">
       <div className="w-full max-w-sm rounded-2xl border border-zinc-200/60 bg-white/80 p-8 shadow-xl shadow-zinc-900/5 backdrop-blur">
         <div className="mb-6 text-center">
           <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-rose-700 text-white shadow-md shadow-rose-600/30">
@@ -105,6 +108,7 @@ export default function LoginPage() {
           </Link>
         </p>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

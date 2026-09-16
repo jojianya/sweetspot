@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import MapView, { type MapLocation } from "./MapView";
 import SearchBar from "./SearchBar";
 import LocateButton from "./LocateButton";
+import Navbar from "@/components/layout/Navbar";
 import CategoryBar from "@/components/pins/CategoryBar";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
@@ -165,23 +166,25 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
         </div>
       )}
 
-      <div className="absolute left-0 right-0 top-0 z-10 flex flex-col items-center gap-1 px-4 pt-16">
-        <SearchBar
-          center={center}
-          onSelectPlace={handleSearchPlace}
-          onSelectPin={handleSearchPin}
-        />
-        <div className="w-full rounded-2xl bg-white/70 px-1 py-1 shadow-lg shadow-zinc-900/5 backdrop-blur ring-1 ring-zinc-200/60">
-          <CategoryBar
-            categories={categories}
-            selected={selectedCategory}
-            onSelect={setSelectedCategory}
+      <Navbar>
+        <div className="flex w-full max-w-2xl flex-col items-center gap-1.5">
+          <SearchBar
+            center={center}
+            onSelectPlace={handleSearchPlace}
+            onSelectPin={handleSearchPin}
           />
+          <div className="w-full rounded-2xl bg-white/70 px-1 py-1 shadow-lg shadow-zinc-900/5 backdrop-blur ring-1 ring-zinc-200/60">
+            <CategoryBar
+              categories={categories}
+              selected={selectedCategory}
+              onSelect={setSelectedCategory}
+            />
+          </div>
         </div>
-      </div>
+      </Navbar>
 
       {loading && (
-        <div className="absolute left-3 top-14 z-10 rounded bg-white/90 px-2 py-1 text-xs text-zinc-500 shadow">
+        <div className="absolute left-3 top-36 z-10 rounded bg-white/90 px-2 py-1 text-xs text-zinc-500 shadow">
           Loading pins…
         </div>
       )}
@@ -191,7 +194,7 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
       {bannerError && (
         <div
           role="alert"
-          className="absolute left-3 top-20 z-10 rounded bg-rose-50 px-2 py-1 text-xs text-rose-600 shadow"
+          className="absolute left-3 top-40 z-10 rounded bg-rose-50 px-2 py-1 text-xs text-rose-600 shadow"
         >
           {bannerError}
           {categoriesError && (

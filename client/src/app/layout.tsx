@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Navbar from "@/components/layout/Navbar";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import "./globals.css";
 
@@ -27,7 +26,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex h-screen flex-col overflow-hidden">
         <ErrorBoundary>
-          <Navbar />
           <main className="relative flex flex-1 flex-col overflow-hidden">{children}</main>
         </ErrorBoundary>
       </body>

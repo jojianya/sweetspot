@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import MapView, { type MapLocation } from "./MapView";
 import SearchBar from "./SearchBar";
+import LocateButton from "./LocateButton";
 import CategoryBar from "@/components/pins/CategoryBar";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
@@ -125,6 +126,11 @@ export default function MapApp() {
     []
   );
 
+  const handleLocate = useCallback((c: { lat: number; lng: number }) => {
+    setFlyTo(c);
+    setPostingMode(false);
+  }, []);
+
   const bannerError = categoriesError ?? pinsError ?? detailError;
 
   return (
@@ -168,6 +174,9 @@ export default function MapApp() {
           Loading pins…
         </div>
       )}
+      <div className="absolute bottom-20 right-4 z-10">
+        <LocateButton onLocate={handleLocate} />
+      </div>
       {bannerError && (
         <div
           role="alert"

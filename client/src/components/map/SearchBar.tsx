@@ -127,7 +127,7 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
   let pinIdx = -1;
 
   return (
-    <div ref={wrapperRef} className="relative w-full max-w-2xl">
+    <div ref={wrapperRef} className="relative w-full min-w-0 flex-1">
       <div className="flex items-center gap-2 rounded-full border border-white/60 bg-white/90 px-4 py-3 shadow-lg shadow-zinc-900/5 backdrop-blur focus-within:border-rose-300 focus-within:ring-2 focus-within:ring-rose-600/20">
         <svg className="h-4 w-4 shrink-0 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <circle cx="11" cy="11" r="8" />

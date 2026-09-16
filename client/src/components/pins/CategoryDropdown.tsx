@@ -48,7 +48,7 @@ export default function CategoryDropdown({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-full border border-white/60 bg-white/90 px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-lg shadow-zinc-900/5 backdrop-blur outline-none transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-rose-600/20"
+        className="flex shrink-0 items-center gap-2 rounded-full border border-white/60 bg-white/90 px-4 py-3 text-sm font-medium text-zinc-700 shadow-lg shadow-zinc-900/5 backdrop-blur outline-none transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-rose-600/20"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -76,7 +76,7 @@ export default function CategoryDropdown({
         <ul
           role="listbox"
           aria-label="Categories"
-          className="absolute left-0 top-full z-30 mt-2 max-h-80 w-56 overflow-y-auto rounded-2xl border border-zinc-200/70 bg-white/95 py-1.5 shadow-xl shadow-zinc-900/10 backdrop-blur"
+          className="absolute right-0 top-full z-30 mt-2 max-h-80 w-56 overflow-y-auto rounded-2xl border border-zinc-200/70 bg-white/95 py-1.5 shadow-xl shadow-zinc-900/10 backdrop-blur"
         >
           <li role="presentation">
             <button

@@ -167,7 +167,7 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
       )}
 
       <Navbar>
-        <div className="flex w-full max-w-2xl flex-col items-center gap-1.5">
+        <div className="flex w-full max-w-2xl items-center gap-1.5">
           <SearchBar
             center={center}
             onSelectPlace={handleSearchPlace}

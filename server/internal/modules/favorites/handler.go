@@ -1,11 +1,11 @@
 package favorites
 
 import (
-	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 )
 
 type Handler struct {
@@ -22,8 +22,7 @@ func (h *Handler) Save(c *gin.Context) {
 
 	exists, err := h.service.PinExists(c.Request.Context(), pinID)
 	if err != nil {
-		slog.Error("favorite: pin exists", "pin_id", pinID, "error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "favorite: pin exists", err, "pin_id", pinID)
 		return
 	}
 	if !exists {
@@ -32,8 +31,7 @@ func (h *Handler) Save(c *gin.Context) {
 	}
 
 	if err := h.service.SavePin(c.Request.Context(), userID, pinID); err != nil {
-		slog.Error("favorite: save", "user_id", userID, "pin_id", pinID, "error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "favorite: save", err, "user_id", userID, "pin_id", pinID)
 		return
 	}
 
@@ -46,8 +44,7 @@ func (h *Handler) Unsave(c *gin.Context) {
 
 	saved, err := h.service.IsSaved(c.Request.Context(), userID, pinID)
 	if err != nil {
-		slog.Error("favorite: is saved", "user_id", userID, "pin_id", pinID, "error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "favorite: is saved", err, "user_id", userID, "pin_id", pinID)
 		return
 	}
 	if !saved {
@@ -56,8 +53,7 @@ func (h *Handler) Unsave(c *gin.Context) {
 	}
 
 	if err := h.service.UnsavePin(c.Request.Context(), userID, pinID); err != nil {
-		slog.Error("favorite: unsave", "user_id", userID, "pin_id", pinID, "error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "favorite: unsave", err, "user_id", userID, "pin_id", pinID)
 		return
 	}
 
@@ -69,8 +65,7 @@ func (h *Handler) GetSaved(c *gin.Context) {
 
 	entries, err := h.service.List(c.Request.Context(), userID)
 	if err != nil {
-		slog.Error("favorite: list", "user_id", userID, "error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "favorite: list", err, "user_id", userID)
 		return
 	}
 
@@ -82,8 +77,7 @@ func (h *Handler) GetSavedIDs(c *gin.Context) {
 
 	ids, err := h.service.ListIDs(c.Request.Context(), userID)
 	if err != nil {
-		slog.Error("favorite: list ids", "user_id", userID, "error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "favorite: list ids", err, "user_id", userID)
 		return
 	}
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 )
 
 type Handler struct {
@@ -23,7 +24,7 @@ func (h *Handler) Get(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "user: get", err)
 		return
 	}
 
@@ -51,7 +52,7 @@ func (h *Handler) UpdateRole(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			response.Internal(c, "user: update role", err)
 			return
 		}
 	}

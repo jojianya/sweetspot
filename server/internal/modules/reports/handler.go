@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
+	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 )
 
 const (
@@ -33,7 +35,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	exists, err := h.service.PinExists(c.Request.Context(), pinID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "report: pin exists", err, "pin_id", pinID)
 		return
 	}
 	if !exists {
@@ -47,7 +49,7 @@ func (h *Handler) Create(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "you already reported this pin"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "report: create", err, "pin_id", pinID)
 		return
 	}
 
@@ -66,14 +68,9 @@ func (h *Handler) List(c *gin.Context) {
 		}
 	}
 
-	limit := reportListDefaultLimit
-	if lStr := c.Query("limit"); lStr != "" {
-		l, err := strconv.Atoi(lStr)
-		if err != nil || l < 1 || l > reportListMaxLimit {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be an integer between 1 and 200"})
-			return
-		}
-		limit = l
+	limit, ok := httpx.ParseLimit(c, reportListDefaultLimit, reportListMaxLimit)
+	if !ok {
+		return
 	}
 
 	offset := 0
@@ -88,7 +85,7 @@ func (h *Handler) List(c *gin.Context) {
 
 	reports, err := h.service.ListReports(c.Request.Context(), status, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "report: list", err)
 		return
 	}
 
@@ -110,7 +107,7 @@ func (h *Handler) Review(c *gin.Context) {
 		case errors.Is(err, ErrAlreadyResolved):
 			c.JSON(http.StatusConflict, gin.H{"error": "report already resolved"})
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			response.Internal(c, "report: review", err)
 		}
 		return
 	}

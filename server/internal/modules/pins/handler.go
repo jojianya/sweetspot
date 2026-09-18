@@ -11,6 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
+	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins/imaging"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/pkg/geohash"
@@ -43,7 +45,7 @@ func NewHandler(service Service, store *storage.Local) *Handler {
 func (h *Handler) ListCategories(c *gin.Context) {
 	categories, err := h.service.ListCategories(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "pins: list categories", err)
 		return
 	}
 
@@ -97,7 +99,7 @@ func (h *Handler) GetPins(c *gin.Context) {
 	if categoryID != nil {
 		exists, err := h.service.CategoryExists(c.Request.Context(), *categoryID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			response.Internal(c, "pins: category exists", err, "category_id", *categoryID)
 			return
 		}
 		if !exists {
@@ -106,19 +108,14 @@ func (h *Handler) GetPins(c *gin.Context) {
 		}
 	}
 
-	limit := pinListDefaultLimit
-	if lStr := c.Query("limit"); lStr != "" {
-		l, err := strconv.Atoi(lStr)
-		if err != nil || l < 1 || l > pinListDefaultLimit {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be an integer between 1 and 200"})
-			return
-		}
-		limit = l
+	limit, ok := httpx.ParseLimit(c, pinListDefaultLimit, pinListDefaultLimit)
+	if !ok {
+		return
 	}
 
 	pins, err := h.service.ListPins(c.Request.Context(), bbox, categoryID, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "pins: list", err)
 		return
 	}
 
@@ -132,7 +129,7 @@ func (h *Handler) GetPin(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "pin not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "pins: get", err, "pin_id", c.Param("id"))
 		return
 	}
 
@@ -173,8 +170,7 @@ func (h *Handler) DeletePin(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "you can only delete your own pins"})
 			return
 		}
-		slog.Error("delete pin", "err", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "delete pin", err, "pin_id", c.Param("id"), "user_id", userID)
 		return
 	}
 
@@ -191,8 +187,7 @@ func (h *Handler) CreatePin(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	userExists, err := h.service.UserExists(c.Request.Context(), userID)
 	if err != nil {
-		slog.Error("create pin: user exists", "user_id", userID, "error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "create pin: user exists", err, "user_id", userID)
 		return
 	}
 	if !userExists {
@@ -277,8 +272,7 @@ func (h *Handler) CreatePin(c *gin.Context) {
 
 	exists, err := h.service.CategoryExists(c.Request.Context(), categoryID)
 	if err != nil {
-		slog.Error("create pin: category exists", "category_id", categoryID, "error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "create pin: category exists", err, "category_id", categoryID)
 		return
 	}
 	if !exists {
@@ -316,14 +310,12 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		Geohash:       geohash.Encode(lat, lng),
 	})
 	if err != nil {
-		slog.Error("create pin: database insert",
+		response.Internal(c, "create pin: database insert", err,
 			"user_id", middleware.GetUserID(c),
 			"lat", lat,
 			"lng", lng,
 			"category_id", categoryID,
-			"photos", len(photoURLs),
-			"error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			"photos", len(photoURLs))
 		return
 	}
 
@@ -350,20 +342,14 @@ func (h *Handler) SearchPins(c *gin.Context) {
 		return
 	}
 
-	limit := searchDefaultLimit
-	if l := c.Query("limit"); l != "" {
-		n, err := strconv.Atoi(l)
-		if err != nil || n < 1 || n > searchMaxLimit {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be an integer between 1 and 25"})
-			return
-		}
-		limit = n
+	limit, ok := httpx.ParseLimit(c, searchDefaultLimit, searchMaxLimit)
+	if !ok {
+		return
 	}
 
 	pins, err := h.service.SearchPins(c.Request.Context(), q, limit)
 	if err != nil {
-		slog.Error("search pins", "query", q, "error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "search pins", err, "query", q)
 		return
 	}
 

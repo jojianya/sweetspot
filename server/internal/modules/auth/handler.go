@@ -2,12 +2,12 @@ package auth
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 )
@@ -35,7 +35,7 @@ func (h *Handler) Register(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "email or username already taken"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "auth: register", err)
 		return
 	}
 
@@ -63,7 +63,7 @@ func (h *Handler) Login(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email, username, or password"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "auth: login", err)
 		return
 	}
 
@@ -84,8 +84,7 @@ func (h *Handler) Logout(c *gin.Context) {
 	jwtClaims := claims.(*jwt.Claims)
 	ttl := time.Until(jwtClaims.ExpiresAt.Time)
 	if err := h.bl.Revoke(c.Request.Context(), jwtClaims.ID, ttl); err != nil {
-		slog.Default().Error("logout revoke failed", "error", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		response.Internal(c, "logout revoke failed", err)
 		return
 	}
 

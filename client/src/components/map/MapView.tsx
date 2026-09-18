@@ -152,40 +152,50 @@ export default function MapView({
     const pinLayers = ["pins-base", "pins-selected"];
     let initialized = false;
 
-    // setStyle() (theme swap) drops every runtime-added image, source and
-    // layer. "load" fires only once per map, but "style.load" fires on the
-    // initial load AND after every style change, so the pin resources must
-    // be (re-)created here.
+    // setStyle() (theme swap) drops runtime-added sources and layers and
+    // fires "style.load" again ("load" only fires once per map), but the
+    // diff path can keep previously added images, so re-creation must be
+    // guarded per resource.
     const ensurePinLayers = () => {
-      if (map.getSource("pins")) return;
+      if (!map.hasImage("pin-default")) {
+        map.addImage("pin-default", makePinIcon(64, "#e11d48", null, "#ffffff"));
+      }
+      if (!map.hasImage("pin-selected")) {
+        map.addImage(
+          "pin-selected",
+          makePinIcon(64, "#9f1239", "#ffffff", "#ffffff")
+        );
+      }
 
-      map.addImage("pin-default", makePinIcon(64, "#e11d48", null, "#ffffff"));
-      map.addImage(
-        "pin-selected",
-        makePinIcon(64, "#9f1239", "#ffffff", "#ffffff")
-      );
+      if (!map.getSource("pins")) {
+        map.addSource("pins", { type: "geojson", data: EMPTY_GEOJSON });
+      }
 
-      map.addSource("pins", { type: "geojson", data: EMPTY_GEOJSON });
-      map.addLayer({
-        id: "pins-base",
-        type: "symbol",
-        source: "pins",
-        layout: {
-          "icon-image": "pin-default",
-          "icon-size": 0.75,
-          "icon-anchor": "bottom",
-        },
-      });
-      map.addLayer({
-        id: "pins-selected",
-        type: "symbol",
-        source: "pins",
-        layout: {
-          "icon-image": "pin-selected",
-          "icon-size": 1.05,
-          "icon-anchor": "bottom",
-        },
-      });
+      if (!map.getLayer("pins-base")) {
+        map.addLayer({
+          id: "pins-base",
+          type: "symbol",
+          source: "pins",
+          layout: {
+            "icon-image": "pin-default",
+            "icon-size": 0.75,
+            "icon-anchor": "bottom",
+          },
+        });
+      }
+
+      if (!map.getLayer("pins-selected")) {
+        map.addLayer({
+          id: "pins-selected",
+          type: "symbol",
+          source: "pins",
+          layout: {
+            "icon-image": "pin-selected",
+            "icon-size": 1.05,
+            "icon-anchor": "bottom",
+          },
+        });
+      }
     };
 
     map.on("style.load", () => {

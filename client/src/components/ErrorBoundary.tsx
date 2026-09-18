@@ -24,8 +24,8 @@ export default class ErrorBoundary extends Component<
     if (this.state.hasError) {
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-          <p className="text-lg font-semibold text-zinc-900">Something went wrong</p>
-          <p className="text-sm text-zinc-500">The map editor hit an unexpected error.</p>
+          <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Something went wrong</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">The map editor hit an unexpected error.</p>
           <button
             type="button"
             onClick={() => window.location.reload()}

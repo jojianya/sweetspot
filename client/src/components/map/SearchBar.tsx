@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { searchPlaces, type PlaceResult } from "@/lib/api/geocoding";
 import { searchPins } from "@/lib/api/pins";
 import type { PinListEntry } from "@/lib/types";
@@ -15,9 +16,19 @@ interface SearchBarProps {
   center: { lat: number; lng: number };
   onSelectPlace: (center: { lat: number; lng: number }, bbox?: [number, number, number, number]) => void;
   onSelectPin: (entry: PinListEntry) => void;
+  placeholder?: string;
+  className?: string;
+  endSlot?: ReactNode;
 }
 
-export default function SearchBar({ center, onSelectPlace, onSelectPin }: SearchBarProps) {
+export default function SearchBar({
+  center,
+  onSelectPlace,
+  onSelectPin,
+  placeholder = "Search places or pins…",
+  className,
+  endSlot,
+}: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ResultItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -127,8 +138,8 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
   let pinIdx = -1;
 
   return (
-    <div ref={wrapperRef} className="relative w-full min-w-0 flex-1">
-      <div className="flex items-center gap-2 rounded-full border border-white/60 bg-white/90 px-4 py-3 shadow-lg shadow-zinc-900/5 backdrop-blur focus-within:border-rose-300 focus-within:ring-2 focus-within:ring-rose-600/20">
+    <div ref={wrapperRef} className={"relative w-full min-w-0 " + (className ?? "flex-1")}>
+      <div className="flex h-12 items-center gap-2 rounded-full border border-[#E0E0E0] bg-white px-4 shadow-[0_2px_6px_rgba(0,0,0,0.15)] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-none">
         <svg className="h-4 w-4 shrink-0 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <circle cx="11" cy="11" r="8" />
           <path strokeLinecap="round" d="m21 21-4.35-4.35" />
@@ -150,27 +161,28 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
           }}
           onFocus={() => { if (results.length > 0) setIsOpen(true); }}
           onKeyDown={handleKey}
-          placeholder="Search places or pins…"
-          className="flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
+          placeholder={placeholder}
+          className="flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100"
           role="combobox"
           aria-expanded={isOpen}
           aria-controls="search-results-listbox"
           aria-autocomplete="list"
         />
         {query && (
-          <button type="button" onClick={clear} className="rounded-full p-0.5 text-zinc-400 hover:text-zinc-600" aria-label="Clear">
+          <button type="button" onClick={clear} className="rounded-full p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" aria-label="Clear">
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
         )}
+        {endSlot}
       </div>
 
       {isOpen && (
         <ul
           role="listbox"
           id="search-results-listbox"
-          className="absolute left-0 right-0 top-full z-30 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-zinc-200/70 bg-white/95 py-1.5 shadow-xl shadow-zinc-900/10 backdrop-blur"
+          className="absolute left-0 right-0 top-full z-30 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-zinc-200/70 bg-white/95 py-1.5 shadow-xl shadow-zinc-900/10 backdrop-blur dark:border-zinc-700/70 dark:bg-zinc-900/95"
         >
           {loading && (
             <li className="px-4 py-3 text-sm text-zinc-400">Searching…</li>
@@ -192,13 +204,13 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
                     key={`place-${item.place.id}`}
                     role="option"
                     aria-selected={isActive}
-                    className={`cursor-pointer px-4 py-2.5 text-sm ${isActive ? "bg-rose-50 text-rose-700" : "text-zinc-900 hover:bg-zinc-50"}`}
+                    className={`cursor-pointer px-4 py-2.5 text-sm ${isActive ? "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300" : "text-zinc-900 hover:bg-zinc-50 dark:text-zinc-100 dark:hover:bg-zinc-800"}`}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => select(item)}
                     onMouseEnter={() => setActiveIndex(placeIdx)}
                   >
                     <span className="line-clamp-1 font-medium">{item.place.text}</span>
-                    <span className="line-clamp-1 text-xs text-zinc-500">{item.place.place_name}</span>
+                    <span className="line-clamp-1 text-xs text-zinc-500 dark:text-zinc-400">{item.place.place_name}</span>
                   </li>
                 );
               })}
@@ -218,7 +230,7 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
                     key={`pin-${item.pin.id}`}
                     role="option"
                     aria-selected={isActive}
-                    className={`cursor-pointer px-4 py-2.5 text-sm ${isActive ? "bg-rose-50 text-rose-700" : "text-zinc-900 hover:bg-zinc-50"}`}
+                    className={`cursor-pointer px-4 py-2.5 text-sm ${isActive ? "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300" : "text-zinc-900 hover:bg-zinc-50 dark:text-zinc-100 dark:hover:bg-zinc-800"}`}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => select(item)}
                     onMouseEnter={() => setActiveIndex(pinIdx)}
@@ -226,7 +238,7 @@ export default function SearchBar({ center, onSelectPlace, onSelectPin }: Search
                     <span className="line-clamp-1 font-medium">
                       {item.pin.caption ?? item.pin.username ?? "Pin"}
                     </span>
-                    <span className="line-clamp-1 text-xs text-zinc-500">
+                    <span className="line-clamp-1 text-xs text-zinc-500 dark:text-zinc-400">
                       {item.pin.username ? `@${item.pin.username}` : "Pin on map"}
                     </span>
                   </li>

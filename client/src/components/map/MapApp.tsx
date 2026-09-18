@@ -2,33 +2,36 @@
 
 import { useCallback, useEffect, useState } from "react";
 import MapView, { type MapLocation } from "./MapView";
-import SearchBar from "./SearchBar";
 import LocateButton from "./LocateButton";
-import Navbar from "@/components/layout/Navbar";
-import CategoryDropdown from "@/components/pins/CategoryDropdown";
+import MapNavBar from "./MapNavBar";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
-import { fetchCategories, deletePin } from "@/lib/api";
+import SavedPinsPanel from "@/components/pins/SavedPinsPanel";
+import { fetchCategories, type FavoriteEntry } from "@/lib/api";
 import { usePins } from "@/hooks/usePins";
 import { usePinDetail } from "@/hooks/usePinDetail";
 import type { Category, CreatedPin, NewPinPhoto, PinListEntry } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
+import { useTheme } from "@/store/theme";
 
 export default function MapApp() {
+  const { theme } = useTheme();
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [savedOpen, setSavedOpen] = useState(false);
   const [bbox, setBbox] = useState<string | null>(null);
   const [center, setCenter] = useState({ lat: 17.385, lng: 78.4867 });
   const [flyTo, setFlyTo] = useState<{ lng: number; lat: number } | null>(null);
   const [postingMode, setPostingMode] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-const { pins, loading, error: pinsError, addPin, removePin } = usePins(bbox, selectedCategory);
-const { user } = useAuth();
-const reportDetailError = useCallback((message: string) => setDetailError(message), []);
+const { pins, loading, error: pinsError, addPin } = usePins(bbox, selectedCategory);
+  const reportDetailError = useCallback((message: string) => setDetailError(message), []);
 const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
 
   const loadCategories = useCallback(async () => {
@@ -72,16 +75,26 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
   );
 
   const handleMapClick = useCallback(() => {
+    if (createOpen) {
+      setCreateOpen(false);
+      setPostingMode(false);
+      return;
+    }
     setPostingMode((p) => !p);
     setSelectedPinId((id) => {
       if (id) setDetailError(null);
       return null;
     });
-  }, []);
+    setHighlightId(null);
+    setSavedOpen(false);
+  }, [createOpen]);
 
   const handleSelectPin = useCallback((id: string) => {
     setSelectedPinId(id);
+    setHighlightId(id);
     setPostingMode(false);
+    setCreateOpen(false);
+    setSavedOpen(false);
   }, []);
 
   const handleSetLocation = useCallback((location: MapLocation) => {
@@ -105,9 +118,12 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
         username,
       });
       setSelectedPinId(pin.id);
+      setHighlightId(pin.id);
+      setSavedOpen(false);
       const point = parsePoint(pin.location);
       if (point) setFlyTo(point);
       setPostingMode(false);
+      setCreateOpen(false);
       setDetailError(null);
     },
     [addPin]
@@ -117,13 +133,18 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
     const point = parsePoint(entry.location);
     if (point) setFlyTo(point);
     setSelectedPinId(entry.id);
+    setHighlightId(entry.id);
     setPostingMode(false);
+    setCreateOpen(false);
+    setSavedOpen(false);
   }, []);
 
   const handleSearchPlace = useCallback(
     (c: { lat: number; lng: number }) => {
       setFlyTo(c);
       setPostingMode(false);
+      setCreateOpen(false);
+      setSavedOpen(false);
     },
     []
   );
@@ -131,16 +152,23 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
   const handleLocate = useCallback((c: { lat: number; lng: number }) => {
     setFlyTo(c);
     setPostingMode(false);
+    setCreateOpen(false);
+    setSavedOpen(false);
   }, []);
 
-  const handleDeletePin = useCallback(
-    async (id: string) => {
-      await deletePin(id);
-      removePin(id);
-      setSelectedPinId(null);
-    },
-    [removePin]
-  );
+  const handleOpenSaved = useCallback(() => {
+    setSelectedPinId(null);
+    setSavedOpen(true);
+  }, []);
+
+  const handleOpenSavedPin = useCallback((entry: FavoriteEntry) => {
+    setHighlightId(entry.id);
+    setSelectedPinId(null);
+    const point = parsePoint(entry.location);
+    if (point) setFlyTo(point);
+    setPostingMode(false);
+    setCreateOpen(false);
+  }, []);
 
   const bannerError = categoriesError ?? pinsError ?? detailError;
 
@@ -149,7 +177,8 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
       <MapView
         pins={pins}
         flyTo={flyTo}
-        selectedPinId={selectedPinId}
+        highlightId={highlightId}
+        theme={theme}
         onBoundsChange={handleBoundsChange}
         onSelectPin={handleSelectPin}
         onMapClick={handleMapClick}
@@ -166,23 +195,18 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
         </div>
       )}
 
-      <Navbar>
-        <div className="flex w-full max-w-2xl items-center gap-1.5">
-          <SearchBar
-            center={center}
-            onSelectPlace={handleSearchPlace}
-            onSelectPin={handleSearchPin}
-          />
-          <CategoryDropdown
-            categories={categories}
-            selected={selectedCategory}
-            onSelect={setSelectedCategory}
-          />
-        </div>
-      </Navbar>
+      <MapNavBar
+        center={center}
+        onSelectPlace={handleSearchPlace}
+        onSelectPin={handleSearchPin}
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onSelectCategory={setSelectedCategory}
+        onOpenSaved={handleOpenSaved}
+      />
 
       {loading && (
-        <div className="absolute left-3 top-36 z-10 rounded bg-white/90 px-2 py-1 text-xs text-zinc-500 shadow">
+        <div className="absolute left-3 top-36 z-10 rounded bg-white/90 px-2 py-1 text-xs text-zinc-500 shadow dark:bg-zinc-900/90 dark:text-zinc-400">
           Loading pins…
         </div>
       )}
@@ -192,7 +216,7 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
       {bannerError && (
         <div
           role="alert"
-          className="absolute left-3 top-40 z-10 rounded bg-rose-50 px-2 py-1 text-xs text-rose-600 shadow"
+          className="absolute left-3 top-40 z-10 rounded bg-rose-50 px-2 py-1 text-xs text-rose-600 shadow dark:bg-rose-950/60 dark:text-rose-300"
         >
           {bannerError}
           {categoriesError && (
@@ -208,7 +232,7 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
       )}
 
       {!loading && !bannerError && pins.length === 0 && (
-        <div className="absolute bottom-6 left-4 z-10 rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-500 shadow ring-1 ring-zinc-200/70 backdrop-blur">
+        <div className="absolute bottom-6 left-4 z-10 rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-500 shadow ring-1 ring-zinc-200/70 backdrop-blur dark:bg-zinc-900/90 dark:text-zinc-400 dark:ring-zinc-700/70">
           No pins in this area yet
         </div>
       )}
@@ -217,21 +241,28 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
         <PinDetailPanel
           key={detail.id}
           pin={detail}
-          currentUserId={user?.id ?? null}
-          onDelete={handleDeletePin}
           onClose={() => setSelectedPinId(null)}
         />
       )}
 
-      {postingMode && (
-        <CreatePinButton
-          lat={center.lat}
-          lng={center.lng}
-          categories={categories}
-          onCreated={handleCreated}
-          onSetLocation={handleSetLocation}
+      {savedOpen && (
+        <SavedPinsPanel
+          activeId={highlightId}
+          onClose={() => setSavedOpen(false)}
+          onOpenPin={handleOpenSavedPin}
         />
       )}
+
+      <CreatePinButton
+        posting={postingMode}
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        lat={center.lat}
+        lng={center.lng}
+        categories={categories}
+        onCreated={handleCreated}
+        onSetLocation={handleSetLocation}
+      />
     </div>
   );
 }

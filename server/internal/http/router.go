@@ -13,6 +13,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/favorites"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
@@ -60,6 +61,12 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		JWTSecret:   cfg.JWTSecret,
 		Blacklist:   c.Blacklist,
 		UserService: c.UserService,
+	})
+
+	favoriteHandler := favorites.NewHandler(favorites.NewService(c.FavoriteRepo))
+	favorites.RegisterRoutes(jsonRoutes, favoriteHandler, favorites.RouteOptions{
+		JWTSecret: cfg.JWTSecret,
+		Blacklist: c.Blacklist,
 	})
 
 	return r

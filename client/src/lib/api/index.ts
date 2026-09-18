@@ -3,3 +3,4 @@ export { login, logout, register } from "./auth";
 export { fetchCategories } from "./categories";
 export { createPin, deletePin, fetchPin, fetchPins, searchPins } from "./pins";
 export { searchPlaces, type PlaceResult } from "./geocoding";
+export { fetchFavoriteIDs, fetchFavorites, removeFavorite, saveFavorite, type FavoriteEntry } from "./favorites";

@@ -38,12 +38,12 @@ export default function LocateButton({ onLocate }: Props) {
       type="button"
       onClick={handleClick}
       title="Go to my location"
-      className={`flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md ring-1 ring-zinc-200 transition-colors hover:bg-zinc-50 ${status === "error" ? "ring-rose-400" : ""}`}
+      className={`flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md ring-1 ring-zinc-200 transition-colors hover:bg-zinc-50 dark:bg-zinc-900 dark:ring-zinc-700 dark:hover:bg-zinc-800 ${status === "error" ? "ring-rose-400" : ""}`}
     >
       {status === "loading" ? (
-        <span className="block h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+        <span className="block h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700 dark:border-zinc-700 dark:border-t-zinc-300" />
       ) : (
-        <svg className={`h-4 w-4 ${status === "error" ? "text-rose-500" : "text-zinc-600"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <svg className={`h-4 w-4 ${status === "error" ? "text-rose-500" : "text-zinc-600 dark:text-zinc-400"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="3" />
           <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
         </svg>

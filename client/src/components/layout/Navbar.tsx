@@ -37,7 +37,7 @@ export default function Navbar({ children }: NavbarProps) {
         <nav className="pointer-events-auto ml-auto flex shrink-0 items-center gap-2.5">
           {isLoggedIn && user ? (
             <>
-              <div className="hidden items-center gap-2.5 sm:flex [text-shadow:0_1px_2px_rgba(255,255,255,0.9)]">
+              <div className="hidden items-center gap-2.5 sm:flex [text-shadow:0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
                 {user.avatar_url ? (
                   <img
                     src={user.avatar_url}
@@ -45,16 +45,16 @@ export default function Navbar({ children }: NavbarProps) {
                     className="h-8 w-8 rounded-full object-cover"
                   />
                 ) : (
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-sm font-semibold text-rose-700">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-sm font-semibold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
                     {user.username.charAt(0).toUpperCase()}
                   </span>
                 )}
-                <span className="text-sm text-zinc-600">@{user.username}</span>
+                <span className="text-sm text-zinc-600 dark:text-zinc-300">@{user.username}</span>
               </div>
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-full border border-zinc-300 bg-white/90 px-3.5 py-1.5 text-sm font-medium text-zinc-700 shadow-sm backdrop-blur transition-colors hover:bg-white"
+                className="rounded-full border border-zinc-300 bg-white/90 px-3.5 py-1.5 text-sm font-medium text-zinc-700 shadow-sm backdrop-blur transition-colors hover:bg-white dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-900"
               >
                 Log out
               </button>
@@ -63,7 +63,7 @@ export default function Navbar({ children }: NavbarProps) {
             <>
               <Link
                 href="/login"
-                className="rounded-full border border-zinc-300 bg-white/90 px-3.5 py-1.5 text-sm font-medium text-zinc-700 shadow-sm backdrop-blur transition-colors hover:bg-white"
+                className="rounded-full border border-zinc-300 bg-white/90 px-3.5 py-1.5 text-sm font-medium text-zinc-700 shadow-sm backdrop-blur transition-colors hover:bg-white dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-900"
               >
                 Log in
               </Link>

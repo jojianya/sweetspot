@@ -44,3 +44,30 @@ export async function searchPlaces(
     bbox: f.bbox,
   }));
 }
+
+/**
+ * Reverse geocode a coordinate into a human-readable address string
+ * (e.g. "MG Road, Indiranagar, Bengaluru"). Returns null when the lookup
+ * fails or yields nothing usable.
+ */
+export async function reverseGeocode(
+  coord: { lat: number; lng: number },
+  signal?: AbortSignal
+): Promise<string | null> {
+  const params = new URLSearchParams({
+    key: MAPTILER_KEY,
+    language: "en",
+    limit: "1",
+    types: "address,road,neighbourhood,locality,municipality,place,region,country",
+  });
+
+  const res = await fetch(
+    `https://api.maptiler.com/geocoding/${coord.lng},${coord.lat}.json?${params}`,
+    { signal }
+  );
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as { features?: Feature[] };
+  const text = data.features?.[0]?.place_name;
+  return text || null;
+}

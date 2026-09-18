@@ -1,3 +1,16 @@
+# LOCAL DEVELOPMENT stack — hot reload with bind mounts (no rebuilds needed).
+#
+# Quick start:
+#   cp .env.example .env          (first time)
+#   docker compose up -d --build  (only needed when a Dockerfile or lockfile changes)
+#   docker compose up -d          (everything after: bind mounts pick up edits live)
+#
+# How hot reload works:
+#   - client: `./client` is bind-mounted; `next dev` (HMR) replays changes instantly.
+#   - server: `./server` is bind-mounted; Air rebuilds + restarts the Go binary on save.
+#   - node_modules / .next live in anonymous volumes so container deps aren't clobbered.
+#   Rebuild the images only when you touch a Dockerfile, package.json, or go.mod.
+
 services:
   postgres:
     image: postgis/postgis:16-3.4
@@ -36,7 +49,7 @@ services:
   server:
     build:
       context: ./server
-      dockerfile: deployments/docker/server.Dockerfile
+      dockerfile: deployments/docker/server.Dockerfile.dev
     container_name: goodspot247-server
     restart: unless-stopped
     ports:
@@ -53,25 +66,40 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       STORAGE_BACKEND: local
       STORAGE_BASE_URL: http://localhost:8081
+      LOG_LEVEL: debug
+      # This box is RAM-constrained; cap the Go toolchain so builds don't OOM.
+      GOGC: "50"
+      GOMEMLIMIT: 2GiB
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+    volumes:
+      - ./server:/app
+      - server_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - server_uploads:/app/uploads
 
   client:
     build:
       context: ./client
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_MAPTILER_API_KEY: ${NEXT_PUBLIC_MAPTILER_API_KEY:?set NEXT_PUBLIC_MAPTILER_API_KEY in .env}
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8081}
+      dockerfile: Dockerfile.dev
     container_name: goodspot247-client
     restart: unless-stopped
     ports:
       - "3000:3000"
+    environment:
+      NEXT_PUBLIC_MAPTILER_API_KEY: ${NEXT_PUBLIC_MAPTILER_API_KEY:?set NEXT_PUBLIC_MAPTILER_API_KEY in .env}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8081}
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+      - /app/.next
     depends_on:
       - server
 

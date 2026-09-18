@@ -82,5 +82,36 @@ func RunMigrations(pool *pgxpool.Pool, migrationsDir string) error {
 		fmt.Printf("migrated: %s\n", file)
 	}
 
+	if err := verifySchema(ctx, pool); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+var requiredTables = []string{
+	"users",
+	"categories",
+	"pins",
+	"pin_photos",
+	"reports",
+}
+
+// verifySchema guards against migrations silently no-op'ing (e.g. an empty
+// migrations dir). If a required table is missing after all migrations ran,
+// startup fails loudly instead of booting into a broken, empty database.
+func verifySchema(ctx context.Context, pool *pgxpool.Pool) error {
+	for _, table := range requiredTables {
+		var exists bool
+		if err := pool.QueryRow(ctx,
+			"SELECT to_regclass($1) IS NOT NULL", "public."+table,
+		).Scan(&exists); err != nil {
+			return fmt.Errorf("verifying table %s: %w", table, err)
+		}
+		if !exists {
+			return fmt.Errorf("schema verification failed: table %q missing after migrations — "+
+				"the database is empty and was likely recreated or wiped", table)
+		}
+	}
 	return nil
 }

@@ -1,0 +1,18 @@
+FROM golang:1.27-alpine AS base
+RUN apk add --no-cache vips-dev build-base pkgconf
+WORKDIR /app
+
+ENV CGO_ENABLED=1
+ENV PATH="$PATH:/go/bin"
+
+# Cache module downloads before copying source so rebuilds are fast.
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Hot-reload watcher for Go (rebuilds + restarts on file change).
+RUN go install github.com/air-verse/air@latest
+
+COPY . .
+
+EXPOSE 8081
+CMD ["air", "-c", ".air.toml"]

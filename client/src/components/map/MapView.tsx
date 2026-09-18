@@ -14,6 +14,7 @@ import type { PinListEntry } from "@/lib/types";
 import { boundsToValidBbox, parsePoint } from "@/lib/utils";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import type { Theme } from "@/store/theme";
+import { ensurePinLayers, type GeoFeature } from "./pinLayers";
 
 const LIGHT_STYLE = `https://api.maptiler.com/maps/toner-lite/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_API_KEY}`;
 const DARK_STYLE = `https://api.maptiler.com/maps/basic-v2-dark/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_API_KEY}`;
@@ -33,78 +34,6 @@ interface MapViewProps {
   onBoundsChange: (bbox: string, center: { lat: number; lng: number }) => void;
   onSelectPin: (id: string) => void;
   onMapClick: () => void;
-}
-
-interface GeoFeature {
-  type: "Feature";
-  geometry: { type: "Point"; coordinates: [number, number] };
-  properties: {
-    id: string;
-    caption: string;
-    username: string;
-    cover: string;
-  };
-}
-
-type GeoJSONLike = {
-  type: "FeatureCollection";
-  features: GeoFeature[];
-};
-
-const EMPTY_GEOJSON: GeoJSONLike = {
-  type: "FeatureCollection",
-  features: [],
-};
-
-function makePinIcon(
-  size: number,
-  color: string,
-  ringColor: string | null,
-  dotColor: string
-): ImageData {
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  const cx = size / 2;
-  const cy = size * 0.3;
-  const r = size * 0.26;
-  const tipY = size * 0.97;
-
-  ctx.fillStyle = color;
-  ctx.strokeStyle = ringColor ?? color;
-  ctx.lineWidth = size * 0.07;
-  if (ringColor) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, r + size * 0.05, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx, tipY);
-    ctx.lineTo(cx - r * 0.85, cy + r * 0.45);
-    ctx.lineTo(cx + r * 0.85, cy + r * 0.45);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cx, tipY);
-  ctx.lineTo(cx - r * 0.85, cy + r * 0.45);
-  ctx.lineTo(cx + r * 0.85, cy + r * 0.45);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = dotColor;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.38, 0, Math.PI * 2);
-  ctx.fill();
-
-  return ctx.getImageData(0, 0, size, size);
 }
 
 export default function MapView({
@@ -152,54 +81,8 @@ export default function MapView({
     const pinLayers = ["pins-base", "pins-selected"];
     let initialized = false;
 
-    // setStyle() (theme swap) drops runtime-added sources and layers and
-    // fires "style.load" again ("load" only fires once per map), but the
-    // diff path can keep previously added images, so re-creation must be
-    // guarded per resource.
-    const ensurePinLayers = () => {
-      if (!map.hasImage("pin-default")) {
-        map.addImage("pin-default", makePinIcon(64, "#e11d48", null, "#ffffff"));
-      }
-      if (!map.hasImage("pin-selected")) {
-        map.addImage(
-          "pin-selected",
-          makePinIcon(64, "#9f1239", "#ffffff", "#ffffff")
-        );
-      }
-
-      if (!map.getSource("pins")) {
-        map.addSource("pins", { type: "geojson", data: EMPTY_GEOJSON });
-      }
-
-      if (!map.getLayer("pins-base")) {
-        map.addLayer({
-          id: "pins-base",
-          type: "symbol",
-          source: "pins",
-          layout: {
-            "icon-image": "pin-default",
-            "icon-size": 0.75,
-            "icon-anchor": "bottom",
-          },
-        });
-      }
-
-      if (!map.getLayer("pins-selected")) {
-        map.addLayer({
-          id: "pins-selected",
-          type: "symbol",
-          source: "pins",
-          layout: {
-            "icon-image": "pin-selected",
-            "icon-size": 1.05,
-            "icon-anchor": "bottom",
-          },
-        });
-      }
-    };
-
     map.on("style.load", () => {
-      ensurePinLayers();
+      ensurePinLayers(map);
       // Re-runs the pin-data and highlight-filter effects against the
       // freshly loaded style.
       setStyleVersion((v) => v + 1);

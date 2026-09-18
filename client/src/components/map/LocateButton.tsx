@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils";
 
-const GEO_AVAILABLE = typeof navigator !== "undefined" && "geolocation" in navigator;
+const GEO_AVAILABLE = geolocationAvailable();
 
 interface Props {
   onLocate: (pos: { lat: number; lng: number }) => void;
@@ -15,18 +16,16 @@ export default function LocateButton({ onLocate }: Props) {
   const handleClick = useCallback(() => {
     if (status === "loading") return;
     setStatus("loading");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        onLocate({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    getCurrentPosition({ maximumAge: 0 })
+      .then((pos) => {
+        onLocate(toGeoCoords(pos));
         setStatus("idle");
-      },
-      () => {
+      })
+      .catch(() => {
         setStatus("error");
         clearTimeout(timerRef.current!);
         timerRef.current = setTimeout(() => setStatus("idle"), 2000);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+      });
   }, [status, onLocate]);
 
   useEffect(() => () => clearTimeout(timerRef.current!), []);

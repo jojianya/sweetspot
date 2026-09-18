@@ -6,7 +6,7 @@ import { CloseIcon } from "@/components/icons";
 import { createPin } from "@/lib/api";
 import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
 import type { MapLocation } from "@/components/map/MapView";
-import { errorMessage } from "@/lib/utils";
+import { errorMessage, getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
 const MAX_PHOTOS = 5;
@@ -98,23 +98,21 @@ export default function CreatePinButton({
   };
 
   const useCurrentLocation = () => {
-    if (!("geolocation" in navigator)) {
+    if (!geolocationAvailable()) {
       setError("Location is not available in this browser");
       return;
     }
     setLocating(true);
     setError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    getCurrentPosition()
+      .then((pos) => {
         setLocating(false);
-        onSetLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      },
-      (err) => {
+        onSetLocation(toGeoCoords(pos));
+      })
+      .catch((e: unknown) => {
         setLocating(false);
-        setError(err.message || "Could not get your location");
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+        setError(errorMessage(e));
+      });
   };
 
   const submit = async () => {

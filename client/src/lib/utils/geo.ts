@@ -18,6 +18,46 @@ export function parsePoint(point: string): { lng: number; lat: number } | null {
   return { lng, lat };
 }
 
+export type GeoCoords = {
+  lat: number;
+  lng: number;
+};
+
+const DEFAULT_POSITION_OPTIONS: PositionOptions = {
+  enableHighAccuracy: true,
+  timeout: 10000,
+  maximumAge: 60000,
+};
+
+export function geolocationAvailable(): boolean {
+  return typeof navigator !== "undefined" && "geolocation" in navigator;
+}
+
+/**
+ * Promise wrapper around navigator.geolocation.getCurrentPosition with a
+ * shared default option set. Rejects with an Error (never a raw
+ * GeolocationPositionError) so callers can rely on `.message`.
+ */
+export function getCurrentPosition(
+  opts?: Partial<PositionOptions>
+): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!geolocationAvailable()) {
+      reject(new Error("Location is not available in this browser"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      resolve,
+      (err) => reject(new Error(err.message || "Could not get your location")),
+      { ...DEFAULT_POSITION_OPTIONS, ...opts }
+    );
+  });
+}
+
+export function toGeoCoords(pos: GeolocationPosition): GeoCoords {
+  return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+}
+
 export function boundsToValidBbox(b: LngLatBounds): [number, number, number, number] {
   const south = Math.max(-90, Math.min(90, b.getSouth()));
   const north = Math.max(-90, Math.min(90, b.getNorth()));

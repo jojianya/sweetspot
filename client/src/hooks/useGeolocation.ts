@@ -1,27 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getCurrentPosition, toGeoCoords, type GeoCoords } from "@/lib/utils";
 
-export interface GeoCoords {
-  lat: number;
-  lng: number;
-}
+export type { GeoCoords };
 
 export function useGeolocation(): {
   position: GeoCoords | null;
-  error: GeolocationPositionError | null;
+  error: Error | null;
 } {
   const [position, setPosition] = useState<GeoCoords | null>(null);
-  const [error, setError] = useState<GeolocationPositionError | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (!("geolocation" in navigator)) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => setError(err),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+    let cancelled = false;
+    getCurrentPosition()
+      .then((pos) => {
+        if (!cancelled) setPosition(toGeoCoords(pos));
+      })
+      .catch((e: unknown) => {
+        if (e instanceof Error && !cancelled) setError(e);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return { position, error };

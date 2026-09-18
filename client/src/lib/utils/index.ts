@@ -1,3 +1,10 @@
 export { errorMessage } from "./errorMessage";
 export { formatTime } from "./format";
-export { boundsToValidBbox, parsePoint } from "./geo";
+export {
+  boundsToValidBbox,
+  getCurrentPosition,
+  geolocationAvailable,
+  parsePoint,
+  toGeoCoords,
+  type GeoCoords,
+} from "./geo";

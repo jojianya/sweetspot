@@ -157,7 +157,6 @@ export default function MapApp() {
         >
           <div className="absolute h-0.5 w-16 bg-rose-600 shadow-[0_0_4px_rgba(255,255,255,0.9)]" />
           <div className="absolute h-16 w-0.5 bg-rose-600 shadow-[0_0_4px_rgba(255,255,255,0.9)]" />
-          <div className="absolute h-2.5 w-2.5 rounded-full border-2 border-rose-600" />
         </div>
       )}
 

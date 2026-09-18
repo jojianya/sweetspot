@@ -1,46 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PanelSheet from "@/components/PanelSheet";
+import { BookmarkIcon, CloseIcon } from "@/components/icons";
 import { fetchFavorites, type FavoriteEntry } from "@/lib/api";
 
 interface SavedPinsPanelProps {
   onClose: () => void;
   onOpenPin: (entry: FavoriteEntry) => void;
   activeId: string | null;
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      className="h-5 w-5"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M6 18 18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-function BookmarkIcon() {
-  return (
-    <svg
-      className="h-4 w-4"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" />
-    </svg>
-  );
 }
 
 export default function SavedPinsPanel({
@@ -84,19 +52,11 @@ export default function SavedPinsPanel({
   const subtitle = (e: FavoriteEntry) => (e.username ? `@${e.username}` : "Saved pin");
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Saved pins"
-      className="absolute z-40 flex flex-col bg-white shadow-2xl shadow-zinc-900/20
-          inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl
-          sm:left-0 sm:right-auto sm:top-16 sm:bottom-0 sm:max-h-none sm:w-full sm:max-w-md sm:rounded-none sm:rounded-r-2xl
-          dark:bg-zinc-900 dark:shadow-zinc-950/60"
-    >
+    <PanelSheet role="dialog" aria-modal="true" aria-label="Saved pins">
       <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3.5 dark:border-zinc-800">
         <div className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           <span className="text-zinc-400">
-            <BookmarkIcon />
+            <BookmarkIcon className="h-4 w-4" />
           </span>
           Saved
           {!loading && entries.length > 0 && (
@@ -165,7 +125,7 @@ export default function SavedPinsPanel({
                   />
                 ) : (
                   <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-300 dark:bg-zinc-800 dark:text-zinc-600">
-                    <BookmarkIcon />
+                    <BookmarkIcon className="h-4 w-4" />
                   </span>
                 )}
                 <span className="min-w-0">
@@ -180,6 +140,6 @@ export default function SavedPinsPanel({
             );
           })}
       </div>
-    </div>
+    </PanelSheet>
   );
 }

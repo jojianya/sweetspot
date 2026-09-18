@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { logout } from "@/lib/api";
+import Avatar from "@/components/Avatar";
+import { useLogout } from "@/hooks/useLogout";
 import { useAuth } from "@/store/auth";
 
 interface NavbarProps {
@@ -11,19 +11,9 @@ interface NavbarProps {
 }
 
 export default function Navbar({ children }: NavbarProps) {
-  const { user, token, clearAuth } = useAuth();
-  const router = useRouter();
+  const { user, token } = useAuth();
   const isLoggedIn = token !== null;
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch {
-      // token may already be blacklisted; clear locally regardless
-    }
-    clearAuth();
-    router.push("/");
-  };
+  const handleLogout = useLogout();
 
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-30">
@@ -38,17 +28,12 @@ export default function Navbar({ children }: NavbarProps) {
           {isLoggedIn && user ? (
             <>
               <div className="hidden items-center gap-2.5 sm:flex [text-shadow:0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
-                {user.avatar_url ? (
-                  <img
-                    src={user.avatar_url}
-                    alt=""
-                    className="h-8 w-8 rounded-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-sm font-semibold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
-                    {user.username.charAt(0).toUpperCase()}
-                  </span>
-                )}
+                <Avatar
+                  src={user.avatar_url}
+                  username={user.username}
+                  className="h-8 w-8"
+                  fallbackClassName="bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
+                />
                 <span className="text-sm text-zinc-600 dark:text-zinc-300">@{user.username}</span>
               </div>
               <button

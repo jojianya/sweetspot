@@ -4,7 +4,8 @@ import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import SearchBar from "./SearchBar";
 import ThemeToggle from "./ThemeToggle";
-import { logout } from "@/lib/api";
+import Avatar from "@/components/Avatar";
+import { useLogout } from "@/hooks/useLogout";
 import { useAuth } from "@/store/auth";
 import type { Category, PinListEntry } from "@/lib/types";
 
@@ -211,27 +212,21 @@ export default function MapNavBar({
   onSelectCategory,
   onOpenSaved,
 }: MapNavBarProps) {
-  const { user, token, clearAuth } = useAuth();
+  const { user, token } = useAuth();
   const router = useRouter();
   const isLoggedIn = token !== null;
+  const handleLogout = useLogout();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [appsOpen, setAppsOpen] = useState(false);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch {
-      // token may already be blacklisted; clear locally regardless
-    }
-    clearAuth();
-    router.push("/");
-  };
-
   const scrollChips = (dir: 1 | -1) => {
     scrollRef.current?.scrollBy({ left: dir * 240, behavior: "smooth" });
   };
+
+  const menuButtonClass =
+    "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800";
 
   const rightCluster: ReactNode = (
     <div className="flex shrink-0 items-center gap-2.5">
@@ -290,14 +285,11 @@ export default function MapNavBar({
             aria-expanded={profileOpen}
             className="block h-10 w-10 overflow-hidden rounded-full border border-[#E0E0E0] transition-transform hover:scale-105 dark:border-zinc-700"
           >
-            {user.avatar_url ? (
-              // eslint-disable-next-line @next/next/no-img-element -- avatars are hosted media, <img> is fine here
-              <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <span className="flex h-full w-full items-center justify-center bg-zinc-100 text-sm font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                {user.username.charAt(0).toUpperCase()}
-              </span>
-            )}
+            <Avatar
+              src={user.avatar_url}
+              username={user.username}
+              className="h-full w-full"
+            />
           </button>
           {profileOpen && (
             <div
@@ -305,18 +297,11 @@ export default function MapNavBar({
               role="menu"
             >
               <div className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-                {user.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- avatars are hosted media, <img> is fine here
-                  <img
-                    src={user.avatar_url}
-                    alt=""
-                    className="h-9 w-9 rounded-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-sm font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                    {user.username.charAt(0).toUpperCase()}
-                  </span>
-                )}
+                <Avatar
+                  src={user.avatar_url}
+                  username={user.username}
+                  className="h-9 w-9"
+                />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">@{user.username}</p>
                   <p className="truncate text-xs capitalize text-zinc-500 dark:text-zinc-400">{user.role}</p>
@@ -332,7 +317,7 @@ export default function MapNavBar({
                     onOpenSaved();
                   }}
                   role="menuitem"
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  className={menuButtonClass}
                 >
                   <svg className="h-4 w-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                     <path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" />

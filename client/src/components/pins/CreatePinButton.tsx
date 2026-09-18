@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { CloseIcon } from "@/components/icons";
 import { createPin } from "@/lib/api";
 import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
 import type { MapLocation } from "@/components/map/MapView";
@@ -178,19 +179,7 @@ export default function CreatePinButton({
             className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
             aria-label="Close"
           >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 18 18 6M6 6l12 12"
-              />
-            </svg>
+            <CloseIcon />
           </button>
         </header>
 

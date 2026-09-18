@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import PanelSheet from "@/components/PanelSheet";
+import { BookmarkIcon, CloseIcon } from "@/components/icons";
 import type { PinDetail } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
 import { reverseGeocode } from "@/lib/api/geocoding";
@@ -50,27 +52,11 @@ const stroke = {
   viewBox: "0 0 24 24",
 };
 
-function CloseIcon() {
-  return (
-    <svg className="h-5 w-5" {...stroke} aria-hidden>
-      <path d="M6 18 18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
 function DirectionsIcon() {
   return (
     <svg className="h-5 w-5" {...stroke} aria-hidden>
       <path d="M7 7h10v10" />
       <path d="M7 17 17 7" />
-    </svg>
-  );
-}
-
-function BookmarkIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" />
     </svg>
   );
 }
@@ -223,10 +209,10 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
 
   return (
     <>
-      <div className="absolute z-40 flex flex-col bg-white shadow-2xl shadow-zinc-900/20
-          inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl
-          sm:left-0 sm:right-auto sm:top-16 sm:bottom-0 sm:max-h-none sm:w-full sm:max-w-md sm:rounded-none sm:rounded-r-2xl
-          dark:bg-zinc-900 dark:shadow-zinc-950/60">
+      <PanelSheet
+        role="dialog"
+        aria-label="Pin details"
+      >
         {/* Hero photo — plain image, no overlays */}
         <div className="relative h-[210px] shrink-0 overflow-hidden rounded-t-2xl sm:rounded-t-none sm:rounded-tr-2xl">
           {photo ? (
@@ -364,7 +350,7 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
             </div>
           )}
         </div>
-      </div>
+      </PanelSheet>
 
       {lightbox && photo && (
         <div
@@ -382,12 +368,12 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
           />
           <button
             type="button"
-            onClick={() => setLightbox(false)}
-            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white backdrop-blur hover:bg-white/20"
-            aria-label="Close viewer"
-          >
-            <CloseIcon />
-          </button>
+          onClick={() => setLightbox(false)}
+          className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white backdrop-blur hover:bg-white/20"
+          aria-label="Close viewer"
+        >
+          <CloseIcon />
+        </button>
           {count > 1 && (
             <>
               <button

@@ -8,8 +8,9 @@ import PhotoLightbox from "./PhotoLightbox";
 import type { PinDetail } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
 import { reverseGeocode } from "@/lib/api/geocoding";
-import { fetchFavoriteIDs, removeFavorite, saveFavorite } from "@/lib/api/favorites";
+import { removeFavorite, saveFavorite } from "@/lib/api/favorites";
 import { useAuth } from "@/store/auth";
+import { useSavedStatus } from "@/hooks/useFavorites";
 
 interface PinDetailPanelProps {
   pin: PinDetail;
@@ -98,7 +99,7 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
   const [lightbox, setLightbox] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { saved, setSaved } = useSavedStatus(pin.id, token !== null);
 
   const photo = pin.photos[index];
   const count = pin.photos.length;
@@ -130,21 +131,6 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
       });
     return () => controller.abort();
   }, [point]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!token) return;
-    fetchFavoriteIDs()
-      .then((ids) => {
-        if (!cancelled) setSaved(ids.includes(pin.id));
-      })
-      .catch(() => {
-        // saved state stays false if the lookup fails
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, pin.id]);
 
   const handleSave = () => {
     if (!token) {

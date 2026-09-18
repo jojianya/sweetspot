@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
 import { BookmarkIcon, CloseIcon } from "@/components/icons";
-import { fetchFavorites, type FavoriteEntry } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
+import { useFavorites } from "@/hooks/useFavorites";
+import type { FavoriteEntry } from "@/lib/api";
 
 interface SavedPinsPanelProps {
   onClose: () => void;
@@ -17,35 +16,7 @@ export default function SavedPinsPanel({
   onOpenPin,
   activeId,
 }: SavedPinsPanelProps) {
-  const [entries, setEntries] = useState<FavoriteEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = (resetLoading: boolean) => {
-    if (resetLoading) setLoading(true);
-    setError(null);
-    fetchFavorites()
-      .then(setEntries)
-      .catch((e: unknown) => setError(errorMessage(e)))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchFavorites()
-      .then((data) => {
-        if (!cancelled) setEntries(data);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(errorMessage(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { entries, loading, error, retry } = useFavorites();
 
   const title = (e: FavoriteEntry) =>
     e.caption?.trim() || (e.username ? `@${e.username}` : "Untitled");
@@ -86,7 +57,7 @@ export default function SavedPinsPanel({
             <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
             <button
               type="button"
-              onClick={() => load(true)}
+              onClick={retry}
               className="mt-3 rounded-full border border-zinc-200 px-4 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               Retry

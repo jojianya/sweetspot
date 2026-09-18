@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fetchPin } from "@/lib/api";
+import { errorMessage } from "@/lib/utils";
 import type { PinDetail } from "@/lib/types";
 
 interface UsePinDetailOptions {
@@ -32,8 +33,7 @@ export function usePinDetail(id: string | null, options?: UsePinDetailOptions) {
       })
       .catch((e: unknown) => {
         if (!ctrl.signal.aborted) {
-          const message = e instanceof Error ? e.message : "something went wrong";
-          onErrorRef.current?.(message);
+          onErrorRef.current?.(errorMessage(e));
         }
       });
 

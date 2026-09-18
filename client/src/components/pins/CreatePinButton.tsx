@@ -6,6 +6,7 @@ import { CloseIcon } from "@/components/icons";
 import { createPin } from "@/lib/api";
 import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
 import type { MapLocation } from "@/components/map/MapView";
+import { errorMessage } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
 const MAX_PHOTOS = 5;
@@ -137,7 +138,7 @@ export default function CreatePinButton({
       setCaption("");
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       setSubmitting(false);
     }

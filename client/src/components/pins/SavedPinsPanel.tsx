@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
 import { BookmarkIcon, CloseIcon } from "@/components/icons";
 import { fetchFavorites, type FavoriteEntry } from "@/lib/api";
+import { errorMessage } from "@/lib/utils";
 
 interface SavedPinsPanelProps {
   onClose: () => void;
@@ -25,7 +26,7 @@ export default function SavedPinsPanel({
     setError(null);
     fetchFavorites()
       .then(setEntries)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "something went wrong"))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   };
 
@@ -36,7 +37,7 @@ export default function SavedPinsPanel({
         if (!cancelled) setEntries(data);
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "something went wrong");
+        if (!cancelled) setError(errorMessage(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

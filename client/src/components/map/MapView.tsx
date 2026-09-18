@@ -26,6 +26,14 @@ export interface MapLocation {
   lng: number;
 }
 
+/** Data carried by a hover tooltip; only fields actually rendered. */
+type PinHover = {
+  id: string;
+  caption: string | null;
+  username: string | null;
+  cover_url: string;
+};
+
 interface MapViewProps {
   pins: PinListEntry[];
   flyTo: { lng: number; lat: number } | null;
@@ -52,11 +60,9 @@ export default function MapView({
   const [styleReady, setStyleReady] = useState(false);
   const [styleVersion, setStyleVersion] = useState(0);
   const themeRef = useRef(theme);
-  const [hover, setHover] = useState<{
-    pin: PinListEntry;
-    x: number;
-    y: number;
-  } | null>(null);
+  const [hover, setHover] = useState<{ pin: PinHover; x: number; y: number } | null>(
+    null
+  );
 
   const onBoundsRef = useRef(onBoundsChange);
   const onSelectRef = useRef(onSelectPin);
@@ -92,14 +98,15 @@ export default function MapView({
       if (initialized) return;
       initialized = true;
 
-        map.on("click", pinLayers as never, (e) => {
+        // Typed overload: MapLibre v6 accepts string[] layer ids directly.
+        map.on("click", pinLayers, (e) => {
           const id = e.features?.[0]?.properties?.id;
           if (id) onSelectRef.current(String(id));
         });
-        map.on("mouseenter", pinLayers as never, () => {
+        map.on("mouseenter", pinLayers, () => {
           map.getCanvas().style.cursor = "pointer";
         });
-        map.on("mouseleave", pinLayers as never, () => {
+        map.on("mouseleave", pinLayers, () => {
           map.getCanvas().style.cursor = "";
           setHover(null);
         });
@@ -113,15 +120,9 @@ export default function MapView({
           setHover({
             pin: {
               id: String(props.id),
-              user_id: "",
-              location: "",
-              geohash: "",
               caption: props.caption || null,
-              category_id: 0,
-              is_hidden: false,
-              created_at: "",
-              cover_url: props.cover || "",
               username: props.username || null,
+              cover_url: props.cover || "",
             },
             x: e.point.x,
             y: e.point.y,

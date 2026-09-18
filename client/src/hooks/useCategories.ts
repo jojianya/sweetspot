@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchCategories } from "@/lib/api";
+import { errorMessage } from "@/lib/utils";
 import type { Category } from "@/lib/types";
 
 export function useCategories() {
@@ -17,7 +18,7 @@ export function useCategories() {
       })
       .catch((e: unknown) => {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "something went wrong");
+          setError(errorMessage(e));
         }
       });
     return () => {

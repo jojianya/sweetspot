@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchPins } from "@/lib/api";
+import { errorMessage } from "@/lib/utils";
 import type { PinListEntry } from "@/lib/types";
 
 export function usePins(bbox: string | null, category: number | null) {
@@ -34,7 +35,7 @@ export function usePins(bbox: string | null, category: number | null) {
       })
       .catch((e: unknown) => {
         if (!ctrl.signal.aborted) {
-          setError(e instanceof Error ? e.message : "something went wrong");
+          setError(errorMessage(e));
         }
       })
       .finally(() => {

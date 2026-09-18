@@ -8,7 +8,7 @@ import { useAuth } from "@/store/auth";
 
 interface NavbarProps {
   children?: ReactNode;
-  /** When set, renders a pill link on the left (e.g. back to the map). */
+  /** When set, renders a pill link on the left (e.g. back to the map). testtt */ 
   backHref?: string;
   backLabel?: string;
 }

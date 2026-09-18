@@ -1,24 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import MapView, { type MapLocation } from "./MapView";
 import LocateButton from "./LocateButton";
 import MapNavBar from "./MapNavBar";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
 import SavedPinsPanel from "@/components/pins/SavedPinsPanel";
-import { fetchCategories, type FavoriteEntry } from "@/lib/api";
+import { type FavoriteEntry } from "@/lib/api";
 import { usePins } from "@/hooks/usePins";
 import { usePinDetail } from "@/hooks/usePinDetail";
-import type { Category, CreatedPin, NewPinPhoto, PinListEntry } from "@/lib/types";
+import { useCategories } from "@/hooks/useCategories";
+import type { CreatedPin, NewPinPhoto, PinListEntry } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
 
 export default function MapApp() {
   const { theme } = useTheme();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const { categories, error: categoriesError, retry: retryCategories } = useCategories();
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -30,40 +30,19 @@ export default function MapApp() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-const { pins, loading, error: pinsError, addPin } = usePins(bbox, selectedCategory);
+  const { pins, loading, error: pinsError, addPin } = usePins(bbox, selectedCategory);
   const reportDetailError = useCallback((message: string) => setDetailError(message), []);
-const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
+  const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
 
-  const loadCategories = useCallback(async () => {
-    try {
-      setCategories(await fetchCategories());
-    } catch (e) {
-      setCategoriesError(e instanceof Error ? e.message : "something went wrong");
-    }
+  // The overlays (posting crosshair, create dialog, saved panel) are mutually
+  // exclusive with pin selection: every "navigate somewhere" action closes the
+  // others through this one reset.
+  const closeOverlays = useCallback(() => {
+    setPostingMode(false);
+    setCreateOpen(false);
+    setSavedOpen(false);
+    setDetailError(null);
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchCategories()
-      .then((data) => {
-        if (!cancelled) setCategories(data);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          setCategoriesError(
-            e instanceof Error ? e.message : "something went wrong"
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const retryCategories = useCallback(() => {
-    setCategoriesError(null);
-    void loadCategories();
-  }, [loadCategories]);
 
   const handleBoundsChange = useCallback(
     (bboxValue: string, c: { lat: number; lng: number }) => {
@@ -81,21 +60,17 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
       return;
     }
     setPostingMode((p) => !p);
-    setSelectedPinId((id) => {
-      if (id) setDetailError(null);
-      return null;
-    });
+    setSelectedPinId(null);
     setHighlightId(null);
     setSavedOpen(false);
+    setDetailError(null);
   }, [createOpen]);
 
   const handleSelectPin = useCallback((id: string) => {
     setSelectedPinId(id);
     setHighlightId(id);
-    setPostingMode(false);
-    setCreateOpen(false);
-    setSavedOpen(false);
-  }, []);
+    closeOverlays();
+  }, [closeOverlays]);
 
   const handleSetLocation = useCallback((location: MapLocation) => {
     setFlyTo(location);
@@ -119,14 +94,11 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
       });
       setSelectedPinId(pin.id);
       setHighlightId(pin.id);
-      setSavedOpen(false);
+      closeOverlays();
       const point = parsePoint(pin.location);
       if (point) setFlyTo(point);
-      setPostingMode(false);
-      setCreateOpen(false);
-      setDetailError(null);
     },
-    [addPin]
+    [addPin, closeOverlays]
   );
 
   const handleSearchPin = useCallback((entry: PinListEntry) => {
@@ -134,41 +106,35 @@ const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
     if (point) setFlyTo(point);
     setSelectedPinId(entry.id);
     setHighlightId(entry.id);
-    setPostingMode(false);
-    setCreateOpen(false);
-    setSavedOpen(false);
-  }, []);
+    closeOverlays();
+  }, [closeOverlays]);
 
   const handleSearchPlace = useCallback(
     (c: { lat: number; lng: number }) => {
       setFlyTo(c);
-      setPostingMode(false);
-      setCreateOpen(false);
-      setSavedOpen(false);
+      closeOverlays();
     },
-    []
+    [closeOverlays]
   );
 
   const handleLocate = useCallback((c: { lat: number; lng: number }) => {
     setFlyTo(c);
-    setPostingMode(false);
-    setCreateOpen(false);
-    setSavedOpen(false);
-  }, []);
+    closeOverlays();
+  }, [closeOverlays]);
 
   const handleOpenSaved = useCallback(() => {
     setSelectedPinId(null);
+    closeOverlays();
     setSavedOpen(true);
-  }, []);
+  }, [closeOverlays]);
 
   const handleOpenSavedPin = useCallback((entry: FavoriteEntry) => {
     setHighlightId(entry.id);
     setSelectedPinId(null);
+    closeOverlays();
     const point = parsePoint(entry.location);
     if (point) setFlyTo(point);
-    setPostingMode(false);
-    setCreateOpen(false);
-  }, []);
+  }, [closeOverlays]);
 
   const bannerError = categoriesError ?? pinsError ?? detailError;
 

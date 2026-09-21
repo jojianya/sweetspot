@@ -17,34 +17,6 @@ interface PinDetailPanelProps {
   onClose: () => void;
 }
 
-function hashId(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i += 1) {
-    h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  }
-  return h;
-}
-
-function StarIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 2.5 15 9l7 .6-5.3 4.7 1.6 6.9L12 17.6l-6.3 3.6 1.6-6.9L2 9.6 9 9Z" />
-    </svg>
-  );
-}
-
-function FillStar({ className, fill }: { className?: string; fill: number }) {
-  const pct = Math.max(0, Math.min(1, fill)) * 100;
-  return (
-    <div className={"relative inline-block h-[18px] w-[18px] " + (className ?? "")}>
-      <StarIcon className="absolute inset-0 h-full w-full text-zinc-200 dark:text-zinc-700" />
-      <div className="absolute inset-0 overflow-hidden" style={{ width: `${pct}%` }}>
-        <StarIcon className="h-[18px] w-[18px] text-amber-400" />
-      </div>
-    </div>
-  );
-}
-
 const stroke = {
   fill: "none",
   stroke: "currentColor",
@@ -104,18 +76,6 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
   const photo = pin.photos[index];
   const count = pin.photos.length;
   const point = useMemo(() => parsePoint(pin.location), [pin.location]);
-
-  const rating = useMemo(() => {
-    const value = 3.7 + (hashId(pin.id) % 13) / 10;
-    return { value, reviews: 18 + (hashId(pin.id + ":r") % 183) };
-  }, [pin.id]);
-
-  const description = useMemo(() => {
-    const base = `A ${pin.category ? pin.category.toLowerCase() : "neighbourhood"} favourite shared on GoodSpot.`;
-    return count > 0
-      ? `${base} Browse ${count} photo${count === 1 ? "" : "s"} in the gallery.`
-      : base;
-  }, [pin.category, count]);
 
   const [address, setAddress] = useState<string | null>(null);
 
@@ -215,16 +175,6 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
             {name ?? "Untitled"}
           </h2>
 
-          <div className="mt-1.5 flex items-center gap-2">
-            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{rating.value.toFixed(1)}</span>
-            <span className="flex items-center gap-0.5" aria-label={`${rating.value.toFixed(1)} out of 5`}>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <FillStar key={i} fill={rating.value - i} />
-              ))}
-            </span>
-            <span className="text-sm text-zinc-500 dark:text-zinc-400">({rating.reviews} reviews)</span>
-          </div>
-
           <div className="mt-0.5 flex items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400">
             {pin.category && (
               <>
@@ -281,8 +231,6 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
           </div>
 
           <div className="my-5 h-px bg-zinc-100 dark:bg-zinc-800" />
-
-          <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{description}</p>
 
           <div className="mt-3 flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
             <span className="mt-0.5 shrink-0 text-zinc-400 dark:text-zinc-500">

@@ -16,8 +16,10 @@ import { useGeolocation } from "@/hooks/useGeolocation";
 import type { Theme } from "@/store/theme";
 import { ensurePinLayers, type GeoFeature } from "./pinLayers";
 
-const LIGHT_STYLE = `https://api.maptiler.com/maps/toner-lite/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_API_KEY}`;
-const DARK_STYLE = `https://api.maptiler.com/maps/basic-v2-dark/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_API_KEY}`;
+const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
+
+const LIGHT_STYLE = `https://api.maptiler.com/maps/toner-lite/style.json?key=${MAPTILER_KEY}`;
+const DARK_STYLE = `https://api.maptiler.com/maps/basic-v2-dark/style.json?key=${MAPTILER_KEY}`;
 
 setWorkerUrl("/maplibre-gl-worker.js");
 
@@ -75,6 +77,7 @@ export default function MapView({
   });
 
   useEffect(() => {
+    if (!MAPTILER_KEY) return;
     const map = new MapLibreMap({
       container: containerRef.current!,
       style: theme === "dark" ? DARK_STYLE : LIGHT_STYLE,
@@ -238,6 +241,31 @@ export default function MapView({
       highlightId ? ["==", ["get", "id"], highlightId] : ["all"]
     );
   }, [highlightId, styleReady, styleVersion]);
+
+  if (!MAPTILER_KEY) {
+    return (
+      <div className="relative h-full w-full overflow-hidden">
+        <div className="flex h-full w-full items-center justify-center bg-zinc-100 p-6 dark:bg-zinc-900">
+          <div
+            role="status"
+            className="max-w-sm rounded-2xl bg-white/95 p-6 text-center shadow-lg ring-1 ring-zinc-200 backdrop-blur dark:bg-zinc-900/95 dark:ring-zinc-700"
+          >
+            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              Map unavailable
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+              The map can&apos;t load because the MapTiler API key isn&apos;t
+              configured for this environment. Set{" "}
+              <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                NEXT_PUBLIC_MAPTILER_API_KEY
+              </code>{" "}
+              and restart the dev server.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-full w-full">

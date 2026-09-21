@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import MapView, { type MapLocation } from "./MapView";
 import LocateButton from "./LocateButton";
 import MapNavBar from "./MapNavBar";
@@ -16,10 +17,14 @@ import { parsePoint } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
 
-export default function MapApp() {
+export default function MapApp({
+  initialCategory = null,
+}: {
+  initialCategory?: number | null;
+}) {
   const { theme } = useTheme();
   const { categories, error: categoriesError, retry: retryCategories } = useCategories();
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(initialCategory);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [savedOpen, setSavedOpen] = useState(false);
@@ -30,9 +35,44 @@ export default function MapApp() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  const { pins, loading, error: pinsError, addPin } = usePins(bbox, selectedCategory);
+  // A category id from the URL might not exist once the category list is
+  // known. Derive the effective filter instead of mutating state during an
+  // effect: an unknown id falls back to "All" while the raw URL value is kept.
+  const effectiveCategory =
+    selectedCategory === null ||
+    (categories.length > 0 && !categories.some((c) => c.id === selectedCategory))
+      ? null
+      : selectedCategory;
+
+  const { pins, loading, error: pinsError, addPin } = usePins(bbox, effectiveCategory);
   const reportDetailError = useCallback((message: string) => setDetailError(message), []);
   const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
+
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const handleSelectCategory = useCallback(
+    (id: number | null) => {
+      setSelectedCategory(id);
+      router.replace(id === null ? pathname : `${pathname}?category=${id}`, {
+        scroll: false,
+      });
+    },
+    [pathname, router]
+  );
+
+  // If the URL carried a category id that no longer exists, clean the URL
+  // (the effective filter already falls back to "All"). External-system sync
+  // via router.replace is fine inside an effect; state is not reset here.
+  useEffect(() => {
+    if (
+      categories.length > 0 &&
+      selectedCategory !== null &&
+      !categories.some((c) => c.id === selectedCategory)
+    ) {
+      router.replace(pathname, { scroll: false });
+    }
+  }, [categories, selectedCategory, pathname, router]);
 
   // The overlays (posting crosshair, create dialog, saved panel) are mutually
   // exclusive with pin selection: every "navigate somewhere" action closes the
@@ -137,6 +177,7 @@ export default function MapApp() {
   }, [closeOverlays]);
 
   const bannerError = categoriesError ?? pinsError ?? detailError;
+  const activeCategory = categories.find((c) => c.id === effectiveCategory) ?? null;
 
   return (
     <div className="absolute inset-0">
@@ -165,8 +206,8 @@ export default function MapApp() {
         onSelectPlace={handleSearchPlace}
         onSelectPin={handleSearchPin}
         categories={categories}
-        selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
+        selectedCategory={effectiveCategory}
+        onSelectCategory={handleSelectCategory}
         onOpenSaved={handleOpenSaved}
       />
 
@@ -196,9 +237,15 @@ export default function MapApp() {
         </div>
       )}
 
+      {!loading && !bannerError && pins.length > 0 && (
+        <div className="pointer-events-none absolute bottom-6 left-4 z-10 rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-500 shadow ring-1 ring-zinc-200/70 backdrop-blur dark:bg-zinc-900/90 dark:text-zinc-400 dark:ring-zinc-700/70">
+          {pins.length} {activeCategory ? `${activeCategory.name} places` : "places"} here
+        </div>
+      )}
+
       {!loading && !bannerError && pins.length === 0 && (
         <div className="absolute bottom-6 left-4 z-10 rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-500 shadow ring-1 ring-zinc-200/70 backdrop-blur dark:bg-zinc-900/90 dark:text-zinc-400 dark:ring-zinc-700/70">
-          No pins in this area yet
+          {activeCategory ? `No ${activeCategory.name} places here` : "No pins in this area yet"}
         </div>
       )}
 

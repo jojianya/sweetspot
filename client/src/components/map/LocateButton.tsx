@@ -1,15 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils";
-
-const GEO_AVAILABLE = geolocationAvailable();
 
 interface Props {
   onLocate: (pos: { lat: number; lng: number }) => void;
 }
 
+// geolocation only exists in browsers (Node has `navigator` but no
+// `geolocation`). useSyncExternalStore renders the server snapshot (false)
+// during SSR and hydration, then the real value once on the client, so the
+// server-rendered HTML always matches the first client render.
+const subscribe = () => () => {};
+
 export default function LocateButton({ onLocate }: Props) {
+  const geoSupported = useSyncExternalStore(subscribe, geolocationAvailable, () => false);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -30,7 +35,7 @@ export default function LocateButton({ onLocate }: Props) {
 
   useEffect(() => () => clearTimeout(timerRef.current!), []);
 
-  if (!GEO_AVAILABLE) return null;
+  if (!geoSupported) return null;
 
   return (
     <button

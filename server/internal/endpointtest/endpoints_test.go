@@ -3,6 +3,7 @@ package endpointtest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/favorites"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
@@ -121,6 +123,43 @@ func (m *mockReportRepo) ListReports(ctx context.Context, status *string, limit,
 	return m.list, m.listErr
 }
 
+type mockFavoriteRepo struct {
+	saveErr    error
+	unsaveErr  error
+	isSaved    bool
+	isSavedErr error
+	exists     bool
+	existsErr  error
+	entries    []favorites.Entry
+	listErr    error
+	ids        []string
+	idsErr     error
+}
+
+func (m *mockFavoriteRepo) Save(context.Context, string, string) error {
+	return m.saveErr
+}
+
+func (m *mockFavoriteRepo) Unsave(context.Context, string, string) error {
+	return m.unsaveErr
+}
+
+func (m *mockFavoriteRepo) IsSaved(context.Context, string, string) (bool, error) {
+	return m.isSaved, m.isSavedErr
+}
+
+func (m *mockFavoriteRepo) PinExists(context.Context, string) (bool, error) {
+	return m.exists, m.existsErr
+}
+
+func (m *mockFavoriteRepo) List(context.Context, string) ([]favorites.Entry, error) {
+	return m.entries, m.listErr
+}
+
+func (m *mockFavoriteRepo) ListIDs(context.Context, string) ([]string, error) {
+	return m.ids, m.idsErr
+}
+
 func newToken(t *testing.T, userID, role string) string {
 	t.Helper()
 	tok, err := jwt.Generate(testSecret, userID, role, time.Hour)
@@ -130,7 +169,7 @@ func newToken(t *testing.T, userID, role string) string {
 	return tok
 }
 
-func setupRouter(usersSvc users.Service, reportRepo reports.Repository, bl *cache.Blacklist) *gin.Engine {
+func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo favorites.Repository, bl *cache.Blacklist) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.Recover(), middleware.SecurityHeaders())
@@ -151,6 +190,9 @@ func setupRouter(usersSvc users.Service, reportRepo reports.Repository, bl *cach
 		Blacklist:   bl,
 		UserService: usersSvc,
 	})
+
+	favH := favorites.NewHandler(favorites.NewService(favRepo))
+	favorites.RegisterRoutes(jsonRoutes, favH, favorites.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
 
 	return r
 }
@@ -187,7 +229,7 @@ func TestAuthEndpoints(t *testing.T) {
 		byUsername: map[string]users.User{},
 		users:      map[string]users.User{},
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, nil)
+	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil)
 
 	t.Run("RegisterSuccess", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"new@example.com","password":"password123","username":"newbie"}`, nil)
@@ -292,7 +334,7 @@ func TestUserEndpoints(t *testing.T) {
 			testUUID2: {ID: testUUID2, Email: "b@example.com", Username: "bob", Role: users.RoleUser},
 		},
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, nil)
+	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil)
 
 	t.Run("GetUserByID", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodGet, "/users/"+testUUID2, "", nil)
@@ -394,7 +436,7 @@ func TestReportEndpoints(t *testing.T) {
 		list:     []reports.ReportListEntry{{PinCaption: strPtr("spam pin")}},
 		reviewed: reports.Report{Reason: "spam"},
 	}
-	r := setupRouter(usersSvc, reportRepo, nil)
+	r := setupRouter(usersSvc, reportRepo, &mockFavoriteRepo{}, nil)
 
 	t.Run("CreateReport", func(t *testing.T) {
 		tok := newToken(t, testUUID2, users.RoleUser)
@@ -487,12 +529,140 @@ func TestReportEndpoints(t *testing.T) {
 	})
 }
 
+func TestFavoriteEndpoints(t *testing.T) {
+	usersSvc := &mockUserService{
+		users: map[string]users.User{
+			testUUID1: {ID: testUUID1, Email: "a@example.com", Username: "alice", Role: users.RoleUser},
+		},
+	}
+	favRepo := &mockFavoriteRepo{exists: true}
+	r := setupRouter(usersSvc, &mockReportRepo{}, favRepo, nil)
+
+	t.Run("SaveFavorite", func(t *testing.T) {
+		tok := newToken(t, testUUID1, users.RoleUser)
+		w := doJSON(t, r, http.MethodPut, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("SaveFavoriteDuplicateIdempotent", func(t *testing.T) {
+		// The repository inserts with ON CONFLICT DO NOTHING, so a repeated
+		// save is a successful no-op (204), not a conflict.
+		tok := newToken(t, testUUID1, users.RoleUser)
+		w := doJSON(t, r, http.MethodPut, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 on duplicate save, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("SaveFavoritePinNotFound", func(t *testing.T) {
+		favRepo.exists = false
+		defer func() { favRepo.exists = true }()
+		tok := newToken(t, testUUID1, users.RoleUser)
+		w := doJSON(t, r, http.MethodPut, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("SaveFavoriteInvalidPinID", func(t *testing.T) {
+		tok := newToken(t, testUUID1, users.RoleUser)
+		w := doJSON(t, r, http.MethodPut, "/favorites/not-a-uuid", "", map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("SaveFavoriteUnauthenticated", func(t *testing.T) {
+		w := doJSON(t, r, http.MethodPut, "/favorites/"+testUUID3, "", nil)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("SaveFavoriteRepoError", func(t *testing.T) {
+		favRepo.saveErr = errors.New("db unavailable")
+		defer func() { favRepo.saveErr = nil }()
+		tok := newToken(t, testUUID1, users.RoleUser)
+		w := doJSON(t, r, http.MethodPut, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("UnsaveFavorite", func(t *testing.T) {
+		favRepo.isSaved = true
+		defer func() { favRepo.isSaved = false }()
+		tok := newToken(t, testUUID1, users.RoleUser)
+		w := doJSON(t, r, http.MethodDelete, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("UnsaveFavoriteNotSaved", func(t *testing.T) {
+		tok := newToken(t, testUUID1, users.RoleUser)
+		w := doJSON(t, r, http.MethodDelete, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("ListSaved", func(t *testing.T) {
+		favRepo.entries = []favorites.Entry{{SavedAt: time.Now()}}
+		defer func() { favRepo.entries = nil }()
+		tok := newToken(t, testUUID1, users.RoleUser)
+		w := doJSON(t, r, http.MethodGet, "/favorites", "", map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+		body := decodeBody(t, w)
+		pins, ok := body["pins"].([]any)
+		if !ok || len(pins) != 1 {
+			t.Fatalf("expected 1 pin in response, got %v", body["pins"])
+		}
+	})
+
+	t.Run("ListSavedIDs", func(t *testing.T) {
+		favRepo.ids = []string{testUUID3}
+		defer func() { favRepo.ids = nil }()
+		tok := newToken(t, testUUID1, users.RoleUser)
+		w := doJSON(t, r, http.MethodGet, "/favorites/ids", "", map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+		body := decodeBody(t, w)
+		ids, ok := body["ids"].([]any)
+		if !ok || len(ids) != 1 || ids[0] != testUUID3 {
+			t.Fatalf("expected [%s], got %v", testUUID3, body["ids"])
+		}
+	})
+
+	t.Run("ListSavedUnauthenticated", func(t *testing.T) {
+		w := doJSON(t, r, http.MethodGet, "/favorites", "", nil)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("ListSavedRepoError", func(t *testing.T) {
+		favRepo.listErr = errors.New("db unavailable")
+		defer func() { favRepo.listErr = nil }()
+		tok := newToken(t, testUUID1, users.RoleUser)
+		w := doJSON(t, r, http.MethodGet, "/favorites", "", map[string]string{"Authorization": "Bearer " + tok})
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+}
+
 func TestSecurityHeadersPresent(t *testing.T) {
 	usersSvc := &mockUserService{
 		byEmail:    map[string]users.User{},
 		byUsername: map[string]users.User{},
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, nil)
+	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil)
 
 	w := doJSON(t, r, http.MethodGet, "/me", "", nil)
 	for _, h := range []string{"X-Content-Type-Options", "X-Frame-Options", "Content-Security-Policy", "Referrer-Policy", "Strict-Transport-Security"} {

@@ -53,7 +53,7 @@ services:
     container_name: goodspot247-server
     restart: unless-stopped
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     environment:
       PORT: 8081
       DB_HOST: postgres
@@ -92,7 +92,7 @@ services:
     container_name: goodspot247-client
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       NEXT_PUBLIC_MAPTILER_API_KEY: ${NEXT_PUBLIC_MAPTILER_API_KEY:?set NEXT_PUBLIC_MAPTILER_API_KEY in .env}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8081}

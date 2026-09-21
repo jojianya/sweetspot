@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import SearchBar from "./SearchBar";
 import ThemeToggle from "./ThemeToggle";
@@ -20,43 +20,6 @@ interface MapNavBarProps {
   onOpenSaved: () => void;
 }
 
-function AppsIcon() {
-  return (
-    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" aria-hidden>
-      {[
-        [5, 5],
-        [12, 5],
-        [19, 5],
-        [5, 12],
-        [12, 12],
-        [19, 12],
-        [5, 19],
-        [12, 19],
-        [19, 19],
-      ].map(([cx, cy]) => (
-        <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1.6" fill="currentColor" />
-      ))}
-    </svg>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg
-      className="h-[18px] w-[18px]"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="m9 18 6-6-6-6" />
-    </svg>
-  );
-}
-
 export default function MapNavBar({
   center,
   onSelectPlace,
@@ -71,70 +34,18 @@ export default function MapNavBar({
   const isLoggedIn = token !== null;
   const handleLogout = useLogout();
 
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [appsOpen, setAppsOpen] = useState(false);
-
-  const scrollChips = (dir: 1 | -1) => {
-    scrollRef.current?.scrollBy({ left: dir * 240, behavior: "smooth" });
-  };
 
   const menuButtonClass =
     "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800";
 
   const rightCluster: ReactNode = (
     <div className="flex shrink-0 items-center gap-2.5">
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => {
-            setAppsOpen((o) => !o);
-            setProfileOpen(false);
-          }}
-          aria-label="Apps"
-          aria-expanded={appsOpen}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-[#E0E0E0] bg-white text-zinc-500 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800"
-        >
-          <AppsIcon />
-        </button>
-        {appsOpen && (
-          <div
-            className="absolute right-0 top-full z-30 mt-2 w-56 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-xl shadow-zinc-900/10 dark:border-zinc-700/70 dark:bg-zinc-900"
-            role="menu"
-          >
-            <div className="flex flex-col p-2">
-              <span className="px-3 py-2 text-sm text-zinc-500 dark:text-zinc-400">
-                {categories.length} categories on the map
-              </span>
-              <div className="my-1 h-px bg-zinc-100 dark:bg-zinc-800" />
-              <button
-                type="button"
-                onClick={() => {
-                  setAppsOpen(false);
-                  onSelectCategory(null);
-                }}
-                role="menuitem"
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                <svg className="h-4 w-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 21V9l9-6 9 6v12" />
-                  <path d="M9 21v-6h6v6" />
-                </svg>
-                Show all pins
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
       {isLoggedIn && user ? (
         <div className="relative">
           <button
             type="button"
-            onClick={() => {
-              setProfileOpen((o) => !o);
-              setAppsOpen(false);
-            }}
+            onClick={() => setProfileOpen((o) => !o)}
             aria-label="Account"
             aria-expanded={profileOpen}
             className="block h-10 w-10 overflow-hidden rounded-full border border-[#E0E0E0] transition-transform hover:scale-105 dark:border-zinc-700"
@@ -167,7 +78,6 @@ export default function MapNavBar({
                   type="button"
                   onClick={() => {
                     setProfileOpen(false);
-                    setAppsOpen(false);
                     onOpenSaved();
                   }}
                   role="menuitem"
@@ -230,10 +140,7 @@ export default function MapNavBar({
           </div>
 
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div
-              ref={scrollRef}
-              className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
+            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {(() => {
                 const active = selectedCategory === null;
                 return (
@@ -274,14 +181,6 @@ export default function MapNavBar({
                 );
               })}
             </div>
-            <button
-              type="button"
-              onClick={() => scrollChips(1)}
-              aria-label="More categories"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E0E0E0] bg-white text-zinc-600 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800"
-            >
-              <ChevronRightIcon />
-            </button>
           </div>
 
           {rightCluster}

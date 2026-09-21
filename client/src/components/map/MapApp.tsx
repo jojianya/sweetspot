@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import MapView, { type MapLocation } from "./MapView";
 import LocateButton from "./LocateButton";
@@ -8,14 +8,14 @@ import MapNavBar from "./MapNavBar";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
 import SavedPinsPanel from "@/components/pins/SavedPinsPanel";
-import { type FavoriteEntry } from "@/lib/api";
 import { usePins } from "@/hooks/usePins";
 import { usePinDetail } from "@/hooks/usePinDetail";
 import { useCategories } from "@/hooks/useCategories";
-import type { CreatedPin, NewPinPhoto, PinListEntry } from "@/lib/types";
+import { usePinStream } from "@/hooks/usePinStream";
 import { parsePoint } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
+import type { CreatedPin, NewPinPhoto, PinListEntry } from "@/lib/types";
 
 export default function MapApp({
   initialCategory = null,
@@ -47,6 +47,29 @@ export default function MapApp({
   const { pins, loading, error: pinsError, addPin } = usePins(bbox, effectiveCategory);
   const reportDetailError = useCallback((message: string) => setDetailError(message), []);
   const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
+
+  // Realtime: new pins in the current view stream in and merge into the list.
+  // A short-lived toast keeps the counter visible without stealing focus.
+  const [streamToast, setStreamToast] = useState(0);
+  const toastTimerRef = useRef<number | null>(null);
+
+  const handleStreamedPin = useCallback(
+    (pin: PinListEntry) => {
+      addPin(pin);
+      setStreamToast((n) => n + 1);
+      if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = window.setTimeout(() => setStreamToast(0), 4000);
+    },
+    [addPin]
+  );
+
+  usePinStream(bbox, effectiveCategory, handleStreamedPin);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -168,7 +191,7 @@ export default function MapApp({
     setSavedOpen(true);
   }, [closeOverlays]);
 
-  const handleOpenSavedPin = useCallback((entry: FavoriteEntry) => {
+  const handleOpenSavedPin = useCallback((entry: PinListEntry) => {
     setHighlightId(entry.id);
     setSelectedPinId(null);
     closeOverlays();
@@ -241,6 +264,17 @@ export default function MapApp({
         <div className="pointer-events-none absolute bottom-6 left-4 z-10 rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-500 shadow ring-1 ring-zinc-200/70 backdrop-blur dark:bg-zinc-900/90 dark:text-zinc-400 dark:ring-zinc-700/70">
           {pins.length} {activeCategory ? `${activeCategory.name} places` : "places"} here
         </div>
+      )}
+
+      {streamToast > 0 && (
+        <button
+          type="button"
+          onClick={() => setStreamToast(0)}
+          className="absolute bottom-16 left-1/2 z-20 -translate-x-1/2 rounded-full bg-zinc-900/90 px-4 py-2 text-xs font-medium text-white shadow-lg backdrop-blur transition-opacity hover:opacity-90 dark:bg-zinc-100/90 dark:text-zinc-900"
+        >
+          {streamToast} new pin{streamToast > 1 ? "s" : ""} in view
+          <span className="ml-1.5 opacity-70">dismiss</span>
+        </button>
       )}
 
       {!loading && !bannerError && pins.length === 0 && (

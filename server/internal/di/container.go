@@ -3,32 +3,44 @@ package di
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jojianya/sweetspot247-backend/internal/config"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/collections"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/comments"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/favorites"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/realtime"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/social"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 )
 
 type Container struct {
-	Config      *config.Config
-	UserService users.Service
-	PinRepo     pins.Repository
-	ReportRepo  reports.Repository
-	FavoriteRepo favorites.Repository
-	Store       *storage.Local
-	Blacklist   *cache.Blacklist
+	Config         *config.Config
+	UserService    users.Service
+	PinRepo        pins.Repository
+	ReportRepo     reports.Repository
+	FavoriteRepo   favorites.Repository
+	CommentRepo    comments.Repository
+	SocialRepo     social.Repository
+	CollectionRepo collections.Repository
+	Store          *storage.Local
+	Blacklist      *cache.Blacklist
+	Events         *realtime.Broker
 }
 
 func Build(cfg *config.Config, pool *pgxpool.Pool) *Container {
 	return &Container{
-		Config:      cfg,
-		UserService: users.NewService(users.NewRepository(pool)),
-		PinRepo:     pins.NewRepository(pool),
-		ReportRepo:  reports.NewRepository(pool),
-		FavoriteRepo: favorites.NewRepository(pool),
-		Store:       storage.NewLocal("./uploads", cfg.StorageBase),
-		Blacklist:   cache.New(cfg.RedisAddr, cfg.RedisPassword),
+		Config:         cfg,
+		UserService:    users.NewService(users.NewRepository(pool)),
+		PinRepo:        pins.NewRepository(pool),
+		ReportRepo:     reports.NewRepository(pool),
+		FavoriteRepo:   favorites.NewRepository(pool),
+		CommentRepo:    comments.NewRepository(pool),
+		SocialRepo:     social.NewRepository(pool),
+		CollectionRepo: collections.NewRepository(pool),
+		Store:          storage.NewLocal("./uploads", cfg.StorageBase),
+		Blacklist:      cache.New(cfg.RedisAddr, cfg.RedisPassword),
+		Events:         realtime.NewBroker(cfg.RedisAddr, cfg.RedisPassword),
 	}
 }

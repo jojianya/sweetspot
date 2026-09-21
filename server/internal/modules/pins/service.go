@@ -8,8 +8,10 @@ type Service interface {
 	DeletePin(ctx context.Context, id, userID string) error
 	GetPin(ctx context.Context, id string) (PinDetail, error)
 	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
+	ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error)
 	SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error)
 	CreatePin(ctx context.Context, pin NewPin) (Pin, error)
+	UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error)
 	UserExists(ctx context.Context, id string) (bool, error)
 }
 
@@ -43,6 +45,14 @@ func (s *service) SearchPins(ctx context.Context, query string, limit int) ([]Pi
 
 func (s *service) CreatePin(ctx context.Context, pin NewPin) (Pin, error) {
 	return s.repo.CreatePin(ctx, pin)
+}
+
+func (s *service) UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error) {
+	return s.repo.UpdatePin(ctx, id, patch)
+}
+
+func (s *service) ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error) {
+	return s.repo.ListByUser(ctx, userID, limit)
 }
 
 func (s *service) DeletePin(ctx context.Context, id, userID string) error {

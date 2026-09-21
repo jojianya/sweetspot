@@ -96,6 +96,9 @@ services:
     environment:
       NEXT_PUBLIC_MAPTILER_API_KEY: ${NEXT_PUBLIC_MAPTILER_API_KEY:?set NEXT_PUBLIC_MAPTILER_API_KEY in .env}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8081}
+      # Server-side fetches (e.g. SSR pin pages) reach the API via the compose
+      # service name; the browser keeps using the loopback-published port above.
+      API_INTERNAL_URL: http://server:8081
     volumes:
       - ./client:/app
       - /app/node_modules

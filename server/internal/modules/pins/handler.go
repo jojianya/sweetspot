@@ -1,9 +1,12 @@
 package pins
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -25,6 +28,10 @@ const (
 	searchDefaultLimit = 10
 	searchMaxLimit     = 25
 	searchMaxQueryLen  = 100
+
+	// Public profile pages show a bounded set of the user's pins.
+	profileDefaultLimit = 50
+	profileMaxLimit     = 100
 )
 
 type validatedFile struct {
@@ -33,14 +40,30 @@ type validatedFile struct {
 	ext   string
 }
 
+// photoErr carries a photo-upload failure: the HTTP status to respond with and
+// the client-facing message.
+type photoErr struct {
+	status int
+	msg    string
+}
+
 type Handler struct {
 	service Service
 	store   *storage.Local
+	events  Events
 }
 
-func NewHandler(service Service, store *storage.Local) *Handler {
-	return &Handler{service: service, store: store}
+func NewHandler(service Service, store *storage.Local, events Events) *Handler {
+	if events == nil {
+		events = nopEvents{}
+	}
+	return &Handler{service: service, store: store, events: events}
 }
+
+// nopEvents is the zero-value event publisher used when realtime is disabled.
+type nopEvents struct{}
+
+func (nopEvents) PinCreated(context.Context, Event) {}
 
 func (h *Handler) ListCategories(c *gin.Context) {
 	categories, err := h.service.ListCategories(c.Request.Context())
@@ -49,40 +72,40 @@ func (h *Handler) ListCategories(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, categories)
+	response.OK(c, categories)
 }
 
 func (h *Handler) GetPins(c *gin.Context) {
 	bboxStr := c.Query("bbox")
 	if bboxStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "bbox query param required (minLat,minLng,maxLat,maxLng)"})
+		response.BadRequest(c, "bbox query param required (minLat,minLng,maxLat,maxLng)")
 		return
 	}
 
 	var bbox [4]float64
 	parts := strings.Split(bboxStr, ",")
 	if len(parts) != 4 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "bbox must be 4 comma-separated floats (minLat,minLng,maxLat,maxLng)"})
+		response.BadRequest(c, "bbox must be 4 comma-separated floats (minLat,minLng,maxLat,maxLng)")
 		return
 	}
 	for i, p := range parts {
 		v, err := strconv.ParseFloat(strings.TrimSpace(p), 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "bbox must be 4 comma-separated floats"})
+			response.BadRequest(c, "bbox must be 4 comma-separated floats")
 			return
 		}
 		bbox[i] = v
 	}
 	if bbox[0] < -90 || bbox[0] > 90 || bbox[2] < -90 || bbox[2] > 90 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "latitudes must be between -90 and 90"})
+		response.BadRequest(c, "latitudes must be between -90 and 90")
 		return
 	}
 	if bbox[1] < -180 || bbox[1] > 180 || bbox[3] < -180 || bbox[3] > 180 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "longitudes must be between -180 and 180"})
+		response.BadRequest(c, "longitudes must be between -180 and 180")
 		return
 	}
 	if bbox[0] > bbox[2] || bbox[1] > bbox[3] {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "bbox min must not exceed max (minLat,minLng,maxLat,maxLng)"})
+		response.BadRequest(c, "bbox min must not exceed max (minLat,minLng,maxLat,maxLng)")
 		return
 	}
 
@@ -90,7 +113,7 @@ func (h *Handler) GetPins(c *gin.Context) {
 	if catStr := c.Query("category"); catStr != "" {
 		id, err := strconv.Atoi(catStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "category must be an integer"})
+			response.BadRequest(c, "category must be an integer")
 			return
 		}
 		categoryID = &id
@@ -103,7 +126,7 @@ func (h *Handler) GetPins(c *gin.Context) {
 			return
 		}
 		if !exists {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "category not found"})
+			response.BadRequest(c, "category not found")
 			return
 		}
 	}
@@ -119,14 +142,14 @@ func (h *Handler) GetPins(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"pins": pins})
+	response.OK(c, gin.H{"pins": pins})
 }
 
 func (h *Handler) GetPin(c *gin.Context) {
 	pin, err := h.service.GetPin(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "pin not found"})
+			response.NotFound(c, "pin not found")
 			return
 		}
 		response.Internal(c, "pins: get", err, "pin_id", c.Param("id"))
@@ -134,11 +157,11 @@ func (h *Handler) GetPin(c *gin.Context) {
 	}
 
 	if pin.IsHidden && !canViewHidden(c, pin) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "pin not found"})
+		response.NotFound(c, "pin not found")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"pin": pin})
+	response.OK(c, gin.H{"pin": pin})
 }
 
 func canViewHidden(c *gin.Context, pin PinDetail) bool {
@@ -157,30 +180,30 @@ func canViewHidden(c *gin.Context, pin PinDetail) bool {
 func (h *Handler) DeletePin(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		response.Unauthorized(c, "authentication required")
 		return
 	}
 
 	if err := h.service.DeletePin(c.Request.Context(), c.Param("id"), userID); err != nil {
 		if errors.Is(err, ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "pin not found"})
+			response.NotFound(c, "pin not found")
 			return
 		}
 		if errors.Is(err, ErrForbidden) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "you can only delete your own pins"})
+			response.Forbidden(c, "you can only delete your own pins")
 			return
 		}
 		response.Internal(c, "delete pin", err, "pin_id", c.Param("id"), "user_id", userID)
 		return
 	}
 
-	c.Status(http.StatusNoContent)
+	response.NoContent(c)
 }
 
 func (h *Handler) CreatePin(c *gin.Context) {
 	form, err := c.MultipartForm()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "expected multipart form data"})
+		response.BadRequest(c, "expected multipart form data")
 		return
 	}
 
@@ -191,35 +214,35 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		return
 	}
 	if !userExists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "account no longer exists, please sign in again"})
+		response.Unauthorized(c, "account no longer exists, please sign in again")
 		return
 	}
 
 	lat, err := strconv.ParseFloat(c.PostForm("lat"), 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lat must be a number"})
+		response.BadRequest(c, "lat must be a number")
 		return
 	}
 	lng, err := strconv.ParseFloat(c.PostForm("lng"), 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lng must be a number"})
+		response.BadRequest(c, "lng must be a number")
 		return
 	}
 	if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "latitude or longitude out of range"})
+		response.BadRequest(c, "latitude or longitude out of range")
 		return
 	}
 
 	categoryID, err := strconv.Atoi(c.PostForm("category_id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "category_id must be an integer"})
+		response.BadRequest(c, "category_id must be an integer")
 		return
 	}
 
 	var caption *string
 	if v := c.PostForm("caption"); v != "" {
 		if len([]rune(v)) > 500 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "caption must be at most 500 characters"})
+			response.BadRequest(c, "caption must be at most 500 characters")
 			return
 		}
 		caption = &v
@@ -227,47 +250,21 @@ func (h *Handler) CreatePin(c *gin.Context) {
 
 	files := form.File["photos"]
 	if len(files) < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one photo is required"})
+		response.BadRequest(c, "at least one photo is required")
 		return
 	}
 	if len(files) > maxPhotosPerPin {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "photo count exceeds maximum"})
+		response.BadRequest(c, "photo count exceeds maximum")
 		return
 	}
 
-	validated := make([]validatedFile, 0, len(files))
-	for i, fh := range files {
-		if fh.Size > maxPhotoSize {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "one or more photos exceed 10MB"})
-			return
+	validated, perr := processPhotos(files)
+	if perr != nil {
+		if perr.status == http.StatusInternalServerError {
+			slog.Error("create pin: read uploaded file", "error", perr.msg)
 		}
-
-		src, err := fh.Open()
-		if err != nil {
-			slog.Error("create pin: open uploaded file", "error", err.Error())
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read uploaded file"})
-			return
-		}
-		data, err := io.ReadAll(src)
-		src.Close()
-		if err != nil {
-			slog.Error("create pin: read uploaded file", "error", err.Error())
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read uploaded file"})
-			return
-		}
-
-		if err := imaging.Validate(data); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "photo " + strconv.Itoa(i+1) + ": " + err.Error()})
-			return
-		}
-
-		proc, err := imaging.Process(data)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "photo " + strconv.Itoa(i+1) + ": " + err.Error()})
-			return
-		}
-
-		validated = append(validated, validatedFile{data: proc.Full, thumb: proc.Thumb, ext: "webp"})
+		response.Error(c, perr.status, perr.msg)
+		return
 	}
 
 	exists, err := h.service.CategoryExists(c.Request.Context(), categoryID)
@@ -276,27 +273,15 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		return
 	}
 	if !exists {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "category not found"})
+		response.BadRequest(c, "category not found")
 		return
 	}
 
-	photoURLs := make([]string, 0, len(validated))
-	thumbURLs := make([]string, 0, len(validated))
-	for _, vf := range validated {
-		url, err := h.store.Save(vf.data, vf.ext)
-		if err != nil {
-			slog.Error("create pin: save photo", "error", err.Error())
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save uploaded file"})
-			return
-		}
-		thumbURL, err := h.store.Save(vf.thumb, vf.ext)
-		if err != nil {
-			slog.Error("create pin: save thumbnail", "error", err.Error())
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save uploaded file"})
-			return
-		}
-		photoURLs = append(photoURLs, url)
-		thumbURLs = append(thumbURLs, thumbURL)
+	photoURLs, thumbURLs, err := h.savePhotos(validated)
+	if err != nil {
+		slog.Error("create pin: save photo", "error", err.Error())
+		response.Error(c, http.StatusInternalServerError, "could not save uploaded file")
+		return
 	}
 
 	pin, err := h.service.CreatePin(c.Request.Context(), NewPin{
@@ -310,6 +295,12 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		Geohash:       geohash.Encode(lat, lng),
 	})
 	if err != nil {
+		// The photos are already on disk; remove them so a failed insert
+		// cannot orphan files.
+		for i := range photoURLs {
+			_ = h.store.Delete(photoURLs[i])
+			_ = h.store.Delete(thumbURLs[i])
+		}
 		response.Internal(c, "create pin: database insert", err,
 			"user_id", middleware.GetUserID(c),
 			"lat", lat,
@@ -328,17 +319,100 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"pin": pin, "photos": photos})
+	// Broadcast to connected maps (best-effort; never fails the create).
+	cover := ""
+	if len(thumbURLs) > 0 {
+		cover = thumbURLs[0]
+	} else if len(photoURLs) > 0 {
+		cover = photoURLs[0]
+	}
+	h.events.PinCreated(c.Request.Context(), Event{
+		ID:         pin.ID.String(),
+		UserID:     pin.UserID.String(),
+		Location:   fmt.Sprintf("POINT(%v %v)", lng, lat),
+		Caption:    pin.Caption,
+		CategoryID: pin.CategoryID,
+		CoverURL:   cover,
+		CreatedAt:  pin.CreatedAt,
+	})
+
+	response.Created(c, gin.H{"pin": pin, "photos": photos})
+}
+
+// processPhotos opens, validates, and re-encodes every uploaded photo. The
+// returned *photoErr is non-nil on failure and carries the exact status and
+// message to respond with.
+func processPhotos(files []*multipart.FileHeader) ([]validatedFile, *photoErr) {
+	validated := make([]validatedFile, 0, len(files))
+	for i, fh := range files {
+		if fh.Size > maxPhotoSize {
+			return nil, &photoErr{http.StatusBadRequest, "one or more photos exceed 10MB"}
+		}
+
+		src, err := fh.Open()
+		if err != nil {
+			return nil, &photoErr{http.StatusInternalServerError, "could not read uploaded file"}
+		}
+		data, err := io.ReadAll(src)
+		src.Close()
+		if err != nil {
+			return nil, &photoErr{http.StatusInternalServerError, "could not read uploaded file"}
+		}
+
+		if err := imaging.Validate(data); err != nil {
+			return nil, &photoErr{http.StatusBadRequest, fmt.Sprintf("photo %d: %s", i+1, err)}
+		}
+
+		proc, err := imaging.Process(data)
+		if err != nil {
+			return nil, &photoErr{http.StatusBadRequest, fmt.Sprintf("photo %d: %s", i+1, err)}
+		}
+
+		validated = append(validated, validatedFile{data: proc.Full, thumb: proc.Thumb, ext: "webp"})
+	}
+	return validated, nil
+}
+
+// savePhotos writes the processed photos to storage. On any failure it removes
+// every file it already wrote, so a failed create cannot orphan files on disk.
+func (h *Handler) savePhotos(validated []validatedFile) (photoURLs, thumbURLs []string, err error) {
+	type stored struct{ full, thumb string }
+	written := make([]stored, 0, len(validated))
+	cleanup := func() {
+		for _, s := range written {
+			_ = h.store.Delete(s.full)
+			_ = h.store.Delete(s.thumb)
+		}
+	}
+
+	photoURLs = make([]string, 0, len(validated))
+	thumbURLs = make([]string, 0, len(validated))
+	for _, vf := range validated {
+		full, err := h.store.Save(vf.data, vf.ext)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		thumb, err := h.store.Save(vf.thumb, vf.ext)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		written = append(written, stored{full: full, thumb: thumb})
+		photoURLs = append(photoURLs, full)
+		thumbURLs = append(thumbURLs, thumb)
+	}
+	return photoURLs, thumbURLs, nil
 }
 
 func (h *Handler) SearchPins(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
 	if q == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "q query param is required"})
+		response.BadRequest(c, "q query param is required")
 		return
 	}
 	if utf8.RuneCountInString(q) > searchMaxQueryLen {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "q must be at most 100 characters"})
+		response.BadRequest(c, "q must be at most 100 characters")
 		return
 	}
 
@@ -353,5 +427,137 @@ func (h *Handler) SearchPins(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"pins": pins})
+	response.OK(c, gin.H{"pins": pins})
+}
+
+// ListByUser returns the public pins of a user for their profile page.
+func (h *Handler) ListByUser(c *gin.Context) {
+	limit, ok := httpx.ParseLimit(c, profileDefaultLimit, profileMaxLimit)
+	if !ok {
+		return
+	}
+
+	pins, err := h.service.ListByUser(c.Request.Context(), c.Param("id"), limit)
+	if err != nil {
+		response.Internal(c, "pins: list by user", err, "user_id", c.Param("id"))
+		return
+	}
+
+	response.OK(c, gin.H{"pins": pins})
+}
+
+// UpdatePin edits a pin owned by the caller (or any pin for moderators).
+// Multipart contract (the client always sends the whole current state):
+//   - caption:     present string; "" clears the caption
+//   - category_id: optional; when present it replaces the category
+//   - photos[]:    optional; when present it replaces the whole photo set
+func (h *Handler) UpdatePin(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	id := c.Param("id")
+
+	existing, err := h.service.GetPin(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.NotFound(c, "pin not found")
+			return
+		}
+		response.Internal(c, "update pin: get", err, "pin_id", id)
+		return
+	}
+
+	role := middleware.GetRole(c)
+	if existing.UserID.String() != userID && role != "admin" && role != "owner" {
+		response.Forbidden(c, "you can only edit your own pins")
+		return
+	}
+
+	form, err := c.MultipartForm()
+	if err != nil {
+		response.BadRequest(c, "expected multipart form data")
+		return
+	}
+
+	caption := strings.TrimSpace(c.PostForm("caption"))
+	if utf8.RuneCountInString(caption) > 500 {
+		response.BadRequest(c, "caption must be at most 500 characters")
+		return
+	}
+
+	var categoryID *int
+	if catStr := strings.TrimSpace(c.PostForm("category_id")); catStr != "" {
+		idv, err := strconv.Atoi(catStr)
+		if err != nil {
+			response.BadRequest(c, "category_id must be an integer")
+			return
+		}
+		exists, err := h.service.CategoryExists(c.Request.Context(), idv)
+		if err != nil {
+			response.Internal(c, "update pin: category exists", err, "category_id", idv)
+			return
+		}
+		if !exists {
+			response.BadRequest(c, "category not found")
+			return
+		}
+		categoryID = &idv
+	}
+
+	patch := UpdatePinPatch{
+		Caption:    &caption,
+		CategoryID: categoryID,
+	}
+
+	files := form.File["photos"]
+	if len(files) > maxPhotosPerPin {
+		response.BadRequest(c, "photo count exceeds maximum")
+		return
+	}
+	if len(files) > 0 {
+		validated, perr := processPhotos(files)
+		if perr != nil {
+			if perr.status == http.StatusInternalServerError {
+				slog.Error("update pin: read uploaded file", "error", perr.msg)
+			}
+			response.Error(c, perr.status, perr.msg)
+			return
+		}
+
+		photoURLs, thumbURLs, err := h.savePhotos(validated)
+		if err != nil {
+			slog.Error("update pin: save photo", "error", err.Error())
+			response.Error(c, http.StatusInternalServerError, "could not save uploaded file")
+			return
+		}
+
+		patch.Photos = make([]NewPhoto, 0, len(photoURLs))
+		for i := range photoURLs {
+			patch.Photos = append(patch.Photos, NewPhoto{PhotoURL: photoURLs[i], ThumbnailURL: thumbURLs[i]})
+		}
+	}
+
+	updated, err := h.service.UpdatePin(c.Request.Context(), id, patch)
+	if err != nil {
+		// The new photos are already on disk; remove them so a failed update
+		// cannot orphan files.
+		for _, ph := range patch.Photos {
+			_ = h.store.Delete(ph.PhotoURL)
+			_ = h.store.Delete(ph.ThumbnailURL)
+		}
+		if errors.Is(err, ErrNotFound) {
+			response.NotFound(c, "pin not found")
+			return
+		}
+		response.Internal(c, "update pin: database update", err, "pin_id", id)
+		return
+	}
+
+	// Best-effort cleanup of the replaced photos now that the swap succeeded.
+	if patch.Photos != nil {
+		for _, ph := range existing.Photos {
+			_ = h.store.Delete(ph.PhotoURL)
+			_ = h.store.Delete(ph.ThumbnailURL)
+		}
+	}
+
+	response.OK(c, gin.H{"pin": updated})
 }

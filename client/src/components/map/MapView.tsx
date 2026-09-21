@@ -5,6 +5,7 @@ import {
   Map as MapLibreMap,
   Marker,
   setWorkerUrl,
+  type ExpressionSpecification,
   type GeoJSONSource,
   type Map as MaplibreMap,
   type Marker as MaplibreMarker,
@@ -14,7 +15,7 @@ import type { PinListEntry } from "@/lib/types";
 import { boundsToValidBbox, parsePoint } from "@/lib/utils";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import type { Theme } from "@/store/theme";
-import { ensurePinLayers, type GeoFeature } from "./pinLayers";
+import { ensurePinLayers, notCluster, type GeoFeature } from "./pinLayers";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
 
@@ -132,8 +133,28 @@ export default function MapView({
           });
         });
 
+        // Clicking a cluster zooms in until its pins spread apart.
+        map.on("click", "pins-cluster", (e) => {
+          const clusterId = e.features?.[0]?.properties?.cluster_id;
+          if (typeof clusterId !== "number") return;
+          const source = map.getSource("pins") as GeoJSONSource | undefined;
+          if (!source) return;
+          void source.getClusterExpansionZoom(clusterId).then((zoom) => {
+            if (e.lngLat) map.easeTo({ center: e.lngLat, zoom });
+          });
+        });
+        map.on("mouseenter", "pins-cluster", () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", "pins-cluster", () => {
+          map.getCanvas().style.cursor = "";
+          setHover(null);
+        });
+
         map.on("click", (e) => {
-          const hit = map.queryRenderedFeatures(e.point, { layers: pinLayers });
+          const hit = map.queryRenderedFeatures(e.point, {
+            layers: [...pinLayers, "pins-cluster"],
+          });
           if (hit.length > 0) return;
           onMapClickRef.current();
         });
@@ -232,14 +253,14 @@ export default function MapView({
     const hasSelected = map.getLayer("pins-selected");
     if (!hasBase || !hasSelected) return;
 
-    map.setFilter(
-      "pins-base",
-      highlightId ? ["!=", ["get", "id"], highlightId] : ["all"]
-    );
-    map.setFilter(
-      "pins-selected",
-      highlightId ? ["==", ["get", "id"], highlightId] : ["all"]
-    );
+    const baseFilter: ExpressionSpecification = highlightId
+      ? ["all", notCluster, ["!=", ["get", "id"], highlightId]]
+      : notCluster;
+    const selectedFilter: ExpressionSpecification = highlightId
+      ? ["all", notCluster, ["==", ["get", "id"], highlightId]]
+      : notCluster;
+    map.setFilter("pins-base", baseFilter);
+    map.setFilter("pins-selected", selectedFilter);
   }, [highlightId, styleReady, styleVersion]);
 
   if (!MAPTILER_KEY) {

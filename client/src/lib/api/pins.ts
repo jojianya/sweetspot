@@ -57,6 +57,21 @@ export async function searchPins(
   return pinListEntrySchema.array().parse(data.pins);
 }
 
+export async function updatePin(
+  id: string,
+  form: { caption: string; categoryId: number | null; photos: File[] | null }
+): Promise<CreatedPin> {
+  const fd = new FormData();
+  fd.append("caption", form.caption);
+  if (form.categoryId !== null) fd.append("category_id", String(form.categoryId));
+  if (form.photos) {
+    for (const file of form.photos) fd.append("photos", file);
+  }
+
+  const { data } = await api.patch<{ pin: unknown }>(`/pins/${id}`, fd);
+  return createdPinSchema.parse(data.pin);
+}
+
 export async function deletePin(id: string): Promise<void> {
   await api.delete(`/pins/${id}`);
 }

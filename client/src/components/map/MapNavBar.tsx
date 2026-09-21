@@ -40,7 +40,7 @@ export default function MapNavBar({
     "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800";
 
   const rightCluster: ReactNode = (
-    <div className="flex shrink-0 items-center gap-2.5">
+    <div className="order-2 flex shrink-0 items-center gap-2.5 sm:order-none">
       {isLoggedIn && user ? (
         <div className="relative">
           <button
@@ -90,6 +90,37 @@ export default function MapNavBar({
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    router.push(`/users/${user.id}`);
+                  }}
+                  role="menuitem"
+                  className={menuButtonClass}
+                >
+                  <svg className="h-4 w-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" />
+                  </svg>
+                  My profile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    router.push("/feed");
+                  }}
+                  role="menuitem"
+                  className={menuButtonClass}
+                >
+                  <svg className="h-4 w-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M4 19V5a2 2 0 0 1 2-2h13v16" />
+                    <path d="M4 19a2 2 0 0 0 2 2h13" />
+                    <path d="M9 7h6M9 11h6M9 15h4" />
+                  </svg>
+                  Feed
+                </button>
+                <button
+                  type="button"
                   onClick={handleLogout}
                   role="menuitem"
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
@@ -128,7 +159,7 @@ export default function MapNavBar({
 
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-30">
-      <div className="pointer-events-auto flex items-center gap-2.5 px-2.5 py-2 sm:gap-3 sm:px-3">
+      <div className="pointer-events-auto flex flex-wrap items-center gap-2.5 px-2.5 py-2 sm:gap-3 sm:px-3">
           <div className="w-full min-w-0 flex-1 sm:w-72 sm:flex-none sm:min-w-64">
             <SearchBar
               center={center}
@@ -139,7 +170,10 @@ export default function MapNavBar({
             />
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          {/* Mobile: full-width second row; sm+: sits between search and the
+              auth cluster exactly as before. min-w-0 + sm:flex-1 preserve the
+              original flex-1 sizing semantics on desktop. */}
+          <div className="order-3 flex w-full min-w-0 shrink-0 items-center gap-2 sm:order-none sm:w-auto sm:flex-1">
             <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {(() => {
                 const active = selectedCategory === null;

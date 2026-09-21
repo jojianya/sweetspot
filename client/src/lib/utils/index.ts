@@ -1,5 +1,5 @@
 export { errorMessage } from "./errorMessage";
-export { formatTime } from "./format";
+export { formatTime, relativeTime } from "./format";
 export {
   boundsToValidBbox,
   getCurrentPosition,

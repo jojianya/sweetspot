@@ -13,9 +13,13 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/collections"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/comments"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/favorites"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/realtime"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/social"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 )
 
@@ -53,7 +57,12 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	userHandler := users.NewHandler(c.UserService)
 	users.RegisterRoutes(jsonRoutes, userHandler, users.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
-	pinHandler := pins.NewHandler(pins.NewService(c.PinRepo), c.Store)
+	// Real-time stream of newly created pins (SSE). Registered before the
+	// pin routes so /events never collides with a parameter route.
+	realtimeHandler := realtime.NewHandler(c.Events)
+	jsonRoutes.GET("/events", realtimeHandler.Stream)
+
+	pinHandler := pins.NewHandler(pins.NewService(c.PinRepo), c.Store, c.Events)
 	pins.RegisterRoutes(uploadRoutes, pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
 	reportHandler := reports.NewHandler(reports.NewService(c.ReportRepo))
@@ -68,6 +77,15 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		JWTSecret: cfg.JWTSecret,
 		Blacklist: c.Blacklist,
 	})
+
+	commentHandler := comments.NewHandler(comments.NewService(c.CommentRepo))
+	comments.RegisterRoutes(jsonRoutes, commentHandler, comments.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+
+	socialHandler := social.NewHandler(social.NewService(c.SocialRepo))
+	social.RegisterRoutes(jsonRoutes, socialHandler, social.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+
+	collectionHandler := collections.NewHandler(collections.NewService(c.CollectionRepo))
+	collections.RegisterRoutes(jsonRoutes, collectionHandler, collections.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
 	return r
 }

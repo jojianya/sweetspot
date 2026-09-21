@@ -32,9 +32,22 @@ func isHex(b byte) bool {
 	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
 }
 
+// Middleware validates the :id path parameter as a UUID.
 func Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !IsUUID(c.Param(paramName)) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// MiddlewareParam validates a named path parameter as a UUID, e.g.
+// validid.MiddlewareParam("pinId") for routes shaped /collections/:id/pins/:pinId.
+func MiddlewareParam(name string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !IsUUID(c.Param(name)) {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 			return
 		}

@@ -18,10 +18,13 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 	rg.GET("/categories", h.ListCategories)
 	rg.GET("/pins", h.GetPins)
 	rg.GET("/pins/search", h.SearchPins)
+	rg.GET("/users/:id/pins", validid.Middleware(), h.ListByUser)
 	rg.GET("/pins/:id", validid.Middleware(), middleware.OptionalAuth(opts.JWTSecret, opts.Blacklist), h.GetPin)
 
 	createLimit := middleware.New(10, time.Minute)
 	rg.POST("/pins", createLimit.Middleware(), middleware.AuthRequired(opts.JWTSecret, opts.Blacklist), h.CreatePin)
 
-	rg.DELETE("/pins/:id", validid.Middleware(), middleware.AuthRequired(opts.JWTSecret, opts.Blacklist), h.DeletePin)
+	authRequired := middleware.AuthRequired(opts.JWTSecret, opts.Blacklist)
+	rg.PATCH("/pins/:id", validid.Middleware(), authRequired, h.UpdatePin)
+	rg.DELETE("/pins/:id", validid.Middleware(), authRequired, h.DeletePin)
 }

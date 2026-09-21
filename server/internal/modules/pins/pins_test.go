@@ -22,6 +22,10 @@ type mockPinRepository struct {
 	userExists    bool
 	userExistsErr error
 	deleteErr     error
+	updated       Pin
+	updateErr     error
+	userPins      []PinListEntry
+	userPinsErr   error
 }
 
 func (m *mockPinRepository) ListCategories(context.Context) ([]Category, error) {
@@ -54,6 +58,14 @@ func (m *mockPinRepository) DeletePin(context.Context, string, string) error {
 
 func (m *mockPinRepository) UserExists(context.Context, string) (bool, error) {
 	return m.userExists, m.userExistsErr
+}
+
+func (m *mockPinRepository) UpdatePin(context.Context, string, UpdatePinPatch) (Pin, error) {
+	return m.updated, m.updateErr
+}
+
+func (m *mockPinRepository) ListByUser(context.Context, string, int) ([]PinListEntry, error) {
+	return m.userPins, m.userPinsErr
 }
 
 func TestListCategories(t *testing.T) {
@@ -155,5 +167,37 @@ func TestDeletePinPropagatesForbidden(t *testing.T) {
 	err := svc.DeletePin(context.Background(), "pin-1", "other-user")
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected ErrForbidden, got %v", err)
+	}
+}
+
+func TestUpdatePinDelegates(t *testing.T) {
+	caption := "updated caption"
+	categoryID := 3
+	svc := NewService(&mockPinRepository{updated: Pin{Geohash: "xy"}})
+	got, err := svc.UpdatePin(context.Background(), "pin-1", UpdatePinPatch{Caption: &caption, CategoryID: &categoryID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Geohash != "xy" {
+		t.Fatalf("unexpected updated pin: %+v", got)
+	}
+}
+
+func TestUpdatePinPropagatesNotFound(t *testing.T) {
+	svc := NewService(&mockPinRepository{updateErr: ErrNotFound})
+	_, err := svc.UpdatePin(context.Background(), "missing", UpdatePinPatch{})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestListByUserDelegates(t *testing.T) {
+	svc := NewService(&mockPinRepository{userPins: []PinListEntry{}})
+	got, err := svc.ListByUser(context.Background(), "user-1", 50)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty results, got %+v", got)
 	}
 }

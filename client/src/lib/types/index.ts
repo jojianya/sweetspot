@@ -7,3 +7,10 @@ export type {
   PinListEntry,
   PinPhoto,
 } from "./pin";
+export type {
+  CollectionDetail,
+  CollectionEntry,
+  Comment,
+  PublicProfile,
+  UserStats,
+} from "./social";

@@ -1,4 +1,4 @@
-import { type Map as MaplibreMap } from "maplibre-gl";
+import { type ExpressionSpecification, type Map as MaplibreMap } from "maplibre-gl";
 
 export type GeoFeature = {
   type: "Feature";
@@ -20,6 +20,9 @@ export const EMPTY_GEOJSON: GeoJSONLike = {
   type: "FeatureCollection",
   features: [],
 };
+
+// Pins stop clustering once the map zooms past this level.
+export const CLUSTER_MAX_ZOOM = 13;
 
 function makePinIcon(
   size: number,
@@ -72,6 +75,9 @@ function makePinIcon(
   return ctx.getImageData(0, 0, size, size);
 }
 
+// Filters that keep cluster features out of the per-pin symbol layers.
+export const notCluster: ExpressionSpecification = ["!", ["has", "point_count"]];
+
 // setStyle() (theme swap) drops runtime-added sources and layers and
 // fires "style.load" again ("load" only fires once per map), but the
 // diff path can keep previously added images, so re-creation must be
@@ -88,7 +94,53 @@ export function ensurePinLayers(map: MaplibreMap): void {
   }
 
   if (!map.getSource("pins")) {
-    map.addSource("pins", { type: "geojson", data: EMPTY_GEOJSON });
+    map.addSource("pins", {
+      type: "geojson",
+      data: EMPTY_GEOJSON,
+      cluster: true,
+      clusterRadius: 50,
+      clusterMaxZoom: CLUSTER_MAX_ZOOM,
+    });
+  }
+
+  if (!map.getLayer("pins-cluster")) {
+    map.addLayer({
+      id: "pins-cluster",
+      type: "circle",
+      source: "pins",
+      filter: ["has", "point_count"],
+      paint: {
+        "circle-color": [
+          "step",
+          ["get", "point_count"],
+          "#fb7185",
+          10,
+          "#e11d48",
+          100,
+          "#9f1239",
+        ],
+        "circle-radius": ["step", ["get", "point_count"], 16, 10, 21, 100, 27],
+        "circle-stroke-width": 2,
+        "circle-stroke-color": "#ffffff",
+      },
+    });
+  }
+
+  if (!map.getLayer("pins-cluster-label")) {
+    map.addLayer({
+      id: "pins-cluster-label",
+      type: "symbol",
+      source: "pins",
+      filter: ["has", "point_count"],
+      layout: {
+        "text-field": ["get", "point_count"],
+        "text-size": 12,
+        "text-font": ["Noto Sans Bold"],
+      },
+      paint: {
+        "text-color": "#ffffff",
+      },
+    });
   }
 
   if (!map.getLayer("pins-base")) {
@@ -96,6 +148,7 @@ export function ensurePinLayers(map: MaplibreMap): void {
       id: "pins-base",
       type: "symbol",
       source: "pins",
+      filter: notCluster,
       layout: {
         "icon-image": "pin-default",
         "icon-size": 0.75,
@@ -109,6 +162,7 @@ export function ensurePinLayers(map: MaplibreMap): void {
       id: "pins-selected",
       type: "symbol",
       source: "pins",
+      filter: notCluster,
       layout: {
         "icon-image": "pin-selected",
         "icon-size": 1.05,

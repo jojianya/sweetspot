@@ -16,7 +16,9 @@ type Repository interface {
 	ListCategories(ctx context.Context) ([]Category, error)
 	GetPin(ctx context.Context, id string) (PinDetail, error)
 	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
+	ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error)
 	SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error)
+	UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error)
 	UserExists(ctx context.Context, id string) (bool, error)
 }
 
@@ -29,6 +31,20 @@ type NewPin struct {
 	PhotoURLs     []string
 	ThumbnailURLs []string
 	Geohash       string
+}
+
+// NewPhoto is a re-encoded image ready to persist.
+type NewPhoto struct {
+	PhotoURL     string
+	ThumbnailURL string
+}
+
+// UpdatePinPatch carries editable pin fields. A nil Photos keeps the current
+// photo set; a non-nil (even empty is rejected by the handler) one replaces it.
+type UpdatePinPatch struct {
+	Caption    *string
+	CategoryID *int
+	Photos     []NewPhoto
 }
 
 type postgresRepository struct {
@@ -170,6 +186,21 @@ func (r *postgresRepository) GetPin(ctx context.Context, id string) (PinDetail, 
 	return d, nil
 }
 
+// pinListEntrySelect is the shared SELECT shape for list/search results: the
+// pin columns plus the first photo's cover URL and the author's username.
+const pinListEntrySelect = `
+	SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
+	       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username
+	FROM pins p
+	LEFT JOIN LATERAL (
+		SELECT photo_url, thumbnail_url FROM pin_photos
+		WHERE pin_id = p.id
+		ORDER BY position
+		LIMIT 1
+	) pp ON true
+	LEFT JOIN users u ON u.id = p.user_id
+	WHERE p.is_hidden = false`
+
 func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error) {
 	args := []any{bbox[1], bbox[0], bbox[3], bbox[2]}
 	if categoryID != nil {
@@ -179,23 +210,11 @@ func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, cate
 	}
 	args = append(args, limit)
 
-	query := `
-		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
-		       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username
-		FROM pins p
-		LEFT JOIN LATERAL (
-			SELECT photo_url, thumbnail_url FROM pin_photos
-			WHERE pin_id = p.id
-			ORDER BY position
-			LIMIT 1
-		) pp ON true
-		LEFT JOIN users u ON u.id = p.user_id
-		WHERE p.is_hidden = false
+	query := pinListEntrySelect + `
 		  AND ($5::int IS NULL OR p.category_id = $5)
 		  AND ST_DWithin(p.location, ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography, 0)
 		ORDER BY p.created_at DESC
-		LIMIT $6
-	`
+		LIMIT $6`
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -203,45 +222,90 @@ func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, cate
 	}
 	defer rows.Close()
 
-	entries := []PinListEntry{}
-	for rows.Next() {
-		var e PinListEntry
-		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
-			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.CreatedAt, &e.CoverURL, &e.Username); err != nil {
-			return nil, err
-		}
-		entries = append(entries, e)
-	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
-		return nil, err
-	}
-	return entries, nil
+	return scanPinListEntries(rows)
 }
 
 func (r *postgresRepository) SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error) {
 	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
 
-	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
-		       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username
-		FROM pins p
-		LEFT JOIN LATERAL (
-			SELECT photo_url, thumbnail_url FROM pin_photos
-			WHERE pin_id = p.id
-			ORDER BY position
-			LIMIT 1
-		) pp ON true
-		LEFT JOIN users u ON u.id = p.user_id
-		WHERE p.is_hidden = false
+	querySQL := pinListEntrySelect + `
 		  AND (p.caption ILIKE '%' || $1 || '%' OR u.username ILIKE '%' || $1 || '%')
 		ORDER BY p.created_at DESC
-		LIMIT $2
-	`, escaped, limit)
+		LIMIT $2`
+
+	rows, err := r.pool.Query(ctx, querySQL, escaped, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
+	return scanPinListEntries(rows)
+}
+
+func (r *postgresRepository) ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error) {
+	query := pinListEntrySelect + `
+		  AND p.user_id = $1
+		ORDER BY p.created_at DESC
+		LIMIT $2`
+
+	rows, err := r.pool.Query(ctx, query, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanPinListEntries(rows)
+}
+
+// UpdatePin applies a patch: caption (nil keeps, empty clears), category_id
+// (nil keeps), and optionally a full photo-set replacement.
+func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Pin{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var p Pin
+	if err := tx.QueryRow(ctx, `
+		UPDATE pins
+		SET caption    = COALESCE($2, caption),
+		    category_id = COALESCE($3, category_id),
+		    updated_at  = now()
+		WHERE id = $1
+		RETURNING id, user_id, ST_AsText(location) AS location, geohash, caption, category_id, is_hidden, created_at
+	`, id, patch.Caption, patch.CategoryID).Scan(
+		&p.ID, &p.UserID, &p.Location, &p.Geohash, &p.Caption, &p.CategoryID, &p.IsHidden, &p.CreatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Pin{}, ErrNotFound
+		}
+		return Pin{}, err
+	}
+
+	if patch.Photos != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM pin_photos WHERE pin_id = $1`, id); err != nil {
+			return Pin{}, err
+		}
+		for i, ph := range patch.Photos {
+			position := int16(i)
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO pin_photos (pin_id, photo_url, thumbnail_url, position)
+				VALUES ($1, $2, $3, $4)
+			`, id, ph.PhotoURL, ph.ThumbnailURL, position); err != nil {
+				return Pin{}, err
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Pin{}, err
+	}
+	return p, nil
+}
+
+// scanPinListEntries maps the shared list/search result rows into entries.
+func scanPinListEntries(rows pgx.Rows) ([]PinListEntry, error) {
 	entries := []PinListEntry{}
 	for rows.Next() {
 		var e PinListEntry

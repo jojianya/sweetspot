@@ -1,14 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PanelSheet from "@/components/PanelSheet";
-import { BookmarkIcon } from "@/components/icons";
+import { BookmarkIcon, CloseIcon } from "@/components/icons";
 import PhotoLightbox from "./PhotoLightbox";
+import CommentsSection from "./CommentsSection";
+import PinEditSheet from "./PinEditSheet";
+import AddToCollectionSheet from "./AddToCollectionSheet";
 import type { PinDetail } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
 import { reverseGeocode } from "@/lib/api/geocoding";
+import { fetchPin } from "@/lib/api/pins";
 import { removeFavorite, saveFavorite } from "@/lib/api/favorites";
+import { useCategories } from "@/hooks/useCategories";
 import { useAuth } from "@/store/auth";
 import { useSavedStatus } from "@/hooks/useFavorites";
 
@@ -64,18 +70,43 @@ function PersonIcon() {
   );
 }
 
-export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
+function ListIcon() {
+  return (
+    <svg className="h-4 w-4" {...stroke} aria-hidden>
+      <path d="M8 6h12M8 12h12M8 18h12" />
+      <path d="M3 6h.01M3 12h.01M3 18h.01" />
+    </svg>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg className="h-4 w-4" {...stroke} aria-hidden>
+      <path d="M21 12a8 8 0 0 1-8 8H4l2.5-2.5A8 8 0 1 1 21 12Z" />
+    </svg>
+  );
+}
+
+export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPanelProps) {
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const { categories } = useCategories();
+  const [pin, setPin] = useState<PinDetail>(initialPin);
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [collectionOpen, setCollectionOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const { saved, setSaved } = useSavedStatus(pin.id, token !== null);
 
   const photo = pin.photos[index];
   const count = pin.photos.length;
   const point = useMemo(() => parsePoint(pin.location), [pin.location]);
+
+  const isOwner =
+    user !== null && (user.id === pin.user_id || user.role === "admin" || user.role === "owner");
 
   const [address, setAddress] = useState<string | null>(null);
 
@@ -110,7 +141,7 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
 
   const handleShare = async () => {
     const text = `Check out ${pin.caption ?? "this place"} on GoodSpot`;
-    const url = window.location.href;
+    const url = `${window.location.origin}/pin/${pin.id}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: text, text, url });
@@ -137,14 +168,20 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
     );
   };
 
+  const handleUpdated = async () => {
+    try {
+      const refreshed = await fetchPin(pin.id);
+      setPin(refreshed);
+    } catch {
+      // ignored: the sheet already confirmed the update server-side
+    }
+  };
+
   const name = pin.caption?.trim();
 
   return (
     <>
-      <PanelSheet
-        role="dialog"
-        aria-label="Pin details"
-      >
+      <PanelSheet role="dialog" aria-label="Pin details">
         {/* Hero photo — plain image, no overlays */}
         <div className="relative h-[210px] shrink-0 overflow-hidden rounded-t-2xl sm:rounded-t-none sm:rounded-tr-2xl">
           {photo ? (
@@ -171,9 +208,19 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          <h2 className="text-xl font-bold leading-tight text-zinc-900 dark:text-zinc-100">
-            {name ?? "Untitled"}
-          </h2>
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="text-xl font-bold leading-tight text-zinc-900 dark:text-zinc-100">
+              {name ?? "Untitled"}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 rounded-full p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+              aria-label="Close"
+            >
+              <CloseIcon />
+            </button>
+          </div>
 
           <div className="mt-0.5 flex items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400">
             {pin.category && (
@@ -183,10 +230,13 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
               </>
             )}
             {pin.username && (
-              <>
+              <Link
+                href={pin.user_id ? `/users/${pin.user_id}` : "#"}
+                className="flex min-w-0 items-center gap-1.5 hover:underline"
+              >
                 <PersonIcon />
                 <span className="truncate">{pin.username}</span>
-              </>
+              </Link>
             )}
           </div>
 
@@ -237,8 +287,7 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
               <PinIcon />
             </span>
             <span>
-              {address ??
-                (point ? "Finding address…" : "On the GoodSpot map")}
+              {address ?? (point ? "Finding address…" : "On the GoodSpot map")}
             </span>
           </div>
 
@@ -269,8 +318,60 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
               </div>
             </div>
           )}
+
+          {/* Secondary actions */}
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Edit
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setCollectionOpen(true)}
+              className="flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              <ListIcon />
+              Add to collection
+            </button>
+            <Link
+              href={`/pin/${pin.id}`}
+              className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Open page
+            </Link>
+          </div>
+
+          {/* Comments */}
+          <div className="mt-5 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setCommentsOpen((v) => !v)}
+              className="flex w-full items-center justify-between text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+              aria-expanded={commentsOpen}
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-zinc-400">
+                  <ChatIcon />
+                </span>
+                Comments
+              </span>
+              <span className="text-xs font-medium text-zinc-400">{commentsOpen ? "Hide" : "Show"}</span>
+            </button>
+            {commentsOpen && (
+              <div className="mt-3">
+                <CommentsSection pinId={pin.id} compact />
+              </div>
+            )}
+          </div>
         </div>
-      </PanelSheet>      {lightbox && photo && (
+      </PanelSheet>
+
+      {lightbox && photo && (
         <PhotoLightbox
           src={photo.photo_url}
           alt={name ?? "Pin photo"}
@@ -279,6 +380,19 @@ export default function PinDetailPanel({ pin, onClose }: PinDetailPanelProps) {
           onNavigate={setIndex}
           onClose={() => setLightbox(false)}
         />
+      )}
+
+      {editOpen && (
+        <PinEditSheet
+          pin={pin}
+          categories={categories.length > 0 ? categories : [{ id: pin.category_id, name: pin.category ?? "Other" }]}
+          onClose={() => setEditOpen(false)}
+          onUpdated={handleUpdated}
+        />
+      )}
+
+      {collectionOpen && (
+        <AddToCollectionSheet pinId={pin.id} onClose={() => setCollectionOpen(false)} />
       )}
     </>
   );

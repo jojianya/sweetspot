@@ -1,0 +1,15 @@
+# Root-level context hygiene. Compose builds use ./client and ./server as
+# contexts (see docker-compose.yml); this file protects `docker build .` and
+# documents repo-wide ignore intent.
+.git
+**/node_modules
+**/.next
+**/out
+**/coverage
+.env*
+backups
+server/tmp
+*.log
+.DS_Store
+.vscode
+.idea

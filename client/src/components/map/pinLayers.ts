@@ -71,6 +71,11 @@ function colorForCategory(categoryId: number, selected: boolean): string {
  *
  * Keeping the geometry as primitives avoids relying on Path2D parsing for
  * runtime-generated map images while preserving the canonical silhouette.
+ *
+ * The pin is drawn as two subpaths in a single path (head circle + stem).
+ * Exactly one fill() and one stroke() call are made per icon to avoid
+ * double-draw artifacts. The inner circle is cut out once with
+ * destination-out.
  */
 function drawSimplePin(
   ctx: CanvasRenderingContext2D,
@@ -96,43 +101,13 @@ function drawSimplePin(
   );
   ctx.scale(scale, scale);
 
-  if (ringColor) {
-    // Draw the selected halo first. The colored body is painted over its
-    // inner half, leaving a clean white outline around the outside.
-    ctx.save();
-    ctx.strokeStyle = ringColor;
-    ctx.lineWidth = ringWidth;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.beginPath();
-    ctx.arc(centerX, headY, outerRadius, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(centerX - stemHalfWidth, stemTopY);
-    ctx.lineTo(centerX - stemHalfWidth, stemBottomY);
-    ctx.arc(
-      centerX,
-      stemBottomY,
-      stemBottomRadius,
-      Math.PI,
-      0,
-      true
-    );
-    ctx.lineTo(centerX + stemHalfWidth, stemTopY);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // Colored outer ring.
-  ctx.fillStyle = color;
+  // Build the complete pin shape (head circle + stem) as two subpaths
+  // in a single path. The circle arc is a full 2π (already closed).
+  // The stem subpath is closed explicitly.
   ctx.beginPath();
+  // Subpath 1: head circle (full 2π arc = already closed)
   ctx.arc(centerX, headY, outerRadius, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Centered stem with the rounded bottom from PiMapPinSimpleLight.
-  ctx.beginPath();
+  // Subpath 2: stem (separate subpath, closed explicitly)
   ctx.moveTo(centerX - stemHalfWidth, stemTopY);
   ctx.lineTo(centerX - stemHalfWidth, stemBottomY);
   ctx.arc(
@@ -144,16 +119,31 @@ function drawSimplePin(
     true
   );
   ctx.lineTo(centerX + stemHalfWidth, stemTopY);
-  ctx.closePath();
-  ctx.fill();
+  ctx.closePath(); // closes ONLY the stem subpath
 
-  // The opening is transparent, matching the SVG icon's compound path.
-  ctx.save();
+  if (ringColor) {
+    // Selected: white stroke (ring), category-color fill
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = ringWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke();
+  } else {
+    // Non-selected: category-color stroke, light transparent fill
+    ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+
+  // Cut out the inner circle (transparent center) — same for both states
   ctx.globalCompositeOperation = "destination-out";
   ctx.beginPath();
   ctx.arc(centerX, headY, innerRadius, 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore();
 
   ctx.restore();
 }
@@ -346,7 +336,7 @@ export function ensurePinLayers(map: MaplibreMap): void {
         "icon-image": categoryTintMatch,
         "icon-size": 0.75,
         "icon-anchor": "bottom",
-        "icon-allow-overlap": false,
+        "icon-allow-overlap": true,
       },
     });
   } else {
@@ -354,7 +344,7 @@ export function ensurePinLayers(map: MaplibreMap): void {
     map.setLayoutProperty("pins-base", "icon-image", categoryTintMatch);
     map.setLayoutProperty("pins-base", "icon-size", 0.75);
     map.setLayoutProperty("pins-base", "icon-anchor", "bottom");
-    map.setLayoutProperty("pins-base", "icon-allow-overlap", false);
+    map.setLayoutProperty("pins-base", "icon-allow-overlap", true);
   }
 
   if (!map.getLayer("pins-selected")) {
@@ -367,7 +357,7 @@ export function ensurePinLayers(map: MaplibreMap): void {
         "icon-image": selectedCategoryTintMatch,
         "icon-size": 1.05,
         "icon-anchor": "bottom",
-        "icon-allow-overlap": false,
+        "icon-allow-overlap": true,
       },
     });
   } else {
@@ -378,6 +368,6 @@ export function ensurePinLayers(map: MaplibreMap): void {
     );
     map.setLayoutProperty("pins-selected", "icon-size", 1.05);
     map.setLayoutProperty("pins-selected", "icon-anchor", "bottom");
-    map.setLayoutProperty("pins-selected", "icon-allow-overlap", false);
+    map.setLayoutProperty("pins-selected", "icon-allow-overlap", true);
   }
 }

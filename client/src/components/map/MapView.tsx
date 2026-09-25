@@ -150,7 +150,7 @@ export default function MapView({
       style: theme === "dark" ? DARK_STYLE : LIGHT_STYLE,
       zoom: 10,
       minZoom: 5,
-      maxZoom: 25,
+      maxZoom: 18,
     });
     mapRef.current = map;
 
@@ -244,6 +244,7 @@ export default function MapView({
     });
 
     map.on("moveend", () => {
+      console.log("zoom:", map.getZoom());
       const [south, west, north, east] = boundsToValidBbox(map.getBounds());
       onBoundsRef.current(`${south},${west},${north},${east}`, {
         lat: map.getCenter().lat,

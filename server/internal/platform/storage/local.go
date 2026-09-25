@@ -44,6 +44,12 @@ func (l *Local) Delete(url string) error {
 	if name == "." || name == "/" || name == "" {
 		return nil
 	}
+	// Prevent path traversal: reject names containing path separators
+	// or parent-directory references after cleaning.
+	clean := filepath.Clean(name)
+	if clean != name || strings.Contains(name, "..") {
+		return nil
+	}
 	err := os.Remove(filepath.Join(l.dir, name))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil

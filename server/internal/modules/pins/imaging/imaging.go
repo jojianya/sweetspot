@@ -45,7 +45,10 @@ func Validate(data []byte) error {
 
 func Process(data []byte) (Result, error) {
 	processSem <- struct{}{}
-	defer func() { <-processSem }()
+	defer func() {
+		recover()
+		<-processSem
+	}()
 	full, err := bimg.Resize(data, bimg.Options{
 		Width:   maxPhotoWidth,
 		Quality: webpQuality,
@@ -73,7 +76,10 @@ func Process(data []byte) (Result, error) {
 // avatarSize. Runs under the same semaphore as Process.
 func Avatar(data []byte) ([]byte, error) {
 	processSem <- struct{}{}
-	defer func() { <-processSem }()
+	defer func() {
+		recover()
+		<-processSem
+	}()
 	img, err := bimg.Resize(data, bimg.Options{
 		Width:   avatarSize,
 		Height:  avatarSize,

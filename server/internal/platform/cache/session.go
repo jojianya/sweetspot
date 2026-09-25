@@ -25,6 +25,9 @@ func (b *Blacklist) Revoke(ctx context.Context, jti string, ttl time.Duration) e
 	if ttl <= 0 {
 		return nil
 	}
+	if ttl < time.Second {
+		ttl = time.Second
+	}
 	return b.client.Set(ctx, keyPrefix+jti, "1", ttl).Err()
 }
 

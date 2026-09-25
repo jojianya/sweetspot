@@ -43,5 +43,9 @@ func ParseBbox(c *gin.Context) (bbox [4]float64, ok bool) {
 		response.BadRequest(c, "bbox min must not exceed max (minLat,minLng,maxLat,maxLng)")
 		return bbox, false
 	}
+	if bbox[0] == bbox[2] || bbox[1] == bbox[3] {
+		response.BadRequest(c, "bbox must have non-zero area (minLat < maxLat and minLng < maxLng)")
+		return bbox, false
+	}
 	return bbox, true
 }

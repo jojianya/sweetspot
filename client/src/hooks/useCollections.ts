@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import {
   addPinToCollection,
   createCollection,
   fetchMyCollections,
   removePinFromCollection,
 } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import type { CollectionEntry } from "@/lib/types";
 
 /**
@@ -16,59 +16,45 @@ import type { CollectionEntry } from "@/lib/types";
  * Create/add/remove all update local state immediately for a snappy UI.
  */
 export function useCollections() {
-  const [collections, setCollections] = useState<CollectionEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  const { data, loading, error, retry, setData } = useAsyncData<CollectionEntry[]>(
+    () => fetchMyCollections(),
+    []
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchMyCollections()
-      .then((data) => {
-        if (!cancelled) setCollections(data);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(errorMessage(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [attempt]);
+  const create = useCallback(
+    async (name: string, description?: string | null) => {
+      const collection = await createCollection(name, description);
+      setData((prev) => [collection, ...(prev ?? [])]);
+      return collection;
+    },
+    [setData]
+  );
 
-  const retry = useCallback(() => {
-    setError(null);
-    setLoading(true);
-    setAttempt((n) => n + 1);
-  }, []);
+  const addPin = useCallback(
+    async (collectionId: string, pinId: string) => {
+      await addPinToCollection(collectionId, pinId);
+      setData((prev) =>
+        (prev ?? []).map((c) =>
+          c.id === collectionId ? { ...c, pin_count: c.pin_count + 1 } : c
+        )
+      );
+    },
+    [setData]
+  );
 
-  const create = useCallback(async (name: string, description?: string | null) => {
-    const collection = await createCollection(name, description);
-    setCollections((prev) => [collection, ...prev]);
-    return collection;
-  }, []);
+  const removePin = useCallback(
+    async (collectionId: string, pinId: string) => {
+      await removePinFromCollection(collectionId, pinId);
+      setData((prev) =>
+        (prev ?? []).map((c) =>
+          c.id === collectionId
+            ? { ...c, pin_count: Math.max(0, c.pin_count - 1) }
+            : c
+        )
+      );
+    },
+    [setData]
+  );
 
-  const addPin = useCallback(async (collectionId: string, pinId: string) => {
-    await addPinToCollection(collectionId, pinId);
-    setCollections((prev) =>
-      prev.map((c) =>
-        c.id === collectionId ? { ...c, pin_count: c.pin_count + 1 } : c
-      )
-    );
-  }, []);
-
-  const removePin = useCallback(async (collectionId: string, pinId: string) => {
-    await removePinFromCollection(collectionId, pinId);
-    setCollections((prev) =>
-      prev.map((c) =>
-        c.id === collectionId
-          ? { ...c, pin_count: Math.max(0, c.pin_count - 1) }
-          : c
-      )
-    );
-  }, []);
-
-  return { collections, loading, error, retry, create, addPin, removePin };
+  return { collections: data ?? [], loading, error, retry, create, addPin, removePin };
 }

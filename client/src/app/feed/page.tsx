@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import { fetchFeed } from "@/lib/api";
-import { errorMessage, relativeTime } from "@/lib/utils";
+import { relativeTime } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import type { PinListEntry } from "@/lib/types";
 
 const stroke = {
@@ -29,33 +29,12 @@ function FeedIcon() {
 
 export default function FeedPage() {
   const { token } = useAuth();
-  const [pins, setPins] = useState<PinListEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchFeed()
-      .then((data) => {
-        if (!cancelled) setPins(data);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(errorMessage(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [attempt, token]);
-
-  const retry = useCallback(() => {
-    setError(null);
-    setLoading(true);
-    setAttempt((n) => n + 1);
-  }, []);
+  const { data, loading, error, retry } = useAsyncData<PinListEntry[]>(
+    () => fetchFeed(),
+    [token],
+    { enabled: !!token }
+  );
+  const pins = data ?? [];
 
   if (!token) {
     return (

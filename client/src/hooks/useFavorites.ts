@@ -1,40 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchFavoriteIDs, fetchFavorites, type FavoriteEntry } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
+import { useAsyncData } from "@/hooks/useAsyncData";
 
 /** Server state for the saved-pins list: entries, loading, error, retry. */
 export function useFavorites() {
-  const [entries, setEntries] = useState<FavoriteEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  const { data, loading, error, retry } = useAsyncData<FavoriteEntry[]>(
+    () => fetchFavorites(),
+    []
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchFavorites()
-      .then((data) => {
-        if (!cancelled) setEntries(data);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(errorMessage(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [attempt]);
-
-  const retry = useCallback(() => {
-    setError(null);
-    setLoading(true);
-    setAttempt((n) => n + 1);
-  }, []);
-
-  return { entries, loading, error, retry };
+  return { entries: data ?? [], loading, error, retry };
 }
 
 /**

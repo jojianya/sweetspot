@@ -15,6 +15,7 @@ import { reverseGeocode } from "@/lib/api/geocoding";
 import { useCategories } from "@/hooks/useCategories";
 import { useSavedStatus } from "@/hooks/useFavorites";
 import { formatTime, parsePoint } from "@/lib/utils";
+import { categorySlug } from "@/lib/utils/category";
 import { useAuth } from "@/store/auth";
 import type { PinDetail } from "@/lib/types";
 
@@ -311,7 +312,13 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
           categories={
             categories.length > 0
               ? categories
-              : [{ id: pin.category_id, name: pin.category ?? "Other" }]
+              : [
+                  {
+                    id: pin.category_id,
+                    name: pin.category ?? "Other",
+                    slug: categorySlug(pin.category ?? "Other"),
+                  },
+                ]
           }
           onClose={() => setEditOpen(false)}
           onUpdated={handleUpdated}

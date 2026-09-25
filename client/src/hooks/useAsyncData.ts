@@ -69,10 +69,10 @@ export function useAsyncData<T>(
       });
 
     return () => ctrl.abort();
-    // runKey is spread-compatible: the effect must run when any element
-    // changes (element-wise comparison), which the spread in runKey encodes.
+    // The caller's deps plus enabled/attempt are the run identity. Compare
+    // each value element-wise so a rerender with stable values does not refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runKey]);
+  }, [...deps, enabled, attempt]);
 
   const retry = useCallback(() => {
     setError(null);

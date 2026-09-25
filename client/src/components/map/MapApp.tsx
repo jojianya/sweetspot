@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import MapView, { type MapLocation } from "./MapView";
 import LocateButton from "./LocateButton";
 import MapNavBar from "./MapNavBar";
@@ -15,6 +15,7 @@ import { useCategories } from "@/hooks/useCategories";
 import { usePinStream } from "@/hooks/usePinStream";
 import { useTrending } from "@/hooks/useTrending";
 import { parsePoint } from "@/lib/utils";
+import { categoryHref, resolveCategoryParam } from "@/lib/utils/category";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
 import type { CreatedPin, NewPinPhoto, PinListEntry, TrendingPin } from "@/lib/types";
@@ -22,11 +23,23 @@ import type { CreatedPin, NewPinPhoto, PinListEntry, TrendingPin } from "@/lib/t
 export default function MapApp({
   initialCategory = null,
 }: {
-  initialCategory?: number | null;
+  initialCategory?: string | null;
 }) {
   const { theme } = useTheme();
   const { categories, error: categoriesError, retry: retryCategories } = useCategories();
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(initialCategory);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedCategoryRef = useRef<{ slug: string | null } | null>(null);
+  const currentQuery = searchParams.toString();
+  const currentCategoryParam = searchParams.get("category");
+  const categoryParam = currentQuery === "" ? initialCategory : currentCategoryParam;
+  const resolvedCategory =
+    categories.length > 0 ? resolveCategoryParam(categoryParam, categories) : null;
+
+  // Category slugs are the public URL contract; numeric IDs remain internal
+  // to the pin and realtime API requests.
+  const effectiveCategory = resolvedCategory?.id ?? null;
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [savedOpen, setSavedOpen] = useState(false);
@@ -37,15 +50,6 @@ export default function MapApp({
   const [postingMode, setPostingMode] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-
-  // A category id from the URL might not exist once the category list is
-  // known. Derive the effective filter instead of mutating state during an
-  // effect: an unknown id falls back to "All" while the raw URL value is kept.
-  const effectiveCategory =
-    selectedCategory === null ||
-    (categories.length > 0 && !categories.some((c) => c.id === selectedCategory))
-      ? null
-      : selectedCategory;
 
   const { pins, loading, error: pinsError, addPin } = usePins(bbox, effectiveCategory);
   const { pins: trending, loading: trendingLoading, error: trendingError } = useTrending(
@@ -77,31 +81,42 @@ export default function MapApp({
     };
   }, []);
 
-  const router = useRouter();
-  const pathname = usePathname();
-
-  const handleSelectCategory = useCallback(
-    (id: number | null) => {
-      setSelectedCategory(id);
-      router.replace(id === null ? pathname : `${pathname}?category=${id}`, {
+  const replaceCategoryParam = useCallback(
+    (slug: string | null) => {
+      router.replace(categoryHref(pathname, currentQuery, slug), {
         scroll: false,
       });
     },
-    [pathname, router]
+    [currentQuery, pathname, router]
   );
 
-  // If the URL carried a category id that no longer exists, clean the URL
-  // (the effective filter already falls back to "All"). External-system sync
-  // via router.replace is fine inside an effect; state is not reset here.
+  const handleSelectCategory = useCallback(
+    (id: number | null) => {
+      const category = id === null ? null : categories.find((item) => item.id === id);
+      const slug = category?.slug ?? null;
+      requestedCategoryRef.current = { slug };
+      replaceCategoryParam(slug);
+    },
+    [categories, replaceCategoryParam]
+  );
+
+  // Legacy numeric links resolve to their category and are canonicalized to
+  // the slug. Unknown values remain "All" and are removed from the query.
   useEffect(() => {
-    if (
-      categories.length > 0 &&
-      selectedCategory !== null &&
-      !categories.some((c) => c.id === selectedCategory)
-    ) {
-      router.replace(pathname, { scroll: false });
+    const requestedCategory = requestedCategoryRef.current;
+    if (requestedCategory !== null) {
+      if (currentCategoryParam === requestedCategory.slug) {
+        requestedCategoryRef.current = null;
+      }
+      return;
     }
-  }, [categories, selectedCategory, pathname, router]);
+
+    if (categories.length === 0 || currentCategoryParam === null) return;
+
+    const canonicalSlug = resolveCategoryParam(currentCategoryParam, categories)?.slug ?? null;
+    if (canonicalSlug === currentCategoryParam) return;
+    replaceCategoryParam(canonicalSlug);
+  }, [categories, currentCategoryParam, replaceCategoryParam]);
 
   // The overlays (posting crosshair, create dialog, saved panel) are mutually
   // exclusive with pin selection: every "navigate somewhere" action closes the

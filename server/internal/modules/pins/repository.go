@@ -121,7 +121,7 @@ func (r *postgresRepository) DeletePin(ctx context.Context, id, userID string) e
 }
 
 func (r *postgresRepository) ListCategories(ctx context.Context) ([]Category, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, name FROM categories ORDER BY id`)
+	rows, err := r.pool.Query(ctx, `SELECT id, name, slug FROM categories ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (r *postgresRepository) ListCategories(ctx context.Context) ([]Category, er
 	categories := []Category{}
 	for rows.Next() {
 		var c Category
-		if err := rows.Scan(&c.ID, &c.Name); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Slug); err != nil {
 			return nil, err
 		}
 		categories = append(categories, c)

@@ -21,6 +21,7 @@ import AddToCollectionSheet from "./AddToCollectionSheet";
 import ReportSheet from "./ReportSheet";
 import type { PinDetail } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
+import { categorySlug } from "@/lib/utils/category";
 import { reverseGeocode } from "@/lib/api/geocoding";
 import { fetchPin } from "@/lib/api/pins";
 import { removeFavorite, saveFavorite } from "@/lib/api/favorites";
@@ -341,7 +342,17 @@ export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPa
       {editOpen && (
         <PinEditSheet
           pin={pin}
-          categories={categories.length > 0 ? categories : [{ id: pin.category_id, name: pin.category ?? "Other" }]}
+          categories={
+            categories.length > 0
+              ? categories
+              : [
+                  {
+                    id: pin.category_id,
+                    name: pin.category ?? "Other",
+                    slug: categorySlug(pin.category ?? "Other"),
+                  },
+                ]
+          }
           onClose={() => setEditOpen(false)}
           onUpdated={handleUpdated}
         />

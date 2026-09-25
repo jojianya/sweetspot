@@ -41,7 +41,7 @@ POST   /auth/register           — [rate-limited] create account, returns JWT
 POST   /auth/login              — [rate-limited] authenticate, returns JWT
 POST   /auth/logout             — [auth required] blacklist JWT
 
-GET    /pins?bbox=lat1,lng1,lat2,lng2&category=food   — [public] pins within viewport, optional category filter (hidden pins excluded)
+GET    /pins?bbox=lat1,lng1,lat2,lng2&category=1       — [public] pins within viewport, optional numeric category ID filter (hidden pins excluded)
 GET    /pins/:id                — [public, owner/admin for hidden pins]
 GET    /categories              — [public] fixed list of categories for the create-pin UI
 POST   /pins                    — [auth required, rate-limited] create a pin (1–5 photos via multipart + lat/lng + caption + category)

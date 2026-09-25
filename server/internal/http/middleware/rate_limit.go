@@ -62,12 +62,6 @@ func (l *Limiter) sweepExpired(now time.Time) {
 	}
 }
 
-// Allow reports whether the key is within its window's request limit.
-// It increments the counter for the key and returns true if the result is within limit.
-func (l *Limiter) Allow(key string) bool {
-	return l.AllowKey(key)
-}
-
 // Locked reports whether the key is currently blocked: at least `limit`
 // attempts have been recorded within the active window. Call Reset after
 // success to release the lockout.
@@ -86,14 +80,13 @@ func (l *Limiter) Reset(key string) {
 	delete(l.byKey, key)
 }
 
+// Middleware rate-limits per client IP. It is MiddlewareKeyed with the
+// ClientIP key; because the counters live in process memory the limits are
+// per-replica and do not hold up across multiple server instances.
 func (l *Limiter) Middleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if !l.Allow(c.ClientIP()) {
-			response.AbortError(c, http.StatusTooManyRequests, "too many requests, try again later")
-			return
-		}
-		c.Next()
-	}
+	return l.MiddlewareKeyed(func(c *gin.Context) string {
+		return c.ClientIP()
+	})
 }
 
 func (l *Limiter) MiddlewareKeyed(keyFn func(*gin.Context) string) gin.HandlerFunc {

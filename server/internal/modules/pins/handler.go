@@ -310,10 +310,19 @@ func (h *Handler) CreatePin(c *gin.Context) {
 	})
 	if err != nil {
 		// The photos are already on disk; remove them so a failed insert
-		// cannot orphan files.
-		for i := range photoURLs {
-			_ = h.store.Delete(photoURLs[i])
-			_ = h.store.Delete(thumbURLs[i])
+		// cannot orphan files. Use min length to guard against mismatched slices.
+		// Log deletion failures instead of discarding them.
+		n := len(photoURLs)
+		if len(thumbURLs) < n {
+			n = len(thumbURLs)
+		}
+		for i := 0; i < n; i++ {
+			if err := h.store.Delete(photoURLs[i]); err != nil {
+				slog.Warn("cleanup failed: photo", "url", photoURLs[i], "error", err)
+			}
+			if err := h.store.Delete(thumbURLs[i]); err != nil {
+				slog.Warn("cleanup failed: thumbnail", "url", thumbURLs[i], "error", err)
+			}
 		}
 		response.Internal(c, "create pin: database insert", err,
 			"user_id", middleware.GetUserID(c),

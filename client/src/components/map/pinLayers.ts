@@ -174,6 +174,75 @@ function drawCategoryIcon(
   }
 }
 
+// Draw a phosphor-style pin using canvas primitives (circle + triangle stem + inner dot)
+// This replaces the problematic Path2D approach
+function drawPhosphorPin(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+  ringColor: string | null,
+  dotColor: string
+): void {
+  // Pin dimensions (phosphor map-pin proportions)
+  const r = size * 0.26;           // head circle radius
+  const headY = size * 0.3;        // head center Y
+  const stemBaseY = size * 0.56;   // where stem meets head
+  const tipY = size * 0.95;        // tip of stem
+
+  ctx.fillStyle = color;
+
+  // Draw pin head (circle)
+  ctx.beginPath();
+  ctx.arc(size / 2, size * 0.3, size * 0.26, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw stem (tapered triangle pointing down)
+  ctx.beginPath();
+  ctx.moveTo(size / 2, size * 0.56);           // top center (where stem meets head)
+  ctx.lineTo(size / 2 - size * 0.12, size * 0.8);  // left base
+  ctx.lineTo(size / 2 + size * 0.12, size * 0.8);  // right base
+  ctx.closePath();
+  ctx.fill();
+
+  // Draw tip (rounded bottom)
+  ctx.beginPath();
+  ctx.arc(size / 2, size * 0.95, size * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+
+  // White ring for selected state
+  if (ringColor) {
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = size * 0.06;
+
+    // Outer ring around head
+    ctx.beginPath();
+    ctx.arc(size / 2, size * 0.3, size * 0.31, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Stem outline
+    ctx.beginPath();
+    ctx.moveTo(size / 2, size * 0.56);
+    ctx.lineTo(size / 2 - size * 0.15, size * 0.85);
+    ctx.lineTo(size / 2 + size * 0.15, size * 0.85);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Tip ring
+    ctx.beginPath();
+    ctx.arc(size / 2, size * 0.95, size * 0.11, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Inner white dot (center of head)
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(size / 2, size * 0.3, size * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Base pin icon (legacy fallback, no category)
 function makePinIcon(
   size: number,
   color: string,
@@ -184,48 +253,11 @@ function makePinIcon(
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
-  const cx = size / 2;
-  const cy = size / 2; // center for phosphor pin shape
-
-  // Phosphor Icons map-pin-light path, scaled to canvas size
-  // Original viewBox: 256x256, center at 128,128
-  const scale = size / 256;
-  const path = new Path2D(
-    "M128,66a38,38,0,1,0,38,38A38,38,0,0,0,128,66Z" +
-    "m0,64a26,26,0,1,1,26-26A26,26,0,0,1,128,130Z" +
-    "m0-112a86.1,86.1,0,0,0-86,86c0,30.91,14.34,63.74,41.47,94.94" +
-    "a252.32,252.32,0,0,0,41.09,38,6,6,0,0,0,6.88,0" +
-    "a252.32,252.32,0,0,0,41.09-38c27.13-31.2,41.47-64,41.47-94.94" +
-    "A86.1,86.1,0,0,0,128,18Zm0,206.51C113,212.93,54,163.62,54,104" +
-    "a74,74,0,0,1,148,0C202,163.62,143,212.93,128,224.51Z"
-  );
-
-  ctx.save();
-  ctx.translate(cx - 128 * scale, cy - 128 * scale);
-  ctx.scale(scale, scale);
-
-  ctx.fillStyle = color;
-  ctx.fill(path);
-
-  if (ringColor) {
-    ctx.strokeStyle = ringColor;
-    ctx.lineWidth = 4 * scale;
-    ctx.stroke(path);
-  }
-
-  // Inner dot (white)
-  ctx.fillStyle = dotColor;
-  ctx.beginPath();
-  ctx.arc(128, 90, 10 * scale, 0, Math.PI * 2); // inner circle position scaled
-  ctx.fill();
-
-  ctx.restore();
-
+  drawPhosphorPin(ctx, size / 2, size * 0.3, size, color, ringColor, dotColor);
   return ctx.getImageData(0, 0, size, size);
 }
 
 // Creates a category-specific pin icon (with embedded category symbol)
-// Uses Phosphor Icons map-pin-light as base shape
 function makeCategoryIcon(
   size: number,
   categoryId: number,
@@ -236,48 +268,24 @@ function makeCategoryIcon(
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
 
-  // Phosphor Icons map-pin-light path, scaled to canvas size
-  const scale = size / 256;
-  const path = new Path2D(
-    "M128,66a38,38,0,1,0,38,38A38,38,0,0,0,128,66Z" +
-    "m0,64a26,26,0,1,1,26-26A26,26,0,0,1,128,130Z" +
-    "m0-112a86.1,86.1,0,0,0-86,86c0,30.91,14.34,63.74,41.47,94.94" +
-    "a252.32,252.32,0,0,0,41.09,38,6,6,0,0,0,6.88,0" +
-    "a252.32,252.32,0,0,0,41.09-38c27.13-31.2,41.47-64,41.47-94.94" +
-    "A86.1,86.1,0,0,0,128,18Zm0,206.51C113,212.93,54,163.62,54,104" +
-    "a74,74,0,0,1,148,0C202,163.62,143,212.93,128,224.51Z"
-  );
-
   const color = isSelected
     ? colorForCategorySelected(categoryId)
     : colorForCategory(categoryId);
   const ringColor = isSelected ? "#ffffff" : null;
 
-  ctx.save();
-  ctx.translate(size / 2 - 128 * scale, size / 2 - 128 * scale);
-  ctx.scale(scale, scale);
+  // Draw phosphor pin base
+  drawPhosphorPin(ctx, size / 2, size * 0.3, size, color, ringColor, "#ffffff");
 
-  ctx.fillStyle = color;
-  ctx.fill(path);
+  // Draw category icon in the pin head center
+  const headY = size * 0.3;
+  const r = size * 0.26;
+  drawCategoryIcon(ctx, size / 2, size * 0.3, size, categoryId);
 
-  if (ringColor) {
-    ctx.strokeStyle = ringColor;
-    ctx.lineWidth = 4 * scale;
-    ctx.stroke(path);
-  }
-
-  // Inner dot (white)
+  // White dot overlay (smaller, on top of category icon)
   ctx.fillStyle = "#ffffff";
   ctx.beginPath();
-  ctx.arc(128, 90, 10 * scale, 0, Math.PI * 2);
+  ctx.arc(size / 2, size * 0.3, size * 0.08, 0, Math.PI * 2);
   ctx.fill();
-
-  // Draw category icon in the center (at pin head center)
-  ctx.restore();
-  // Map the phosphor center (128, 90) to our canvas coordinates
-  const pinCx = size / 2;
-  const pinCy = 90 * scale + (size / 2 - 128 * scale);
-  drawCategoryIcon(ctx, pinCx, pinCy, size, categoryId);
 
   return ctx.getImageData(0, 0, size, size);
 }

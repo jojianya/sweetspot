@@ -77,46 +77,8 @@ func (h *Handler) ListCategories(c *gin.Context) {
 	response.OK(c, categories)
 }
 
-// parseBbox validates and parses the bbox query param
-// (minLat,minLng,maxLat,maxLng). On failure it writes the error response and
-// returns ok=false.
-func parseBbox(c *gin.Context) (bbox [4]float64, ok bool) {
-	bboxStr := c.Query("bbox")
-	if bboxStr == "" {
-		response.BadRequest(c, "bbox query param required (minLat,minLng,maxLat,maxLng)")
-		return bbox, false
-	}
-
-	parts := strings.Split(bboxStr, ",")
-	if len(parts) != 4 {
-		response.BadRequest(c, "bbox must be 4 comma-separated floats (minLat,minLng,maxLat,maxLng)")
-		return bbox, false
-	}
-	for i, p := range parts {
-		v, err := strconv.ParseFloat(strings.TrimSpace(p), 64)
-		if err != nil {
-			response.BadRequest(c, "bbox must be 4 comma-separated floats")
-			return bbox, false
-		}
-		bbox[i] = v
-	}
-	if bbox[0] < -90 || bbox[0] > 90 || bbox[2] < -90 || bbox[2] > 90 {
-		response.BadRequest(c, "latitudes must be between -90 and 90")
-		return bbox, false
-	}
-	if bbox[1] < -180 || bbox[1] > 180 || bbox[3] < -180 || bbox[3] > 180 {
-		response.BadRequest(c, "longitudes must be between -180 and 180")
-		return bbox, false
-	}
-	if bbox[0] > bbox[2] || bbox[1] > bbox[3] {
-		response.BadRequest(c, "bbox min must not exceed max (minLat,minLng,maxLat,maxLng)")
-		return bbox, false
-	}
-	return bbox, true
-}
-
 func (h *Handler) GetPins(c *gin.Context) {
-	bbox, ok := parseBbox(c)
+	bbox, ok := httpx.ParseBbox(c)
 	if !ok {
 		return
 	}
@@ -161,7 +123,7 @@ func (h *Handler) GetPins(c *gin.Context) {
 // ranks them by a hotness score (views and comments, decayed by age) so fresh
 // pins with the same activity outrank older ones.
 func (h *Handler) GetTrending(c *gin.Context) {
-	bbox, ok := parseBbox(c)
+	bbox, ok := httpx.ParseBbox(c)
 	if !ok {
 		return
 	}

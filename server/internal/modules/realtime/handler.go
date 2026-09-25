@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
@@ -30,22 +31,8 @@ func NewHandler(broker *Broker) *Handler {
 func (h *Handler) Stream(c *gin.Context) {
 	var bbox *[4]float64
 	if raw := strings.TrimSpace(c.Query("bbox")); raw != "" {
-		parts := strings.Split(raw, ",")
-		if len(parts) != 4 {
-			response.BadRequest(c, "bbox must be 4 comma-separated floats (minLat,minLng,maxLat,maxLng)")
-			return
-		}
-		var b [4]float64
-		for i, p := range parts {
-			v, err := strconv.ParseFloat(strings.TrimSpace(p), 64)
-			if err != nil {
-				response.BadRequest(c, "bbox must be 4 comma-separated floats")
-				return
-			}
-			b[i] = v
-		}
-		if b[0] > b[2] || b[1] > b[3] {
-			response.BadRequest(c, "bbox min must not exceed max (minLat,minLng,maxLat,maxLng)")
+		b, ok := httpx.ParseBbox(c)
+		if !ok {
 			return
 		}
 		bbox = &b

@@ -63,20 +63,7 @@ function colorForCategory(categoryId: number, selected: boolean): string {
   return colors[categoryId % colors.length];
 }
 
-/**
- * Draws the geometry of react-icons/pi's PiMapPinSimpleLight using canvas
- * primitives so MapLibre receives a raster ImageData rather than a React
- * component. The source icon uses a 256x256 viewBox with a 54px outer
- * circle, a 42px circular opening, and a centered 12px stem.
- *
- * Keeping the geometry as primitives avoids relying on Path2D parsing for
- * runtime-generated map images while preserving the canonical silhouette.
- *
- * The pin is drawn as two subpaths in a single path (head circle + stem).
- * Exactly one fill() and one stroke() call are made per icon to avoid
- * double-draw artifacts. The inner circle is cut out once with
- * destination-out.
- */
+/** Draws a high-contrast teardrop pin with a centered category-color core. */
 function drawSimplePin(
   ctx: CanvasRenderingContext2D,
   size: number,
@@ -84,16 +71,6 @@ function drawSimplePin(
   ringColor: string | null
 ): void {
   const scale = size / PIN_VIEWBOX_SIZE;
-  const centerX = 128;
-  const headY = 72;
-  const outerRadius = 54;
-  const innerRadius = 42;
-  const stemHalfWidth = 6;
-  const stemTopY = 125.66;
-  const stemBottomY = 232;
-  const stemBottomRadius = 6;
-  const ringWidth = 6;
-
   ctx.save();
   ctx.translate(
     (size - PIN_VIEWBOX_SIZE * scale) / 2,
@@ -101,48 +78,30 @@ function drawSimplePin(
   );
   ctx.scale(scale, scale);
 
-  // Build the complete pin shape (head circle + stem) as two subpaths
-  // in a single path. The circle arc is a full 2π (already closed).
-  // The stem subpath is closed explicitly.
+  // Keep the silhouette inset so its outline remains crisp at small sizes.
   ctx.beginPath();
-  // Subpath 1: head circle (full 2π arc = already closed)
-  ctx.arc(centerX, headY, outerRadius, 0, Math.PI * 2);
-  // Subpath 2: stem (separate subpath, closed explicitly)
-  ctx.moveTo(centerX - stemHalfWidth, stemTopY);
-  ctx.lineTo(centerX - stemHalfWidth, stemBottomY);
-  ctx.arc(
-    centerX,
-    stemBottomY,
-    stemBottomRadius,
-    Math.PI,
-    0,
-    true
-  );
-  ctx.lineTo(centerX + stemHalfWidth, stemTopY);
-  ctx.closePath(); // closes ONLY the stem subpath
+  ctx.moveTo(128, 244);
+  ctx.bezierCurveTo(110, 218, 42, 144, 42, 91);
+  ctx.bezierCurveTo(42, 43, 80, 12, 128, 12);
+  ctx.bezierCurveTo(176, 12, 214, 43, 214, 91);
+  ctx.bezierCurveTo(214, 144, 146, 218, 128, 244);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = ringColor ?? "#ffffff";
+  ctx.lineWidth = ringColor ? 14 : 10;
+  ctx.lineJoin = "round";
+  ctx.stroke();
 
-  if (ringColor) {
-    // Selected: white stroke (ring), category-color fill
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = ringWidth;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.stroke();
-  } else {
-    // Non-selected: category-color stroke, light transparent fill
-    ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
-    ctx.fill();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-  }
-
-  // Cut out the inner circle (transparent center) — same for both states
-  ctx.globalCompositeOperation = "destination-out";
+  // A white inset keeps category colors legible without hollowing out the pin.
   ctx.beginPath();
-  ctx.arc(centerX, headY, innerRadius, 0, Math.PI * 2);
+  ctx.arc(128, 88, 33, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(128, 88, 15, 0, Math.PI * 2);
+  ctx.fillStyle = color;
   ctx.fill();
 
   ctx.restore();

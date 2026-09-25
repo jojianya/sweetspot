@@ -83,9 +83,9 @@ function drawCategoryIcon(
     case 2: // Nature — Tree
       // Crown: two arcs on the circle boundary (matching SVG TreeIcon)
       // Circle: center (cx, cy), radius r = size * 0.26
-      // Crown arcs at circle boundary: center offset by r * 0.7, radius r * 0.7
-      const crownR = r * 0.7;
-      const crownOffsetX = r * 0.7;
+      // Crown arcs at circle boundary: center offset by r * 0.5, radius r * 0.5
+      const crownR = r * 0.5;
+      const crownOffsetX = r * 0.5;
       // Left crown arc (center-left)
       ctx.beginPath();
       ctx.arc(cx - crownOffsetX, cy, crownR, Math.PI, 0);
@@ -94,7 +94,7 @@ function drawCategoryIcon(
       ctx.arc(cx + crownOffsetX, cy, crownR, Math.PI, 0);
       // Trunk: from circle bottom (cy + r) down to tip area
       ctx.moveTo(cx, cy + r);
-      ctx.lineTo(cx, cy + r + s * 0.8);
+      ctx.lineTo(cx, cy + r + s * 0.5);
       ctx.stroke();
       break;
     case 3: // Event — Calendar

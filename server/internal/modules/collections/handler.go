@@ -18,15 +18,15 @@ type CollectionRequest struct {
 }
 
 type Handler struct {
-	service Service
+	repo Repository
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(repo Repository) *Handler {
+	return &Handler{repo: repo}
 }
 
 func (h *Handler) ListMine(c *gin.Context) {
-	collections, err := h.service.ListByUser(c.Request.Context(), middleware.GetUserID(c))
+	collections, err := h.repo.ListByUser(c.Request.Context(), middleware.GetUserID(c))
 	if err != nil {
 		response.Internal(c, "collections: list mine", err, "user_id", middleware.GetUserID(c))
 		return
@@ -36,7 +36,7 @@ func (h *Handler) ListMine(c *gin.Context) {
 
 func (h *Handler) ListByUser(c *gin.Context) {
 	userID := c.Param("id")
-	exists, err := h.service.UserExists(c.Request.Context(), userID)
+	exists, err := h.repo.UserExists(c.Request.Context(), userID)
 	if err != nil {
 		response.Internal(c, "collections: user exists", err, "user_id", userID)
 		return
@@ -46,7 +46,7 @@ func (h *Handler) ListByUser(c *gin.Context) {
 		return
 	}
 
-	collections, err := h.service.ListByUser(c.Request.Context(), userID)
+	collections, err := h.repo.ListByUser(c.Request.Context(), userID)
 	if err != nil {
 		response.Internal(c, "collections: list by user", err, "user_id", userID)
 		return
@@ -88,7 +88,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	collection, err := h.service.Create(c.Request.Context(), middleware.GetUserID(c), name, description)
+	collection, err := h.repo.Create(c.Request.Context(), middleware.GetUserID(c), name, description)
 	if err != nil {
 		response.Internal(c, "collections: create", err, "user_id", middleware.GetUserID(c))
 		return
@@ -98,22 +98,29 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) Get(c *gin.Context) {
-	detail, err := h.service.CollectionDetail(c.Request.Context(), c.Param("id"))
+	id := c.Param("id")
+	collection, err := h.repo.Get(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return
 		}
-		response.Internal(c, "collections: get", err, "collection_id", c.Param("id"))
+		response.Internal(c, "collections: get", err, "collection_id", id)
 		return
 	}
 
-	response.OK(c, gin.H{"collection": detail})
+	pins, err := h.repo.ListPins(c.Request.Context(), id)
+	if err != nil {
+		response.Internal(c, "collections: get pins", err, "collection_id", id)
+		return
+	}
+
+	response.OK(c, gin.H{"collection": CollectionDetail{Collection: collection, Pins: pins}})
 }
 
 // requireOwner aborts unless the caller owns the collection (or moderates).
 func (h *Handler) requireOwner(c *gin.Context) bool {
-	collection, err := h.service.Get(c.Request.Context(), c.Param("id"))
+	collection, err := h.repo.Get(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
@@ -150,7 +157,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.Update(c.Request.Context(), c.Param("id"), name, description); err != nil {
+	if err := h.repo.Update(c.Request.Context(), c.Param("id"), name, description); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return
@@ -167,7 +174,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.Delete(c.Request.Context(), c.Param("id")); err != nil {
+	if err := h.repo.Delete(c.Request.Context(), c.Param("id")); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return
@@ -185,7 +192,7 @@ func (h *Handler) AddPin(c *gin.Context) {
 	}
 
 	pinID := c.Param("pinId")
-	exists, err := h.service.PinExists(c.Request.Context(), pinID)
+	exists, err := h.repo.PinExists(c.Request.Context(), pinID)
 	if err != nil {
 		response.Internal(c, "collections: pin exists", err, "pin_id", pinID)
 		return
@@ -195,7 +202,7 @@ func (h *Handler) AddPin(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.AddPin(c.Request.Context(), c.Param("id"), pinID); err != nil {
+	if err := h.repo.AddPin(c.Request.Context(), c.Param("id"), pinID); err != nil {
 		response.Internal(c, "collections: add pin", err, "collection_id", c.Param("id"), "pin_id", pinID)
 		return
 	}
@@ -208,7 +215,7 @@ func (h *Handler) RemovePin(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.RemovePin(c.Request.Context(), c.Param("id"), c.Param("pinId")); err != nil {
+	if err := h.repo.RemovePin(c.Request.Context(), c.Param("id"), c.Param("pinId")); err != nil {
 		response.Internal(c, "collections: remove pin", err, "collection_id", c.Param("id"), "pin_id", c.Param("pinId"))
 		return
 	}

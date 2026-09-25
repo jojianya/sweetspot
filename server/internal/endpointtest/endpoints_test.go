@@ -259,7 +259,7 @@ func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo 
 		UserService: usersSvc,
 	})
 
-	favH := favorites.NewHandler(favorites.NewService(favRepo))
+	favH := favorites.NewHandler(favRepo)
 	favorites.RegisterRoutes(jsonRoutes, favH, favorites.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
 
 	return r

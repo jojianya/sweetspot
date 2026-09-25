@@ -11,11 +11,11 @@ const feedDefaultLimit = 50
 const feedMaxLimit = 100
 
 type Handler struct {
-	service Service
+	repo Repository
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(repo Repository) *Handler {
+	return &Handler{repo: repo}
 }
 
 func (h *Handler) followTarget(c *gin.Context) (string, bool) {
@@ -25,7 +25,7 @@ func (h *Handler) followTarget(c *gin.Context) (string, bool) {
 		return "", false
 	}
 
-	exists, err := h.service.UserExists(c.Request.Context(), targetID)
+	exists, err := h.repo.UserExists(c.Request.Context(), targetID)
 	if err != nil {
 		response.Internal(c, "social: user exists", err, "user_id", targetID)
 		return "", false
@@ -43,7 +43,7 @@ func (h *Handler) Follow(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.Follow(c.Request.Context(), middleware.GetUserID(c), targetID); err != nil {
+	if err := h.repo.Follow(c.Request.Context(), middleware.GetUserID(c), targetID); err != nil {
 		response.Internal(c, "social: follow", err, "user_id", middleware.GetUserID(c), "target", targetID)
 		return
 	}
@@ -57,7 +57,7 @@ func (h *Handler) Unfollow(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.Unfollow(c.Request.Context(), middleware.GetUserID(c), targetID); err != nil {
+	if err := h.repo.Unfollow(c.Request.Context(), middleware.GetUserID(c), targetID); err != nil {
 		response.Internal(c, "social: unfollow", err, "user_id", middleware.GetUserID(c), "target", targetID)
 		return
 	}
@@ -68,7 +68,7 @@ func (h *Handler) Unfollow(c *gin.Context) {
 func (h *Handler) Stats(c *gin.Context) {
 	userID := c.Param("id")
 
-	exists, err := h.service.UserExists(c.Request.Context(), userID)
+	exists, err := h.repo.UserExists(c.Request.Context(), userID)
 	if err != nil {
 		response.Internal(c, "social: user exists", err, "user_id", userID)
 		return
@@ -80,20 +80,20 @@ func (h *Handler) Stats(c *gin.Context) {
 
 	viewerID := middleware.GetUserID(c)
 	stats := Stats{}
-	if stats.Followers, err = h.service.CountFollowers(c.Request.Context(), userID); err != nil {
+	if stats.Followers, err = h.repo.CountFollowers(c.Request.Context(), userID); err != nil {
 		response.Internal(c, "social: count followers", err, "user_id", userID)
 		return
 	}
-	if stats.Following, err = h.service.CountFollowing(c.Request.Context(), userID); err != nil {
+	if stats.Following, err = h.repo.CountFollowing(c.Request.Context(), userID); err != nil {
 		response.Internal(c, "social: count following", err, "user_id", userID)
 		return
 	}
-	if stats.PinsCount, err = h.service.CountPins(c.Request.Context(), userID); err != nil {
+	if stats.PinsCount, err = h.repo.CountPins(c.Request.Context(), userID); err != nil {
 		response.Internal(c, "social: count pins", err, "user_id", userID)
 		return
 	}
 	if viewerID != "" && viewerID != userID {
-		if stats.IsFollowing, err = h.service.IsFollowing(c.Request.Context(), viewerID, userID); err != nil {
+		if stats.IsFollowing, err = h.repo.IsFollowing(c.Request.Context(), viewerID, userID); err != nil {
 			response.Internal(c, "social: is following", err, "user_id", viewerID, "target", userID)
 			return
 		}
@@ -108,7 +108,7 @@ func (h *Handler) Feed(c *gin.Context) {
 		return
 	}
 
-	pins, err := h.service.Feed(c.Request.Context(), middleware.GetUserID(c), limit)
+	pins, err := h.repo.Feed(c.Request.Context(), middleware.GetUserID(c), limit)
 	if err != nil {
 		response.Internal(c, "social: feed", err, "user_id", middleware.GetUserID(c))
 		return

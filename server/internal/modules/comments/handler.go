@@ -13,11 +13,11 @@ import (
 const maxCommentLength = 500
 
 type Handler struct {
-	service Service
+	repo Repository
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(repo Repository) *Handler {
+	return &Handler{repo: repo}
 }
 
 // isModerator reports whether the caller holds a moderation role.
@@ -27,7 +27,7 @@ func isModerator(c *gin.Context) bool {
 }
 
 func (h *Handler) List(c *gin.Context) {
-	comments, err := h.service.ListByPin(c.Request.Context(), c.Param("id"))
+	comments, err := h.repo.ListByPin(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		response.Internal(c, "comments: list", err, "pin_id", c.Param("id"))
 		return
@@ -52,7 +52,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	comment, err := h.service.Create(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), body)
+	comment, err := h.repo.Create(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), body)
 	if err != nil {
 		response.Internal(c, "comments: create", err, "pin_id", c.Param("id"))
 		return
@@ -63,7 +63,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-	comment, err := h.service.Get(c.Request.Context(), c.Param("id"))
+	comment, err := h.repo.Get(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "comment not found")
@@ -76,12 +76,12 @@ func (h *Handler) Delete(c *gin.Context) {
 	// Moderators soft-delete (keeps an audit trail); the author removes it
 	// outright.
 	if isModerator(c) {
-		if err := h.service.Hide(c.Request.Context(), comment.ID.String()); err != nil {
+		if err := h.repo.Hide(c.Request.Context(), comment.ID.String()); err != nil {
 			response.Internal(c, "comments: hide", err, "comment_id", comment.ID.String())
 			return
 		}
 	} else if comment.UserID.String() == userID {
-		if err := h.service.Delete(c.Request.Context(), comment.ID.String()); err != nil {
+		if err := h.repo.Delete(c.Request.Context(), comment.ID.String()); err != nil {
 			response.Internal(c, "comments: delete", err, "comment_id", comment.ID.String())
 			return
 		}

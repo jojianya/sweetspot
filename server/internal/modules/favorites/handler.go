@@ -7,18 +7,18 @@ import (
 )
 
 type Handler struct {
-	service Service
+	repo Repository
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(repo Repository) *Handler {
+	return &Handler{repo: repo}
 }
 
 func (h *Handler) Save(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	pinID := c.Param("id")
 
-	exists, err := h.service.PinExists(c.Request.Context(), pinID)
+	exists, err := h.repo.PinExists(c.Request.Context(), pinID)
 	if err != nil {
 		response.Internal(c, "favorite: pin exists", err, "pin_id", pinID)
 		return
@@ -28,7 +28,7 @@ func (h *Handler) Save(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.SavePin(c.Request.Context(), userID, pinID); err != nil {
+	if err := h.repo.Save(c.Request.Context(), userID, pinID); err != nil {
 		response.Internal(c, "favorite: save", err, "user_id", userID, "pin_id", pinID)
 		return
 	}
@@ -40,7 +40,7 @@ func (h *Handler) Unsave(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	pinID := c.Param("id")
 
-	saved, err := h.service.IsSaved(c.Request.Context(), userID, pinID)
+	saved, err := h.repo.IsSaved(c.Request.Context(), userID, pinID)
 	if err != nil {
 		response.Internal(c, "favorite: is saved", err, "user_id", userID, "pin_id", pinID)
 		return
@@ -50,7 +50,7 @@ func (h *Handler) Unsave(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UnsavePin(c.Request.Context(), userID, pinID); err != nil {
+	if err := h.repo.Unsave(c.Request.Context(), userID, pinID); err != nil {
 		response.Internal(c, "favorite: unsave", err, "user_id", userID, "pin_id", pinID)
 		return
 	}
@@ -61,7 +61,7 @@ func (h *Handler) Unsave(c *gin.Context) {
 func (h *Handler) GetSaved(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	entries, err := h.service.List(c.Request.Context(), userID)
+	entries, err := h.repo.List(c.Request.Context(), userID)
 	if err != nil {
 		response.Internal(c, "favorite: list", err, "user_id", userID)
 		return
@@ -73,7 +73,7 @@ func (h *Handler) GetSaved(c *gin.Context) {
 func (h *Handler) GetSavedIDs(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	ids, err := h.service.ListIDs(c.Request.Context(), userID)
+	ids, err := h.repo.ListIDs(c.Request.Context(), userID)
 	if err != nil {
 		response.Internal(c, "favorite: list ids", err, "user_id", userID)
 		return

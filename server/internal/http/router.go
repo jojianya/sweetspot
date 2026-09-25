@@ -72,7 +72,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	realtimeHandler := realtime.NewHandler(c.Events)
 	jsonRoutes.GET("/events", realtimeHandler.Stream)
 
-	pinHandler := pins.NewHandler(pins.NewService(c.PinRepo), c.Store, c.Events)
+	pinHandler := pins.NewHandler(c.PinRepo, c.Store, c.Events)
 	pins.RegisterRoutes(uploadRoutes, pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
 	reportHandler := reports.NewHandler(reports.NewService(c.ReportRepo))
@@ -82,19 +82,19 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		UserService: c.UserService,
 	})
 
-	favoriteHandler := favorites.NewHandler(favorites.NewService(c.FavoriteRepo))
+	favoriteHandler := favorites.NewHandler(c.FavoriteRepo)
 	favorites.RegisterRoutes(jsonRoutes, favoriteHandler, favorites.RouteOptions{
 		JWTSecret: cfg.JWTSecret,
 		Blacklist: c.Blacklist,
 	})
 
-	commentHandler := comments.NewHandler(comments.NewService(c.CommentRepo))
+	commentHandler := comments.NewHandler(c.CommentRepo)
 	comments.RegisterRoutes(jsonRoutes, commentHandler, comments.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
-	socialHandler := social.NewHandler(social.NewService(c.SocialRepo))
+	socialHandler := social.NewHandler(c.SocialRepo)
 	social.RegisterRoutes(jsonRoutes, socialHandler, social.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
-	collectionHandler := collections.NewHandler(collections.NewService(c.CollectionRepo))
+	collectionHandler := collections.NewHandler(c.CollectionRepo)
 	collections.RegisterRoutes(jsonRoutes, collectionHandler, collections.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
 
 	return r

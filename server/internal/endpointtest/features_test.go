@@ -244,16 +244,16 @@ func setupFeaturesRouter(
 	// Registered on uploadRoutes: PATCH /users/me is multipart (avatar upload).
 	users.RegisterRoutes(uploadRoutes, userH, users.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
-	pinH := pins.NewHandler(pins.NewService(pinRepo), store, nil)
+	pinH := pins.NewHandler(pinRepo, store, nil)
 	pins.RegisterRoutes(uploadRoutes, pinH, pins.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
-	commentH := comments.NewHandler(comments.NewService(commentRepo))
+	commentH := comments.NewHandler(commentRepo)
 	comments.RegisterRoutes(jsonRoutes, commentH, comments.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
-	socialH := social.NewHandler(social.NewService(socialRepo))
+	socialH := social.NewHandler(socialRepo)
 	social.RegisterRoutes(jsonRoutes, socialH, social.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
-	colH := collections.NewHandler(collections.NewService(collectionRepo))
+	colH := collections.NewHandler(collectionRepo)
 	collections.RegisterRoutes(jsonRoutes, colH, collections.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
 	return r, store

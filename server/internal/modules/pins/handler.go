@@ -50,16 +50,16 @@ type photoErr struct {
 }
 
 type Handler struct {
-	service Service
-	store   *storage.Local
-	events  Events
+	repo   Repository
+	store  *storage.Local
+	events Events
 }
 
-func NewHandler(service Service, store *storage.Local, events Events) *Handler {
+func NewHandler(repo Repository, store *storage.Local, events Events) *Handler {
 	if events == nil {
 		events = nopEvents{}
 	}
-	return &Handler{service: service, store: store, events: events}
+	return &Handler{repo: repo, store: store, events: events}
 }
 
 // nopEvents is the zero-value event publisher used when realtime is disabled.
@@ -68,7 +68,7 @@ type nopEvents struct{}
 func (nopEvents) PinCreated(context.Context, Event) {}
 
 func (h *Handler) ListCategories(c *gin.Context) {
-	categories, err := h.service.ListCategories(c.Request.Context())
+	categories, err := h.repo.ListCategories(c.Request.Context())
 	if err != nil {
 		response.Internal(c, "pins: list categories", err)
 		return
@@ -94,7 +94,7 @@ func (h *Handler) GetPins(c *gin.Context) {
 	}
 
 	if categoryID != nil {
-		exists, err := h.service.CategoryExists(c.Request.Context(), *categoryID)
+		exists, err := h.repo.CategoryExists(c.Request.Context(), *categoryID)
 		if err != nil {
 			response.Internal(c, "pins: category exists", err, "category_id", *categoryID)
 			return
@@ -110,7 +110,7 @@ func (h *Handler) GetPins(c *gin.Context) {
 		return
 	}
 
-	pins, err := h.service.ListPins(c.Request.Context(), bbox, categoryID, limit)
+	pins, err := h.repo.ListPins(c.Request.Context(), bbox, categoryID, limit)
 	if err != nil {
 		response.Internal(c, "pins: list", err)
 		return
@@ -133,7 +133,7 @@ func (h *Handler) GetTrending(c *gin.Context) {
 		return
 	}
 
-	pins, err := h.service.ListTrending(c.Request.Context(), bbox, limit)
+	pins, err := h.repo.ListTrending(c.Request.Context(), bbox, limit)
 	if err != nil {
 		response.Internal(c, "pins: trending", err)
 		return
@@ -143,7 +143,7 @@ func (h *Handler) GetTrending(c *gin.Context) {
 }
 
 func (h *Handler) GetPin(c *gin.Context) {
-	pin, err := h.service.GetPin(c.Request.Context(), c.Param("id"))
+	pin, err := h.repo.GetPin(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
@@ -178,7 +178,7 @@ func canViewHidden(c *gin.Context, pin PinDetail) bool {
 // counts, so SSR fetches and crawlers calling GET /pins/:id do not inflate the
 // number — the client registers views explicitly when a detail is opened.
 func (h *Handler) RegisterView(c *gin.Context) {
-	views, err := h.service.RegisterView(c.Request.Context(), c.Param("id"))
+	views, err := h.repo.RegisterView(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
@@ -198,7 +198,7 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeletePin(c.Request.Context(), c.Param("id"), userID); err != nil {
+	if err := h.repo.DeletePin(c.Request.Context(), c.Param("id"), userID); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
 			return
@@ -222,7 +222,7 @@ func (h *Handler) CreatePin(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	userExists, err := h.service.UserExists(c.Request.Context(), userID)
+	userExists, err := h.repo.UserExists(c.Request.Context(), userID)
 	if err != nil {
 		response.Internal(c, "create pin: user exists", err, "user_id", userID)
 		return
@@ -281,7 +281,7 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		return
 	}
 
-	exists, err := h.service.CategoryExists(c.Request.Context(), categoryID)
+	exists, err := h.repo.CategoryExists(c.Request.Context(), categoryID)
 	if err != nil {
 		response.Internal(c, "create pin: category exists", err, "category_id", categoryID)
 		return
@@ -298,7 +298,7 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		return
 	}
 
-	pin, err := h.service.CreatePin(c.Request.Context(), NewPin{
+	pin, err := h.repo.CreatePin(c.Request.Context(), NewPin{
 		UserID:        middleware.GetUserID(c),
 		Lat:           lat,
 		Lng:           lng,
@@ -435,7 +435,7 @@ func (h *Handler) SearchPins(c *gin.Context) {
 		return
 	}
 
-	pins, err := h.service.SearchPins(c.Request.Context(), q, limit)
+	pins, err := h.repo.SearchPins(c.Request.Context(), q, limit)
 	if err != nil {
 		response.Internal(c, "search pins", err, "query", q)
 		return
@@ -451,7 +451,7 @@ func (h *Handler) ListByUser(c *gin.Context) {
 		return
 	}
 
-	pins, err := h.service.ListByUser(c.Request.Context(), c.Param("id"), limit)
+	pins, err := h.repo.ListByUser(c.Request.Context(), c.Param("id"), limit)
 	if err != nil {
 		response.Internal(c, "pins: list by user", err, "user_id", c.Param("id"))
 		return
@@ -469,7 +469,7 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	id := c.Param("id")
 
-	existing, err := h.service.GetPin(c.Request.Context(), id)
+	existing, err := h.repo.GetPin(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
@@ -504,7 +504,7 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 			response.BadRequest(c, "category_id must be an integer")
 			return
 		}
-		exists, err := h.service.CategoryExists(c.Request.Context(), idv)
+		exists, err := h.repo.CategoryExists(c.Request.Context(), idv)
 		if err != nil {
 			response.Internal(c, "update pin: category exists", err, "category_id", idv)
 			return
@@ -549,7 +549,7 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		}
 	}
 
-	updated, err := h.service.UpdatePin(c.Request.Context(), id, patch)
+	updated, err := h.repo.UpdatePin(c.Request.Context(), id, patch)
 	if err != nil {
 		// The new photos are already on disk; remove them so a failed update
 		// cannot orphan files.

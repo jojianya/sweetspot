@@ -183,3 +183,81 @@ export function ChatIcon({ className = "h-4 w-4" }: IconProps) {
     </svg>
   );
 }
+
+// Category icons — stroke-based, 24x24, matching app icon style
+export function UtensilsIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+      <path d="M7 2v20" />
+      <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+      <path d="M21 15v6" />
+    </svg>
+  );
+}
+
+export function TreeIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 20v-5" />
+      <path d="M12 15a5 5 0 0 0-5-5" />
+      <path d="M12 15a5 5 0 0 1 5-5" />
+      <path d="M12 2v3" />
+    </svg>
+  );
+}
+
+export function CalendarIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4" />
+      <path d="M8 2v4" />
+      <path d="M3 10h18" />
+    </svg>
+  );
+}
+
+export function MoonIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    </svg>
+  );
+}
+
+export function PaletteIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="13.5" cy="6.5" r="2.5" />
+      <circle cx="18.5" cy="11.5" r="2.5" />
+      <circle cx="13.5" cy="17.5" r="2.5" />
+      <circle cx="8.5" cy="11.5" r="2.5" />
+      <path d="M13.5 6.5 5 15 4 19 8 18.5" />
+    </svg>
+  );
+}
+
+export function TrophyIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M6 9 5.5 6a2 2 0 0 1 2.8 0l.5 3" />
+      <path d="M18 9l.5-3a2 2 0 0 1 2.8 0l.5 3" />
+      <path d="M4 21h16" />
+      <path d="M8 14v7" />
+      <path d="M16 14v7" />
+      <path d="M12 5v14" />
+    </svg>
+  );
+}
+
+export function GlobeIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M2 12h20" />
+      <path d="M12 2a15.3 15.3 0 0 1 0 20" />
+      <path d="M12 2a15.3 15.3 0 0 0 0 20" />
+    </svg>
+  );
+}

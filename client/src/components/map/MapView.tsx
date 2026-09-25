@@ -239,6 +239,7 @@ export default function MapView({
           caption: p.caption ?? "",
           username: p.username ?? "",
           cover: p.cover_url,
+          category_id: p.category_id,
         },
       });
     }

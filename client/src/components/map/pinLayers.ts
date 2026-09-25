@@ -63,6 +63,7 @@ function drawCategoryIcon(
   categoryId: number
 ): void {
   const s = size * 0.35; // icon scale factor
+  const r = size * 0.26; // circle radius (matches makePinIcon)
   const stroke = size * 0.035;
   ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = stroke;
@@ -80,13 +81,20 @@ function drawCategoryIcon(
       ctx.stroke();
       break;
     case 2: // Nature — Tree
+      // Crown: two arcs on the circle boundary (matching SVG TreeIcon)
+      // Circle: center (cx, cy), radius r = size * 0.26
+      // Crown arcs at circle boundary: center offset by r * 0.7, radius r * 0.7
+      const crownR = r * 0.7;
+      const crownOffsetX = r * 0.7;
+      // Left crown arc (center-left)
       ctx.beginPath();
-      ctx.moveTo(cx, cy - s * 0.9);
-      ctx.lineTo(cx, cy + s * 0.2);
-      ctx.moveTo(cx - s * 0.7, cy + s * 0.2);
-      ctx.quadraticCurveTo(cx, cy - s * 0.7, cx + s * 0.7, cy + s * 0.2);
-      ctx.moveTo(cx, cy - s * 0.3);
-      ctx.lineTo(cx, cy - s * 0.9);
+      ctx.arc(cx - crownOffsetX, cy, crownR, Math.PI, 0);
+      // Right crown arc (center-right)
+      ctx.moveTo(cx + crownOffsetX + crownR, cy);
+      ctx.arc(cx + crownOffsetX, cy, crownR, Math.PI, 0);
+      // Trunk: from circle bottom (cy + r) down to tip area
+      ctx.moveTo(cx, cy + r);
+      ctx.lineTo(cx, cy + r + s * 0.8);
       ctx.stroke();
       break;
     case 3: // Event — Calendar

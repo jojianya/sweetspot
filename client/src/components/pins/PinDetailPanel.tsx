@@ -4,7 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PanelSheet from "@/components/PanelSheet";
-import { BookmarkIcon, CloseIcon } from "@/components/icons";
+import {
+  BookmarkIcon,
+  ChatIcon,
+  CloseIcon,
+  DirectionsIcon,
+  ListIcon,
+  PersonIcon,
+  PinIcon,
+  ShareIcon,
+} from "@/components/icons";
 import PhotoLightbox from "./PhotoLightbox";
 import CommentsSection from "./CommentsSection";
 import PinEditSheet from "./PinEditSheet";
@@ -22,70 +31,6 @@ import { useSavedStatus } from "@/hooks/useFavorites";
 interface PinDetailPanelProps {
   pin: PinDetail;
   onClose: () => void;
-}
-
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  viewBox: "0 0 24 24",
-};
-
-function DirectionsIcon() {
-  return (
-    <svg className="h-5 w-5" {...stroke} aria-hidden>
-      <path d="M7 7h10v10" />
-      <path d="M7 17 17 7" />
-    </svg>
-  );
-}
-
-function ShareIcon() {
-  return (
-    <svg className="h-5 w-5" {...stroke} aria-hidden>
-      <circle cx="6" cy="12" r="2.6" />
-      <circle cx="18" cy="6" r="2.6" />
-      <circle cx="18" cy="18" r="2.6" />
-      <path d="m8.6 10.9 6.8-3.8M8.6 13.1l6.8 3.8" />
-    </svg>
-  );
-}
-
-function PinIcon() {
-  return (
-    <svg className="h-4 w-4" {...stroke} aria-hidden>
-      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
-}
-
-function PersonIcon() {
-  return (
-    <svg className="h-4 w-4" {...stroke} aria-hidden>
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" />
-    </svg>
-  );
-}
-
-function ListIcon() {
-  return (
-    <svg className="h-4 w-4" {...stroke} aria-hidden>
-      <path d="M8 6h12M8 12h12M8 18h12" />
-      <path d="M3 6h.01M3 12h.01M3 18h.01" />
-    </svg>
-  );
-}
-
-function ChatIcon() {
-  return (
-    <svg className="h-4 w-4" {...stroke} aria-hidden>
-      <path d="M21 12a8 8 0 0 1-8 8H4l2.5-2.5A8 8 0 1 1 21 12Z" />
-    </svg>
-  );
 }
 
 export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPanelProps) {

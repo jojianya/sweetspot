@@ -2,30 +2,12 @@
 
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
+import { ChevronRightIcon, FeedIcon, PinIcon } from "@/components/icons";
 import { fetchFeed } from "@/lib/api";
 import { relativeTime } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import type { PinListEntry } from "@/lib/types";
-
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  viewBox: "0 0 24 24",
-};
-
-function FeedIcon() {
-  return (
-    <svg className="h-5 w-5" {...stroke} aria-hidden>
-      <path d="M4 19V5a2 2 0 0 1 2-2h13v16" />
-      <path d="M4 19a2 2 0 0 0 2 2h13" />
-      <path d="M9 7h6M9 11h6M9 15h4" />
-    </svg>
-  );
-}
 
 export default function FeedPage() {
   const { token } = useAuth();
@@ -123,10 +105,7 @@ export default function FeedPage() {
                   />
                 ) : (
                   <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-300 dark:bg-zinc-800 dark:text-zinc-600">
-                    <svg className="h-5 w-5" {...stroke} aria-hidden>
-                      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-                      <circle cx="12" cy="10" r="3" />
-                    </svg>
+                    <PinIcon className="h-5 w-5" />
                   </span>
                 )}
                 <span className="min-w-0 flex-1">
@@ -143,13 +122,7 @@ export default function FeedPage() {
                     <time dateTime={pin.created_at}>{relativeTime(pin.created_at)}</time>
                   </span>
                 </span>
-                <svg
-                  className="h-4 w-4 shrink-0 text-zinc-300 dark:text-zinc-600"
-                  {...stroke}
-                  aria-hidden
-                >
-                  <path d="m9 6 6 6-6 6" />
-                </svg>
+                <ChevronRightIcon className="h-4 w-4 shrink-0 text-zinc-300 dark:text-zinc-600" />
               </Link>
             </li>
           ))}

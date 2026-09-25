@@ -66,6 +66,9 @@ export default function MapView({
   const [hover, setHover] = useState<{ pin: PinHover; x: number; y: number } | null>(
     null
   );
+  const [clusterHover, setClusterHover] = useState<{ count: number; x: number; y: number } | null>(
+    null
+  );
 
   const onBoundsRef = useRef(onBoundsChange);
   const onSelectRef = useRef(onSelectPin);
@@ -146,9 +149,15 @@ export default function MapView({
         map.on("mouseenter", "pins-cluster", () => {
           map.getCanvas().style.cursor = "pointer";
         });
+        map.on("mousemove", "pins-cluster", (e) => {
+          const count = e.features?.[0]?.properties?.point_count;
+          if (typeof count === "number") {
+            setClusterHover({ count, x: e.point.x, y: e.point.y });
+          }
+        });
         map.on("mouseleave", "pins-cluster", () => {
           map.getCanvas().style.cursor = "";
-          setHover(null);
+          setClusterHover(null);
         });
 
         map.on("click", (e) => {
@@ -332,6 +341,16 @@ export default function MapView({
                 </p>
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {clusterHover && (
+        <div
+          className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+8px)]"
+          style={{ left: clusterHover.x, top: clusterHover.y }}
+        >
+          <div className="rounded bg-zinc-900/95 px-2.5 py-1 text-xs text-white shadow-lg">
+            Click to expand {clusterHover.count} pins
           </div>
         </div>
       )}

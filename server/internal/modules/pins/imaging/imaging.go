@@ -11,6 +11,7 @@ import (
 const (
 	maxPhotoWidth        = 1600
 	thumbSize            = 400
+	avatarSize           = 256
 	webpQuality          = 80
 	maxPhotoDim          = 8000
 	maxConcurrentProcess = 2
@@ -66,4 +67,22 @@ func Process(data []byte) (Result, error) {
 	}
 
 	return Result{Full: full, Thumb: thumb}, nil
+}
+
+// Avatar center-crops and re-encodes an uploaded image into a square webp at
+// avatarSize. Runs under the same semaphore as Process.
+func Avatar(data []byte) ([]byte, error) {
+	processSem <- struct{}{}
+	defer func() { <-processSem }()
+	img, err := bimg.Resize(data, bimg.Options{
+		Width:   avatarSize,
+		Height:  avatarSize,
+		Crop:    true,
+		Quality: webpQuality,
+		Type:    bimg.WEBP,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("could not process avatar: %w", err)
+	}
+	return img, nil
 }

@@ -6,7 +6,9 @@ export type {
   PinDetail,
   PinListEntry,
   PinPhoto,
+  TrendingPin,
 } from "./pin";
+export type { Report, ReportEntry, ReportStatus } from "./report";
 export type {
   CollectionDetail,
   CollectionEntry,

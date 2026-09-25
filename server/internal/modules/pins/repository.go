@@ -16,9 +16,11 @@ type Repository interface {
 	ListCategories(ctx context.Context) ([]Category, error)
 	GetPin(ctx context.Context, id string) (PinDetail, error)
 	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
+	ListTrending(ctx context.Context, bbox [4]float64, limit int) ([]TrendingPin, error)
 	ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error)
 	SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error)
 	UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error)
+	RegisterView(ctx context.Context, id string) (int64, error)
 	UserExists(ctx context.Context, id string) (bool, error)
 }
 
@@ -75,9 +77,9 @@ func (r *postgresRepository) CreatePin(ctx context.Context, pin NewPin) (Pin, er
 	err = tx.QueryRow(ctx, `
 		INSERT INTO pins (user_id, location, geohash, caption, category_id)
 		VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, $4, $5, $6)
-		RETURNING id, user_id, ST_AsText(location) AS location, geohash, caption, category_id, is_hidden, created_at
+		RETURNING id, user_id, ST_AsText(location) AS location, geohash, caption, category_id, is_hidden, views, created_at
 	`, pin.UserID, pin.Lng, pin.Lat, pin.Geohash, pin.Caption, pin.CategoryID).Scan(
-		&p.ID, &p.UserID, &p.Location, &p.Geohash, &p.Caption, &p.CategoryID, &p.IsHidden, &p.CreatedAt,
+		&p.ID, &p.UserID, &p.Location, &p.Geohash, &p.Caption, &p.CategoryID, &p.IsHidden, &p.Views, &p.CreatedAt,
 	)
 	if err != nil {
 		return Pin{}, err
@@ -143,14 +145,14 @@ func (r *postgresRepository) GetPin(ctx context.Context, id string) (PinDetail, 
 	var d PinDetail
 
 	err := r.pool.QueryRow(ctx, `
-		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
+		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
 		       c.name, u.username, u.avatar_url
 		FROM pins p
 		LEFT JOIN categories c ON c.id = p.category_id
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE p.id = $1
 	`, id).Scan(
-		&d.ID, &d.UserID, &d.Location, &d.Geohash, &d.Caption, &d.CategoryID, &d.IsHidden, &d.CreatedAt,
+		&d.ID, &d.UserID, &d.Location, &d.Geohash, &d.Caption, &d.CategoryID, &d.IsHidden, &d.Views, &d.CreatedAt,
 		&d.Category, &d.Username, &d.AvatarURL,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -189,7 +191,7 @@ func (r *postgresRepository) GetPin(ctx context.Context, id string) (PinDetail, 
 // pinListEntrySelect is the shared SELECT shape for list/search results: the
 // pin columns plus the first photo's cover URL and the author's username.
 const pinListEntrySelect = `
-	SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
+	SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
 	       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username
 	FROM pins p
 	LEFT JOIN LATERAL (
@@ -223,6 +225,67 @@ func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, cate
 	defer rows.Close()
 
 	return scanPinListEntries(rows)
+}
+
+// trendingPinSelect is trending's SELECT: the shared list-entry shape plus the
+// comment count and a hotness score that decays with age (in hours). The score
+// keeps recent pins competitive while still rewarding engagement:
+//
+//	score = (views + 5*comments) / (age_hours + 2)
+const trendingPinSelect = `
+	SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
+	       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username,
+	       COALESCE(c.comment_count, 0)::int AS comment_count,
+	       ROUND(((p.views + 5.0 * COALESCE(c.comment_count, 0)) /
+	              (EXTRACT(EPOCH FROM (now() - p.created_at)) / 3600.0 + 2.0))::numeric, 2) AS score
+	FROM pins p
+	LEFT JOIN LATERAL (
+		SELECT photo_url, thumbnail_url FROM pin_photos
+		WHERE pin_id = p.id
+		ORDER BY position
+		LIMIT 1
+	) pp ON true
+	LEFT JOIN users u ON u.id = p.user_id
+	LEFT JOIN (
+		SELECT pin_id, COUNT(*) AS comment_count
+		FROM comments
+		WHERE is_hidden = false
+		GROUP BY pin_id
+	) c ON c.pin_id = p.id
+	WHERE p.is_hidden = false`
+
+func (r *postgresRepository) ListTrending(ctx context.Context, bbox [4]float64, limit int) ([]TrendingPin, error) {
+	query := trendingPinSelect + `
+		  AND ST_DWithin(p.location, ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography, 0)
+		ORDER BY score DESC, p.created_at DESC
+		LIMIT $5`
+
+	rows, err := r.pool.Query(ctx, query, bbox[1], bbox[0], bbox[3], bbox[2], limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanTrendingPins(rows)
+}
+
+// scanTrendingPins maps trending rows (list-entry columns + comment_count,
+// score) into entries.
+func scanTrendingPins(rows pgx.Rows) ([]TrendingPin, error) {
+	entries := []TrendingPin{}
+	for rows.Next() {
+		var e TrendingPin
+		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
+			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.CreatedAt, &e.CoverURL, &e.Username,
+			&e.CommentCount, &e.Score); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+		return nil, err
+	}
+	return entries, nil
 }
 
 func (r *postgresRepository) SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error) {
@@ -273,9 +336,9 @@ func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch Upd
 		    category_id = COALESCE($3, category_id),
 		    updated_at  = now()
 		WHERE id = $1
-		RETURNING id, user_id, ST_AsText(location) AS location, geohash, caption, category_id, is_hidden, created_at
+		RETURNING id, user_id, ST_AsText(location) AS location, geohash, caption, category_id, is_hidden, views, created_at
 	`, id, patch.Caption, patch.CategoryID).Scan(
-		&p.ID, &p.UserID, &p.Location, &p.Geohash, &p.Caption, &p.CategoryID, &p.IsHidden, &p.CreatedAt,
+		&p.ID, &p.UserID, &p.Location, &p.Geohash, &p.Caption, &p.CategoryID, &p.IsHidden, &p.Views, &p.CreatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Pin{}, ErrNotFound
@@ -310,7 +373,7 @@ func scanPinListEntries(rows pgx.Rows) ([]PinListEntry, error) {
 	for rows.Next() {
 		var e PinListEntry
 		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
-			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.CreatedAt, &e.CoverURL, &e.Username); err != nil {
+			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.CreatedAt, &e.CoverURL, &e.Username); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -328,4 +391,23 @@ func (r *postgresRepository) UserExists(ctx context.Context, id string) (bool, e
 		return false, err
 	}
 	return exists, nil
+}
+
+// RegisterView increments a pin's view counter and returns the new count.
+// Hidden (soft-deleted) pins are not counted, mirroring GetPin's behavior of
+// treating them as missing.
+func (r *postgresRepository) RegisterView(ctx context.Context, id string) (int64, error) {
+	var views int64
+	err := r.pool.QueryRow(ctx, `
+		UPDATE pins SET views = views + 1
+		WHERE id = $1 AND is_hidden = false
+		RETURNING views
+	`, id).Scan(&views)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	return views, nil
 }

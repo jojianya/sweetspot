@@ -1,6 +1,7 @@
 "use client";
 
-import { Component, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportError } from "@/lib/monitoring";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -18,6 +19,13 @@ export default class ErrorBoundary extends Component<
 
   static getDerivedStateFromError(): ErrorBoundaryState {
     return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    reportError(error, {
+      kind: "react",
+      componentStack: info.componentStack,
+    });
   }
 
   render() {

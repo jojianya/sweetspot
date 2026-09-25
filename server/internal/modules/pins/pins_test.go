@@ -26,6 +26,10 @@ type mockPinRepository struct {
 	updateErr     error
 	userPins      []PinListEntry
 	userPinsErr   error
+	trending      []TrendingPin
+	trendingErr   error
+	views         int64
+	viewErr       error
 }
 
 func (m *mockPinRepository) ListCategories(context.Context) ([]Category, error) {
@@ -66,6 +70,14 @@ func (m *mockPinRepository) UpdatePin(context.Context, string, UpdatePinPatch) (
 
 func (m *mockPinRepository) ListByUser(context.Context, string, int) ([]PinListEntry, error) {
 	return m.userPins, m.userPinsErr
+}
+
+func (m *mockPinRepository) ListTrending(context.Context, [4]float64, int) ([]TrendingPin, error) {
+	return m.trending, m.trendingErr
+}
+
+func (m *mockPinRepository) RegisterView(context.Context, string) (int64, error) {
+	return m.views, m.viewErr
 }
 
 func TestListCategories(t *testing.T) {
@@ -199,5 +211,36 @@ func TestListByUserDelegates(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("expected empty results, got %+v", got)
+	}
+}
+
+func TestRegisterViewDelegates(t *testing.T) {
+	svc := NewService(&mockPinRepository{views: 7})
+	views, err := svc.RegisterView(context.Background(), "pin-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if views != 7 {
+		t.Fatalf("expected 7 views, got %d", views)
+	}
+}
+
+func TestListTrendingDelegates(t *testing.T) {
+	trending := []TrendingPin{{CommentCount: 3, Score: 1.5}}
+	svc := NewService(&mockPinRepository{trending: trending})
+	got, err := svc.ListTrending(context.Background(), [4]float64{0, 0, 1, 1}, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].Score != 1.5 {
+		t.Fatalf("expected the stubbed trending pins, got %+v", got)
+	}
+}
+
+func TestRegisterViewPropagatesNotFound(t *testing.T) {
+	svc := NewService(&mockPinRepository{viewErr: ErrNotFound})
+	_, err := svc.RegisterView(context.Background(), "missing")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }

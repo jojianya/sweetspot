@@ -10,9 +10,10 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/di"
 	"github.com/jojianya/sweetspot247-backend/internal/http"
 	"github.com/jojianya/sweetspot247-backend/internal/observability/logger"
+	"github.com/jojianya/sweetspot247-backend/internal/observability/report"
 )
 
-func Run(cfg *config.Config, pool *pgxpool.Pool) error {
+func Run(cfg *config.Config, pool *pgxpool.Pool, rep *report.Reporter) error {
 	lg := logger.FromContext(nil)
 
 	container := di.Build(cfg, pool)
@@ -25,7 +26,7 @@ func Run(cfg *config.Config, pool *pgxpool.Pool) error {
 		lg.Info("redis connected", "addr", cfg.RedisAddr)
 	}
 
-	router := http.NewRouter(cfg, pool, container, lg)
+	router := http.NewRouter(cfg, pool, container, lg, rep)
 
 	srv := &stdhttp.Server{
 		Addr:    ":" + cfg.Port,

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { CloseIcon } from "@/components/icons";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 const stroke = {
   fill: "none",
@@ -30,22 +31,24 @@ export default function PhotoLightbox({
   onNavigate,
   onClose,
 }: PhotoLightboxProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  useDialogFocus(ref, onClose);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight" && count > 1) {
         onNavigate((index + 1) % count);
       } else if (e.key === "ArrowLeft" && count > 1) {
         onNavigate((index - 1 + count) % count);
-      } else if (e.key === "Escape") {
-        onClose();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [count, index, onNavigate, onClose]);
+  }, [count, index, onNavigate]);
 
   return (
     <div
+      ref={ref}
       role="dialog"
       aria-modal="true"
       aria-label={alt}

@@ -8,7 +8,11 @@ type Service interface {
 	GetByUsername(ctx context.Context, username string) (User, error)
 	GetByLogin(ctx context.Context, identifier string) (User, error)
 	GetByID(ctx context.Context, id string) (User, error)
+	CountUsers(ctx context.Context) (int, error)
+	ListUsers(ctx context.Context, limit, offset int) ([]User, error)
 	UpdateRole(ctx context.Context, actorID, userID, role string) (User, error)
+	UpdateProfile(ctx context.Context, id string, patch UpdateProfilePatch) (User, error)
+	SearchUsers(ctx context.Context, query string, limit int) ([]User, error)
 }
 
 type service struct {
@@ -39,6 +43,18 @@ func (s *service) GetByID(ctx context.Context, id string) (User, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
+func (s *service) SearchUsers(ctx context.Context, query string, limit int) ([]User, error) {
+	return s.repo.SearchUsers(ctx, query, limit)
+}
+
+func (s *service) CountUsers(ctx context.Context) (int, error) {
+	return s.repo.CountUsers(ctx)
+}
+
+func (s *service) ListUsers(ctx context.Context, limit, offset int) ([]User, error) {
+	return s.repo.ListUsers(ctx, limit, offset)
+}
+
 func (s *service) UpdateRole(ctx context.Context, actorID, userID, role string) (User, error) {
 	if actorID != "" && actorID == userID {
 		return User{}, ErrCannotChangeOwnRole
@@ -60,4 +76,8 @@ func (s *service) UpdateRole(ctx context.Context, actorID, userID, role string) 
 	}
 
 	return s.repo.UpdateRole(ctx, userID, role)
+}
+
+func (s *service) UpdateProfile(ctx context.Context, id string, patch UpdateProfilePatch) (User, error) {
+	return s.repo.UpdateProfile(ctx, id, patch)
 }

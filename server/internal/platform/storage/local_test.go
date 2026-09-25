@@ -80,3 +80,28 @@ func TestLocalDirCreated(t *testing.T) {
 		t.Logf("note: server not required for this test; %v", httpErr)
 	}
 }
+
+func TestLocalDelete(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "uploads")
+	l := NewLocal(dir, "http://localhost:8081")
+
+	url, err := l.Save([]byte("x"), "png")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := l.Delete(url); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, filepath.Base(url))); !os.IsNotExist(err) {
+		t.Fatalf("file should be gone after Delete, stat err: %v", err)
+	}
+
+	// Deleting a missing file or a malformed URL is a no-op, not an error.
+	if err := l.Delete(url); err != nil {
+		t.Fatalf("second Delete should be a no-op, got %v", err)
+	}
+	if err := l.Delete("not-a-url"); err != nil {
+		t.Fatalf("Delete of a bare name should be a no-op, got %v", err)
+	}
+}

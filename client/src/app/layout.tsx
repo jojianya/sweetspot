@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import RuntimeErrorReporter from "@/components/RuntimeErrorReporter";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -44,7 +45,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 })();`}
         </Script>
       </head>
-      <body className="flex h-screen flex-col overflow-hidden">
+      <body className="flex h-dvh flex-col overflow-hidden">
+        <RuntimeErrorReporter />
         <ErrorBoundary>
           <main className="relative flex flex-1 flex-col overflow-hidden">{children}</main>
         </ErrorBoundary>

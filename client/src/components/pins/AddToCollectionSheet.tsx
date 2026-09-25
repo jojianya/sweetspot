@@ -24,7 +24,7 @@ export default function AddToCollectionSheet({ pinId, onClose }: AddToCollection
 
   if (!token) {
     return (
-      <PanelSheet role="dialog" aria-modal="true" aria-label="Add to collection">
+      <PanelSheet role="dialog" aria-modal="true" aria-label="Add to collection" onClose={onClose}>
         <header className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Add to collection
@@ -79,7 +79,7 @@ export default function AddToCollectionSheet({ pinId, onClose }: AddToCollection
   };
 
   return (
-    <PanelSheet role="dialog" aria-modal="true" aria-label="Add to collection">
+    <PanelSheet role="dialog" aria-modal="true" aria-label="Add to collection" onClose={onClose}>
       <header className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           Add to collection

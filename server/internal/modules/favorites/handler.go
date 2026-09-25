@@ -1,8 +1,6 @@
 package favorites
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
@@ -26,7 +24,7 @@ func (h *Handler) Save(c *gin.Context) {
 		return
 	}
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "pin not found"})
+		response.NotFound(c, "pin not found")
 		return
 	}
 
@@ -35,7 +33,7 @@ func (h *Handler) Save(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusNoContent)
+	response.NoContent(c)
 }
 
 func (h *Handler) Unsave(c *gin.Context) {
@@ -48,7 +46,7 @@ func (h *Handler) Unsave(c *gin.Context) {
 		return
 	}
 	if !saved {
-		c.JSON(http.StatusNotFound, gin.H{"error": "favorite not found"})
+		response.NotFound(c, "favorite not found")
 		return
 	}
 
@@ -57,7 +55,7 @@ func (h *Handler) Unsave(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusNoContent)
+	response.NoContent(c)
 }
 
 func (h *Handler) GetSaved(c *gin.Context) {
@@ -69,7 +67,7 @@ func (h *Handler) GetSaved(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"pins": entries})
+	response.OK(c, gin.H{"pins": entries})
 }
 
 func (h *Handler) GetSavedIDs(c *gin.Context) {
@@ -81,5 +79,5 @@ func (h *Handler) GetSavedIDs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"ids": ids})
+	response.OK(c, gin.H{"ids": ids})
 }

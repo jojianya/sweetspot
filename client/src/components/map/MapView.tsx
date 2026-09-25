@@ -291,6 +291,26 @@ export default function MapView({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+      {/* Canvas-drawn markers aren't focusable, so expose each pin as a
+          visually hidden button that appears over the map when focused —
+          the keyboard/screen-reader route to every pin. */}
+      <ul
+        aria-label="Pins on the map"
+        className="absolute left-0 top-0 z-10 m-0 list-none p-0"
+      >
+        {pins.map((pin) => (
+          <li key={pin.id} className="contents">
+            <button
+              type="button"
+              onClick={() => onSelectPin(pin.id)}
+              className="sr-only left-3 top-3 focus-visible:[clip-path:none] focus-visible:h-auto focus-visible:w-auto focus-visible:m-0 focus-visible:overflow-visible focus-visible:whitespace-normal focus-visible:rounded-full focus-visible:bg-white/95 focus-visible:px-4 focus-visible:py-2 focus-visible:text-sm focus-visible:font-medium focus-visible:text-zinc-900 focus-visible:shadow-lg focus-visible:ring-1 focus-visible:ring-zinc-200 dark:focus-visible:bg-zinc-900/95 dark:focus-visible:text-zinc-100 dark:focus-visible:ring-zinc-700"
+            >
+              {pin.caption?.trim() || "Untitled pin"}
+              {pin.username ? ` — by ${pin.username}` : ""}
+            </button>
+          </li>
+        ))}
+      </ul>
       {hover && hover.pin.cover_url && (
         <div
           className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+12px)]"

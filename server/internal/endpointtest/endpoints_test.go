@@ -18,6 +18,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
 )
@@ -84,12 +85,79 @@ func (m *mockUserService) GetByID(ctx context.Context, id string) (users.User, e
 }
 
 func (m *mockUserService) UpdateRole(ctx context.Context, actorID, userID, role string) (users.User, error) {
+	if actorID == userID {
+		return users.User{}, users.ErrCannotChangeOwnRole
+	}
 	u, ok := m.users[userID]
 	if !ok {
 		return users.User{}, users.ErrNotFound
 	}
+	if u.Role == users.RoleOwner && role != users.RoleOwner {
+		owners := 0
+		for _, x := range m.users {
+			if x.Role == users.RoleOwner {
+				owners++
+			}
+		}
+		if owners <= 1 {
+			return users.User{}, users.ErrCannotDemoteLastOwner
+		}
+	}
 	u.Role = role
 	m.users[userID] = u
+	return u, nil
+}
+
+func (m *mockUserService) SearchUsers(_ context.Context, query string, _ int) ([]users.User, error) {
+	q := strings.ToLower(query)
+	out := []users.User{}
+	for _, u := range m.users {
+		if strings.Contains(strings.ToLower(u.Username), q) {
+			out = append(out, u)
+		}
+	}
+	return out, nil
+}
+
+func (m *mockUserService) ListUsers(_ context.Context, limit, offset int) ([]users.User, error) {
+	out := make([]users.User, 0, len(m.users))
+	for _, u := range m.users {
+		out = append(out, u)
+	}
+	if offset >= len(out) {
+		return []users.User{}, nil
+	}
+	end := offset + limit
+	if end > len(out) {
+		end = len(out)
+	}
+	return out[offset:end], nil
+}
+
+func (m *mockUserService) CountUsers(_ context.Context) (int, error) {
+	return len(m.users), nil
+}
+
+func (m *mockUserService) UpdateProfile(_ context.Context, id string, patch users.UpdateProfilePatch) (users.User, error) {
+	u, ok := m.users[id]
+	if !ok {
+		return users.User{}, users.ErrNotFound
+	}
+	if patch.Username != nil {
+		for otherID, other := range m.users {
+			if otherID != id && other.Username == *patch.Username {
+				return users.User{}, users.ErrUsernameTaken
+			}
+		}
+		u.Username = *patch.Username
+	}
+	if patch.AvatarURL != nil {
+		u.AvatarURL = patch.AvatarURL
+	}
+	if patch.Socials != nil {
+		u.Socials = *patch.Socials
+	}
+	m.users[id] = u
 	return u, nil
 }
 
@@ -169,10 +237,10 @@ func newToken(t *testing.T, userID, role string) string {
 	return tok
 }
 
-func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo favorites.Repository, bl *cache.Blacklist) *gin.Engine {
+func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo favorites.Repository, bl *cache.Blacklist, store *storage.Local) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(middleware.Recover(), middleware.SecurityHeaders())
+	r.Use(middleware.Recover(nil), middleware.SecurityHeaders())
 
 	jsonRoutes := r.Group("")
 	jsonRoutes.Use(middleware.BodyLimit(1 << 20))
@@ -181,7 +249,7 @@ func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo 
 	authH := auth.NewHandler(authSvc, bl, middleware.New(1000, time.Minute))
 	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
 
-	userH := users.NewHandler(usersSvc)
+	userH := users.NewHandler(usersSvc, store)
 	users.RegisterRoutes(jsonRoutes, userH, users.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
 
 	reportH := reports.NewHandler(reports.NewService(reportRepo))
@@ -229,7 +297,7 @@ func TestAuthEndpoints(t *testing.T) {
 		byUsername: map[string]users.User{},
 		users:      map[string]users.User{},
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil)
+	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
 
 	t.Run("RegisterSuccess", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"new@example.com","password":"password123","username":"newbie"}`, nil)
@@ -334,7 +402,7 @@ func TestUserEndpoints(t *testing.T) {
 			testUUID2: {ID: testUUID2, Email: "b@example.com", Username: "bob", Role: users.RoleUser},
 		},
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil)
+	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
 
 	t.Run("GetUserByID", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodGet, "/users/"+testUUID2, "", nil)
@@ -436,7 +504,7 @@ func TestReportEndpoints(t *testing.T) {
 		list:     []reports.ReportListEntry{{PinCaption: strPtr("spam pin")}},
 		reviewed: reports.Report{Reason: "spam"},
 	}
-	r := setupRouter(usersSvc, reportRepo, &mockFavoriteRepo{}, nil)
+	r := setupRouter(usersSvc, reportRepo, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
 
 	t.Run("CreateReport", func(t *testing.T) {
 		tok := newToken(t, testUUID2, users.RoleUser)
@@ -536,7 +604,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 		},
 	}
 	favRepo := &mockFavoriteRepo{exists: true}
-	r := setupRouter(usersSvc, &mockReportRepo{}, favRepo, nil)
+	r := setupRouter(usersSvc, &mockReportRepo{}, favRepo, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
 
 	t.Run("SaveFavorite", func(t *testing.T) {
 		tok := newToken(t, testUUID1, users.RoleUser)
@@ -662,7 +730,7 @@ func TestSecurityHeadersPresent(t *testing.T) {
 		byEmail:    map[string]users.User{},
 		byUsername: map[string]users.User{},
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil)
+	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
 
 	w := doJSON(t, r, http.MethodGet, "/me", "", nil)
 	for _, h := range []string{"X-Content-Type-Options", "X-Frame-Options", "Content-Security-Policy", "Referrer-Policy", "Strict-Transport-Security"} {
@@ -678,7 +746,7 @@ func TestSpoofedHeaderCannotBypassRateLimit(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	_ = r.SetTrustedProxies(nil)
-	r.Use(middleware.Recover())
+	r.Use(middleware.Recover(nil))
 
 	lim := middleware.New(1, time.Minute)
 	r.POST("/auth/register", lim.Middleware(), func(c *gin.Context) {
@@ -703,7 +771,7 @@ func TestLoginLockoutAfterFailures(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	_ = r.SetTrustedProxies(nil)
-	r.Use(middleware.Recover())
+	r.Use(middleware.Recover(nil))
 
 	hash, _ := passwordHash("password123")
 	usersSvc := &mockUserService{

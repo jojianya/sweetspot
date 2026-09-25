@@ -4,8 +4,9 @@ import {
   newPinPhotoSchema,
   pinDetailSchema,
   pinListEntrySchema,
+  trendingPinSchema,
 } from "./schemas";
-import type { CreatedPin, NewPinPhoto, PinDetail, PinListEntry } from "@/lib/types";
+import type { CreatedPin, NewPinPhoto, PinDetail, PinListEntry, TrendingPin } from "@/lib/types";
 
 export async function fetchPins(
   bbox: string,
@@ -17,6 +18,17 @@ export async function fetchPins(
 
   const { data } = await api.get<{ pins: unknown }>("/pins", { params, signal });
   return pinListEntrySchema.array().parse(data.pins);
+}
+
+export async function fetchTrendingPins(
+  bbox: string,
+  signal?: AbortSignal
+): Promise<TrendingPin[]> {
+  const { data } = await api.get<{ pins: unknown }>("/pins/trending", {
+    params: { bbox },
+    signal,
+  });
+  return trendingPinSchema.array().parse(data.pins);
 }
 
 export async function fetchPin(id: string, signal?: AbortSignal): Promise<PinDetail> {
@@ -74,4 +86,14 @@ export async function updatePin(
 
 export async function deletePin(id: string): Promise<void> {
   await api.delete(`/pins/${id}`);
+}
+
+/**
+ * Registers a single view for a pin and returns the updated counter. Call this
+ * when a pin's detail is actually opened — the read endpoints never increment
+ * views, so SSR fetches and crawlers cannot inflate the count.
+ */
+export async function registerPinView(id: string): Promise<number> {
+  const { data } = await api.post<{ views: number }>(`/pins/${id}/view`);
+  return data.views;
 }

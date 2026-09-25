@@ -4,11 +4,12 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import Avatar from "@/components/Avatar";
 import { useLogout } from "@/hooks/useLogout";
+import { useSessionRefresh } from "@/hooks/useSessionRefresh";
 import { useAuth } from "@/store/auth";
 
 interface NavbarProps {
   children?: ReactNode;
-  /** When set, renders a pill link on the left (e.g. back to the map). testtt */ 
+  /** When set, renders a pill link on the left (e.g. back to the map). */ 
   backHref?: string;
   backLabel?: string;
 }
@@ -21,6 +22,10 @@ export default function Navbar({
   const { user, token } = useAuth();
   const isLoggedIn = token !== null;
   const handleLogout = useLogout();
+
+  // Role changes land in the DB instantly; refresh the cached user on mount so
+  // the navbar reflects the current role without re-logging in.
+  useSessionRefresh();
 
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-30">
@@ -55,6 +60,22 @@ export default function Navbar({
         <nav className="pointer-events-auto ml-auto flex shrink-0 items-center gap-2.5">
           {isLoggedIn && user ? (
             <>
+              {(user.role === "admin" || user.role === "owner") && (
+                <Link
+                  href="/reports"
+                  className="rounded-full border border-zinc-300 bg-white/90 px-3.5 py-1.5 text-sm font-medium text-zinc-700 shadow-sm backdrop-blur transition-colors hover:bg-white dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                >
+                  Reports
+                </Link>
+              )}
+              {user.role === "owner" && (
+                <Link
+                  href="/roles"
+                  className="rounded-full border border-zinc-300 bg-white/90 px-3.5 py-1.5 text-sm font-medium text-zinc-700 shadow-sm backdrop-blur transition-colors hover:bg-white dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                >
+                  Roles
+                </Link>
+              )}
               <div className="hidden items-center gap-2.5 sm:flex [text-shadow:0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
                 <Avatar
                   src={user.avatar_url}

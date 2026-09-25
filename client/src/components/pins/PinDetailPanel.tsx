@@ -9,6 +9,7 @@ import PhotoLightbox from "./PhotoLightbox";
 import CommentsSection from "./CommentsSection";
 import PinEditSheet from "./PinEditSheet";
 import AddToCollectionSheet from "./AddToCollectionSheet";
+import ReportSheet from "./ReportSheet";
 import type { PinDetail } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
 import { reverseGeocode } from "@/lib/api/geocoding";
@@ -98,6 +99,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPa
   const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [collectionOpen, setCollectionOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const { saved, setSaved } = useSavedStatus(pin.id, token !== null);
 
@@ -181,7 +183,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPa
 
   return (
     <>
-      <PanelSheet role="dialog" aria-label="Pin details">
+      <PanelSheet role="dialog" aria-label="Pin details" onClose={onClose}>
         {/* Hero photo — plain image, no overlays */}
         <div className="relative h-[210px] shrink-0 overflow-hidden rounded-t-2xl sm:rounded-t-none sm:rounded-tr-2xl">
           {photo ? (
@@ -344,6 +346,15 @@ export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPa
             >
               Open page
             </Link>
+            {token && user?.id !== pin.user_id && (
+              <button
+                type="button"
+                onClick={() => setReportOpen(true)}
+                className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Report
+              </button>
+            )}
           </div>
 
           {/* Comments */}
@@ -393,6 +404,10 @@ export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPa
 
       {collectionOpen && (
         <AddToCollectionSheet pinId={pin.id} onClose={() => setCollectionOpen(false)} />
+      )}
+
+      {reportOpen && (
+        <ReportSheet pinId={pin.id} onClose={() => setReportOpen(false)} />
       )}
     </>
   );

@@ -1,10 +1,10 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Avatar from "@/components/Avatar";
-import { fetchUser, fetchUserCollections, fetchUserPins } from "@/lib/api";
+import { fetchUser, fetchUserCollections, fetchUserPins, updateMyProfile, type ProfileEdit } from "@/lib/api";
 import { errorMessage, formatTime } from "@/lib/utils";
 import { useFollow } from "@/hooks/useFollow";
 import { useAuth } from "@/store/auth";
@@ -22,6 +22,47 @@ const stroke = {
   strokeLinejoin: "round" as const,
   viewBox: "0 0 24 24",
 };
+
+const INPUT_CLASS =
+  "w-full rounded-xl border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100";
+
+function strSocial(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+/** Builds the socials payload, dropping unchanged known keys so no-op saves are skipped. */
+function socialsChanged(
+  current: Record<string, unknown>,
+  edits: Record<string, string>
+): Record<string, unknown> | undefined {
+  const next: Record<string, unknown> = { ...current };
+  let changed = false;
+  for (const key of Object.keys(edits)) {
+    const before = typeof current[key] === "string" ? current[key] : "";
+    if (edits[key] !== before) {
+      next[key] = edits[key];
+      changed = true;
+    }
+  }
+  return changed ? next : undefined;
+}
+
+/** Renders profile socials as external links (instragram/twitter handles, website URL). */
+function socialLinks(socials: Record<string, unknown>): Array<{ label: string; href: string }> {
+  const links: Array<{ label: string; href: string }> = [];
+  const handle = (v: string) => v.trim().replace(/^@/, "");
+  if (typeof socials.instagram === "string" && socials.instagram.trim()) {
+    links.push({ label: "Instagram", href: `https://instagram.com/${handle(socials.instagram)}` });
+  }
+  if (typeof socials.twitter === "string" && socials.twitter.trim()) {
+    links.push({ label: "Twitter", href: `https://x.com/${handle(socials.twitter)}` });
+  }
+  if (typeof socials.website === "string" && socials.website.trim()) {
+    const site = socials.website.trim();
+    links.push({ label: "Website", href: /^https?:\/\//i.test(site) ? site : `https://${site}` });
+  }
+  return links;
+}
 
 function CollectionGlyph() {
   return (
@@ -117,11 +158,85 @@ export default function ProfilePage({ params }: ProfilePageProps) {
     };
   }, [id, attempt]);
 
+  // Profile editing state (own profile only).
+  const [editing, setEditing] = useState(false);
+  const [editUsername, setEditUsername] = useState("");
+  const [editInstagram, setEditInstagram] = useState("");
+  const [editTwitter, setEditTwitter] = useState("");
+  const [editWebsite, setEditWebsite] = useState("");
+  const [editAvatar, setEditAvatar] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const avatarPreview = useMemo(
+    () => (editAvatar ? URL.createObjectURL(editAvatar) : null),
+    [editAvatar]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    };
+  }, [avatarPreview]);
+
   const retry = () => {
     setError(null);
     setNotFound(false);
     setLoading(true);
     setAttempt((n) => n + 1);
+  };
+
+  const openEdit = () => {
+    if (!profile) return;
+    setEditUsername(profile.username);
+    setEditInstagram(strSocial(profile.socials.instagram));
+    setEditTwitter(strSocial(profile.socials.twitter));
+    setEditWebsite(strSocial(profile.socials.website));
+    setEditAvatar(null);
+    setSaveError(null);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    if (!profile) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const edit: ProfileEdit = {};
+      const username = editUsername.trim();
+      if (username !== profile.username) edit.username = username;
+      const socials = socialsChanged(profile.socials, {
+        instagram: editInstagram,
+        twitter: editTwitter,
+        website: editWebsite,
+      });
+      if (socials) edit.socials = socials;
+      if (editAvatar) edit.avatar = editAvatar;
+      if (edit.username === undefined && edit.socials === undefined && edit.avatar === undefined) {
+        setEditing(false);
+        return;
+      }
+      const updated = await updateMyProfile(edit);
+      setProfile(updated);
+      useAuth.setState((s) =>
+        s.user
+          ? {
+              user: {
+                ...s.user,
+                username: updated.username,
+                avatar_url: updated.avatar_url,
+                socials: updated.socials,
+              },
+            }
+          : s
+      );
+      setEditing(false);
+      setEditAvatar(null);
+    } catch (e) {
+      setSaveError(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -177,6 +292,8 @@ export default function ProfilePage({ params }: ProfilePageProps) {
 
   if (!profile) return null;
 
+  const links = socialLinks(profile.socials);
+
   return (
     <>
       <Navbar backHref="/" />
@@ -205,6 +322,22 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               Joined {formatTime(profile.created_at).split(",")[0]}
             </p>
 
+            {links.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                {links.map((link) => (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-rose-600 hover:underline dark:text-rose-400"
+                  >
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            )}
+
             {/* Stats */}
             <dl className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
               <div className="flex items-baseline gap-1">
@@ -231,6 +364,15 @@ export default function ProfilePage({ params }: ProfilePageProps) {
             </dl>
           </div>
 
+          {isSelf && (
+            <button
+              type="button"
+              onClick={openEdit}
+              className="shrink-0 rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Edit profile
+            </button>
+          )}
           {!isSelf && token && (
             <button
               type="button"
@@ -254,6 +396,136 @@ export default function ProfilePage({ params }: ProfilePageProps) {
             </Link>
           )}
         </div>
+
+        {editing && (
+          <section
+            aria-label="Edit profile"
+            className="mt-4 rounded-2xl border border-zinc-200/70 p-5 shadow-sm dark:border-zinc-800"
+          >
+            <div className="flex items-center gap-4">
+              <Avatar
+                src={avatarPreview ?? profile.avatar_url}
+                username={editUsername || profile.username}
+                className="h-16 w-16"
+              />
+              <div>
+                <label className="inline-block cursor-pointer rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">
+                  Change avatar
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    className="sr-only"
+                    onChange={(e) => setEditAvatar(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {editAvatar && (
+                  <button
+                    type="button"
+                    onClick={() => setEditAvatar(null)}
+                    className="mt-1 block text-xs text-zinc-500 hover:underline dark:text-zinc-400"
+                  >
+                    Remove selection
+                  </button>
+                )}
+                <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+                  JPG or PNG, up to 5MB.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <label
+                htmlFor="edit-username"
+                className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Username
+              </label>
+              <input
+                id="edit-username"
+                type="text"
+                value={editUsername}
+                onChange={(e) => setEditUsername(e.target.value)}
+                className={INPUT_CLASS}
+              />
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <div>
+                <label
+                  htmlFor="edit-instagram"
+                  className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Instagram
+                </label>
+                <input
+                  id="edit-instagram"
+                  type="text"
+                  value={editInstagram}
+                  onChange={(e) => setEditInstagram(e.target.value)}
+                  className={INPUT_CLASS}
+                  placeholder="@handle"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="edit-twitter"
+                  className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Twitter
+                </label>
+                <input
+                  id="edit-twitter"
+                  type="text"
+                  value={editTwitter}
+                  onChange={(e) => setEditTwitter(e.target.value)}
+                  className={INPUT_CLASS}
+                  placeholder="@handle"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="edit-website"
+                  className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Website
+                </label>
+                <input
+                  id="edit-website"
+                  type="text"
+                  value={editWebsite}
+                  onChange={(e) => setEditWebsite(e.target.value)}
+                  className={INPUT_CLASS}
+                  placeholder="https://…"
+                />
+              </div>
+            </div>
+
+            {saveError && (
+              <p className="mt-3 text-sm text-rose-600 dark:text-rose-400" role="alert">
+                {saveError}
+              </p>
+            )}
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                disabled={saving}
+                className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving}
+                className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60"
+              >
+                {saving ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+          </section>
+        )}
 
         {followError && (
           <p className="mt-3 text-sm text-rose-600 dark:text-rose-400" role="alert">

@@ -7,12 +7,18 @@ import (
 )
 
 type mockRepository struct {
-	users      map[string]User
-	owners     int
-	created    User
-	createErr  error
-	byEmailErr error
-	updateErr  error
+	users             map[string]User
+	owners            int
+	created           User
+	createErr         error
+	byEmailErr        error
+	updateErr         error
+	updateProfile     User
+	updateProfileErr  error
+	search            []User
+	searchErr         error
+	list              []User
+	count             int
 }
 
 func (m *mockRepository) Create(ctx context.Context, email, passwordHash, username string) (User, error) {
@@ -62,6 +68,25 @@ func (m *mockRepository) UpdateRole(_ context.Context, id, role string) (User, e
 	u := m.users[id]
 	u.Role = role
 	return u, nil
+}
+
+func (m *mockRepository) SearchUsers(_ context.Context, _ string, _ int) ([]User, error) {
+	return m.search, m.searchErr
+}
+
+func (m *mockRepository) ListUsers(_ context.Context, _ int, _ int) ([]User, error) {
+	return m.list, nil
+}
+
+func (m *mockRepository) CountUsers(_ context.Context) (int, error) {
+	return m.count, nil
+}
+
+func (m *mockRepository) UpdateProfile(_ context.Context, _ string, _ UpdateProfilePatch) (User, error) {
+	if m.updateProfileErr != nil {
+		return User{}, m.updateProfileErr
+	}
+	return m.updateProfile, nil
 }
 
 func newTestService(repo Repository) Service {
@@ -127,5 +152,74 @@ func TestUpdateRolePromoteOwnersUnrestricted(t *testing.T) {
 	}
 	if updated.Role != RoleOwner {
 		t.Fatalf("expected role %q, got %q", RoleOwner, updated.Role)
+	}
+}
+
+func TestSearchUsersDelegatesToRepository(t *testing.T) {
+	svc := newTestService(&mockRepository{
+		search: []User{
+			{ID: "u1", Username: "alice", Role: RoleUser},
+			{ID: "u2", Username: "alicia", Role: RoleAdmin},
+		},
+	})
+	got, err := svc.SearchUsers(context.Background(), "ali", 20)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 || got[0].Username != "alice" || got[1].Role != RoleAdmin {
+		t.Fatalf("unexpected results: %+v", got)
+	}
+}
+
+func TestListUsersDelegatesToRepository(t *testing.T) {
+	svc := newTestService(&mockRepository{
+		list: []User{
+			{ID: "u1", Username: "alice", Role: RoleUser},
+			{ID: "u2", Username: "bob", Role: RoleAdmin},
+		},
+		count: 2,
+	})
+	got, err := svc.ListUsers(context.Background(), 10, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 || got[0].Username != "alice" || got[1].Role != RoleAdmin {
+		t.Fatalf("unexpected results: %+v", got)
+	}
+	n, err := svc.CountUsers(context.Background())
+	if err != nil || n != 2 {
+		t.Fatalf("expected count 2, got %d (err %v)", n, err)
+	}
+}
+
+func TestUpdateProfileDelegatesToRepository(t *testing.T) {
+	username := "newname"
+	avatar := "http://local/uploads/a.webp"
+	socials := map[string]any{"instagram": "@newname"}
+	svc := newTestService(&mockRepository{
+		updateProfile: User{ID: "u1", Username: username, AvatarURL: &avatar, Socials: socials},
+	})
+	got, err := svc.UpdateProfile(context.Background(), "u1", UpdateProfilePatch{
+		Username:  &username,
+		AvatarURL: &avatar,
+		Socials:   &socials,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Username != username || got.AvatarURL == nil || *got.AvatarURL != avatar {
+		t.Fatalf("unexpected user: %+v", got)
+	}
+	if got.Socials["instagram"] != "@newname" {
+		t.Fatalf("unexpected socials: %+v", got.Socials)
+	}
+}
+
+func TestUpdateProfilePropagatesUsernameTaken(t *testing.T) {
+	svc := newTestService(&mockRepository{updateProfileErr: ErrUsernameTaken})
+	name := "taken"
+	_, err := svc.UpdateProfile(context.Background(), "u1", UpdateProfilePatch{Username: &name})
+	if !errors.Is(err, ErrUsernameTaken) {
+		t.Fatalf("expected ErrUsernameTaken, got %v", err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/app"
 	"github.com/jojianya/sweetspot247-backend/internal/config"
 	"github.com/jojianya/sweetspot247-backend/internal/observability/logger"
+	"github.com/jojianya/sweetspot247-backend/internal/observability/report"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 )
 
@@ -12,6 +13,9 @@ func main() {
 
 	lg := logger.Init(cfg.LogLevel, cfg.LogFormat)
 	logger.SetDefault(lg)
+
+	rep := report.New(lg, cfg.SentryDSN, cfg.SentryEnv)
+	defer rep.Close()
 
 	pool, err := database.Connect(cfg.DSN())
 	if err != nil {
@@ -25,7 +29,7 @@ func main() {
 		panic(err)
 	}
 
-	if err := app.Run(cfg, pool); err != nil {
+	if err := app.Run(cfg, pool, rep); err != nil {
 		lg.Error("server error", "error", err.Error())
 	}
 }

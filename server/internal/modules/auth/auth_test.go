@@ -65,6 +65,22 @@ func (s *stubUserService) UpdateRole(context.Context, string, string, string) (u
 	return users.User{}, nil
 }
 
+func (s *stubUserService) SearchUsers(context.Context, string, int) ([]users.User, error) {
+	return []users.User{}, nil
+}
+
+func (s *stubUserService) ListUsers(context.Context, int, int) ([]users.User, error) {
+	return []users.User{}, nil
+}
+
+func (s *stubUserService) CountUsers(context.Context) (int, error) {
+	return 0, nil
+}
+
+func (s *stubUserService) UpdateProfile(context.Context, string, users.UpdateProfilePatch) (users.User, error) {
+	return users.User{}, nil
+}
+
 func newTestService(stub *stubUserService) Service {
 	return NewService(stub, "test-secret")
 }

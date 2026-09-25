@@ -7,6 +7,7 @@ import ThemeToggle from "./ThemeToggle";
 import { ChipIcon } from "./CategoryIcons";
 import Avatar from "@/components/Avatar";
 import { useLogout } from "@/hooks/useLogout";
+import { useSessionRefresh } from "@/hooks/useSessionRefresh";
 import { useAuth } from "@/store/auth";
 import type { Category, PinListEntry } from "@/lib/types";
 
@@ -33,6 +34,10 @@ export default function MapNavBar({
   const router = useRouter();
   const isLoggedIn = token !== null;
   const handleLogout = useLogout();
+
+  // Keep the cached role in step with the DB so moderation menu items appear
+  // for freshly promoted accounts without re-logging in.
+  useSessionRefresh();
 
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -119,6 +124,41 @@ export default function MapNavBar({
                   </svg>
                   Feed
                 </button>
+                {(user.role === "admin" || user.role === "owner") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      router.push("/reports");
+                    }}
+                    role="menuitem"
+                    className={menuButtonClass}
+                  >
+                    <svg className="h-4 w-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M12 2 3 7v6c0 5 4 8 9 9 5-1 9-4 9-9V7l-9-5Z" />
+                      <path d="M12 8v4M12 16h.01" />
+                    </svg>
+                    Reports
+                  </button>
+                )}
+                {user.role === "owner" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      router.push("/roles");
+                    }}
+                    role="menuitem"
+                    className={menuButtonClass}
+                  >
+                    <svg className="h-4 w-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <circle cx="9" cy="8" r="3.5" />
+                      <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
+                      <path d="M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20c0-2.6-1.7-4.6-4-5.3" />
+                    </svg>
+                    Roles
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleLogout}

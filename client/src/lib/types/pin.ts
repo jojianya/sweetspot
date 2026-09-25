@@ -15,9 +15,16 @@ export interface PinListEntry {
   caption: string | null;
   category_id: number;
   is_hidden: boolean;
+  views: number;
   created_at: string;
   cover_url: string;
   username: string | null;
+}
+
+/** A viewport list entry plus the engagement metrics behind the trending rank. */
+export interface TrendingPin extends PinListEntry {
+  comment_count: number;
+  score: number;
 }
 
 export interface PinDetail {
@@ -28,6 +35,7 @@ export interface PinDetail {
   caption: string | null;
   category_id: number;
   is_hidden: boolean;
+  views: number;
   created_at: string;
   category: string | null;
   username: string | null;
@@ -49,5 +57,6 @@ export interface CreatedPin {
   caption: string | null;
   category_id: number;
   is_hidden: boolean;
+  views: number;
   created_at: string;
 }

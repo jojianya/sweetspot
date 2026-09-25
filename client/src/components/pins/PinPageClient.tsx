@@ -8,6 +8,7 @@ import PhotoLightbox from "@/components/pins/PhotoLightbox";
 import CommentsSection from "@/components/pins/CommentsSection";
 import PinEditSheet from "@/components/pins/PinEditSheet";
 import AddToCollectionSheet from "@/components/pins/AddToCollectionSheet";
+import ReportSheet from "@/components/pins/ReportSheet";
 import { BookmarkIcon } from "@/components/icons";
 import { fetchPin, removeFavorite, saveFavorite } from "@/lib/api";
 import { reverseGeocode } from "@/lib/api/geocoding";
@@ -50,6 +51,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
   const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [collectionOpen, setCollectionOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
   const { saved, setSaved } = useSavedStatus(pin.id, token !== null);
 
@@ -267,6 +269,15 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
           >
             Add to collection
           </button>
+          {token && user?.id !== pin.user_id && (
+            <button
+              type="button"
+              onClick={() => setReportOpen(true)}
+              className="rounded-full border border-zinc-300 px-4 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Report
+            </button>
+          )}
           {isOwner && user?.id === pin.user_id && (
             <Link
               href="/"
@@ -309,6 +320,10 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
 
       {collectionOpen && (
         <AddToCollectionSheet pinId={pin.id} onClose={() => setCollectionOpen(false)} />
+      )}
+
+      {reportOpen && (
+        <ReportSheet pinId={pin.id} onClose={() => setReportOpen(false)} />
       )}
     </>
   );

@@ -8,14 +8,16 @@ import MapNavBar from "./MapNavBar";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
 import SavedPinsPanel from "@/components/pins/SavedPinsPanel";
+import TrendingList, { TrendingIcon } from "@/components/pins/TrendingList";
 import { usePins } from "@/hooks/usePins";
 import { usePinDetail } from "@/hooks/usePinDetail";
 import { useCategories } from "@/hooks/useCategories";
 import { usePinStream } from "@/hooks/usePinStream";
+import { useTrending } from "@/hooks/useTrending";
 import { parsePoint } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
-import type { CreatedPin, NewPinPhoto, PinListEntry } from "@/lib/types";
+import type { CreatedPin, NewPinPhoto, PinListEntry, TrendingPin } from "@/lib/types";
 
 export default function MapApp({
   initialCategory = null,
@@ -28,6 +30,7 @@ export default function MapApp({
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [savedOpen, setSavedOpen] = useState(false);
+  const [trendingOpen, setTrendingOpen] = useState(false);
   const [bbox, setBbox] = useState<string | null>(null);
   const [center, setCenter] = useState({ lat: 17.385, lng: 78.4867 });
   const [flyTo, setFlyTo] = useState<{ lng: number; lat: number } | null>(null);
@@ -45,6 +48,9 @@ export default function MapApp({
       : selectedCategory;
 
   const { pins, loading, error: pinsError, addPin } = usePins(bbox, effectiveCategory);
+  const { pins: trending, loading: trendingLoading, error: trendingError } = useTrending(
+    trendingOpen ? bbox : null
+  );
   const reportDetailError = useCallback((message: string) => setDetailError(message), []);
   const { detail } = usePinDetail(selectedPinId, { onError: reportDetailError });
 
@@ -104,6 +110,7 @@ export default function MapApp({
     setPostingMode(false);
     setCreateOpen(false);
     setSavedOpen(false);
+    setTrendingOpen(false);
     setDetailError(null);
   }, []);
 
@@ -126,6 +133,7 @@ export default function MapApp({
     setSelectedPinId(null);
     setHighlightId(null);
     setSavedOpen(false);
+    setTrendingOpen(false);
     setDetailError(null);
   }, [createOpen]);
 
@@ -151,6 +159,7 @@ export default function MapApp({
         caption: pin.caption,
         category_id: pin.category_id,
         is_hidden: pin.is_hidden,
+        views: pin.views,
         created_at: pin.created_at,
         cover_url: cover,
         username,
@@ -198,6 +207,18 @@ export default function MapApp({
     const point = parsePoint(entry.location);
     if (point) setFlyTo(point);
   }, [closeOverlays]);
+
+  const handleOpenTrending = useCallback(
+    (entry: TrendingPin) => {
+      setTrendingOpen(false);
+      const point = parsePoint(entry.location);
+      if (point) setFlyTo(point);
+      setSelectedPinId(entry.id);
+      setHighlightId(entry.id);
+      closeOverlays();
+    },
+    [closeOverlays]
+  );
 
   const bannerError = categoriesError ?? pinsError ?? detailError;
   const activeCategory = categories.find((c) => c.id === effectiveCategory) ?? null;
@@ -264,6 +285,26 @@ export default function MapApp({
         <div className="pointer-events-none absolute bottom-6 left-4 z-10 rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-500 shadow ring-1 ring-zinc-200/70 backdrop-blur dark:bg-zinc-900/90 dark:text-zinc-400 dark:ring-zinc-700/70">
           {pins.length} {activeCategory ? `${activeCategory.name} places` : "places"} here
         </div>
+      )}
+
+      {!trendingOpen ? (
+        <button
+          type="button"
+          onClick={() => setTrendingOpen(true)}
+          aria-expanded={false}
+          className="absolute bottom-24 left-4 z-10 flex items-center gap-1.5 rounded-full bg-white/90 px-3.5 py-2 text-xs font-semibold text-zinc-700 shadow ring-1 ring-zinc-200/70 backdrop-blur transition-colors hover:bg-white dark:bg-zinc-900/90 dark:text-zinc-200 dark:ring-zinc-700/70 dark:hover:bg-zinc-900"
+        >
+          <TrendingIcon className="h-4 w-4 text-rose-500" />
+          Trending
+        </button>
+      ) : (
+        <TrendingList
+          pins={trending}
+          loading={trendingLoading}
+          error={trendingError}
+          onClose={() => setTrendingOpen(false)}
+          onOpenPin={handleOpenTrending}
+        />
       )}
 
       {streamToast > 0 && (

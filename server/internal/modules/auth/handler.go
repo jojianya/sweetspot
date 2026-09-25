@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,32 +24,32 @@ func NewHandler(service Service, bl *cache.Blacklist, emailLim *middleware.Limit
 func (h *Handler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c, err.Error())
 		return
 	}
 
 	u, token, err := h.service.Register(c.Request.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrConflict) {
-			c.JSON(http.StatusConflict, gin.H{"error": "email or username already taken"})
+			response.Conflict(c, "email or username already taken")
 			return
 		}
 		response.Internal(c, "auth: register", err)
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"user": u, "token": token})
+	response.Created(c, gin.H{"user": u, "token": token})
 }
 
 func (h *Handler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c, err.Error())
 		return
 	}
 
 	if h.emailLim != nil && h.emailLim.Locked(req.Identifier) {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "account locked, try again later"})
+		response.TooManyRequests(c, "account locked, try again later")
 		return
 	}
 
@@ -60,7 +59,7 @@ func (h *Handler) Login(c *gin.Context) {
 			if h.emailLim != nil {
 				h.emailLim.AllowKey(req.Identifier)
 			}
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email, username, or password"})
+			response.Unauthorized(c, "invalid email, username, or password")
 			return
 		}
 		response.Internal(c, "auth: login", err)
@@ -71,13 +70,13 @@ func (h *Handler) Login(c *gin.Context) {
 		h.emailLim.Reset(req.Identifier)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"user": u, "token": token})
+	response.OK(c, gin.H{"user": u, "token": token})
 }
 
 func (h *Handler) Logout(c *gin.Context) {
 	claims, ok := c.Get(middleware.CtxJWTClaims)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+		response.Unauthorized(c, "invalid or expired token")
 		return
 	}
 
@@ -88,7 +87,7 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "logged out"})
+	response.OK(c, gin.H{"message": "logged out"})
 }
 
 func (h *Handler) Me(c *gin.Context) {
@@ -96,7 +95,7 @@ func (h *Handler) Me(c *gin.Context) {
 	if r, err := h.service.Role(c.Request.Context(), middleware.GetUserID(c)); err == nil {
 		role = r
 	}
-	c.JSON(http.StatusOK, gin.H{
+	response.OK(c, gin.H{
 		"user_id": middleware.GetUserID(c),
 		"role":    role,
 	})

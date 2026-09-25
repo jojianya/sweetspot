@@ -1,8 +1,8 @@
 import axios from "axios";
 import { useAuth } from "@/store/auth";
+import { API_BASE_URL, reportError } from "@/lib/monitoring";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
+export { API_BASE_URL };
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -18,8 +18,18 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (error) => {
+    const status = error?.response?.status;
+    if (status >= 500) {
+      reportError(error, {
+        kind: "api",
+        method: error?.config?.method,
+        url: error?.config?.url,
+        status,
+      });
+    }
+
     if (
-      error?.response?.status === 401 &&
+      status === 401 &&
       !error?.config?.url?.includes("/auth/login")
     ) {
       useAuth.getState().clearAuth();

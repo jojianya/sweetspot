@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 )
 
 type entry struct {
@@ -88,7 +89,7 @@ func (l *Limiter) Reset(key string) {
 func (l *Limiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !l.Allow(c.ClientIP()) {
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, try again later"})
+			response.AbortError(c, http.StatusTooManyRequests, "too many requests, try again later")
 			return
 		}
 		c.Next()
@@ -98,7 +99,7 @@ func (l *Limiter) Middleware() gin.HandlerFunc {
 func (l *Limiter) MiddlewareKeyed(keyFn func(*gin.Context) string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !l.AllowKey(keyFn(c)) {
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, try again later"})
+			response.AbortError(c, http.StatusTooManyRequests, "too many requests, try again later")
 			return
 		}
 		c.Next()

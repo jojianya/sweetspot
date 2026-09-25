@@ -8,10 +8,12 @@ type Service interface {
 	DeletePin(ctx context.Context, id, userID string) error
 	GetPin(ctx context.Context, id string) (PinDetail, error)
 	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
+	ListTrending(ctx context.Context, bbox [4]float64, limit int) ([]TrendingPin, error)
 	ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error)
 	SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error)
 	CreatePin(ctx context.Context, pin NewPin) (Pin, error)
 	UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error)
+	RegisterView(ctx context.Context, id string) (int64, error)
 	UserExists(ctx context.Context, id string) (bool, error)
 }
 
@@ -43,12 +45,20 @@ func (s *service) SearchPins(ctx context.Context, query string, limit int) ([]Pi
 	return s.repo.SearchPins(ctx, query, limit)
 }
 
+func (s *service) ListTrending(ctx context.Context, bbox [4]float64, limit int) ([]TrendingPin, error) {
+	return s.repo.ListTrending(ctx, bbox, limit)
+}
+
 func (s *service) CreatePin(ctx context.Context, pin NewPin) (Pin, error) {
 	return s.repo.CreatePin(ctx, pin)
 }
 
 func (s *service) UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error) {
 	return s.repo.UpdatePin(ctx, id, patch)
+}
+
+func (s *service) RegisterView(ctx context.Context, id string) (int64, error) {
+	return s.repo.RegisterView(ctx, id)
 }
 
 func (s *service) ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error) {

@@ -22,8 +22,10 @@ import (
 )
 
 const (
-	pinListDefaultLimit = 200
-	maxPhotoSize        = 10 << 20
+	pinListDefaultLimit  = 200
+	trendingDefaultLimit = 10
+	trendingMaxLimit     = 25
+	maxPhotoSize         = 10 << 20
 
 	searchDefaultLimit = 10
 	searchMaxLimit     = 25
@@ -75,37 +77,47 @@ func (h *Handler) ListCategories(c *gin.Context) {
 	response.OK(c, categories)
 }
 
-func (h *Handler) GetPins(c *gin.Context) {
+// parseBbox validates and parses the bbox query param
+// (minLat,minLng,maxLat,maxLng). On failure it writes the error response and
+// returns ok=false.
+func parseBbox(c *gin.Context) (bbox [4]float64, ok bool) {
 	bboxStr := c.Query("bbox")
 	if bboxStr == "" {
 		response.BadRequest(c, "bbox query param required (minLat,minLng,maxLat,maxLng)")
-		return
+		return bbox, false
 	}
 
-	var bbox [4]float64
 	parts := strings.Split(bboxStr, ",")
 	if len(parts) != 4 {
 		response.BadRequest(c, "bbox must be 4 comma-separated floats (minLat,minLng,maxLat,maxLng)")
-		return
+		return bbox, false
 	}
 	for i, p := range parts {
 		v, err := strconv.ParseFloat(strings.TrimSpace(p), 64)
 		if err != nil {
 			response.BadRequest(c, "bbox must be 4 comma-separated floats")
-			return
+			return bbox, false
 		}
 		bbox[i] = v
 	}
 	if bbox[0] < -90 || bbox[0] > 90 || bbox[2] < -90 || bbox[2] > 90 {
 		response.BadRequest(c, "latitudes must be between -90 and 90")
-		return
+		return bbox, false
 	}
 	if bbox[1] < -180 || bbox[1] > 180 || bbox[3] < -180 || bbox[3] > 180 {
 		response.BadRequest(c, "longitudes must be between -180 and 180")
-		return
+		return bbox, false
 	}
 	if bbox[0] > bbox[2] || bbox[1] > bbox[3] {
 		response.BadRequest(c, "bbox min must not exceed max (minLat,minLng,maxLat,maxLng)")
+		return bbox, false
+	}
+	return bbox, true
+}
+
+func (h *Handler) GetPins(c *gin.Context) {
+	bbox, ok := parseBbox(c)
+	if !ok {
 		return
 	}
 
@@ -145,6 +157,29 @@ func (h *Handler) GetPins(c *gin.Context) {
 	response.OK(c, gin.H{"pins": pins})
 }
 
+// GetTrending lists the most engaged recent pins in the viewport. The server
+// ranks them by a hotness score (views and comments, decayed by age) so fresh
+// pins with the same activity outrank older ones.
+func (h *Handler) GetTrending(c *gin.Context) {
+	bbox, ok := parseBbox(c)
+	if !ok {
+		return
+	}
+
+	limit, ok := httpx.ParseLimit(c, trendingDefaultLimit, trendingMaxLimit)
+	if !ok {
+		return
+	}
+
+	pins, err := h.service.ListTrending(c.Request.Context(), bbox, limit)
+	if err != nil {
+		response.Internal(c, "pins: trending", err)
+		return
+	}
+
+	response.OK(c, gin.H{"pins": pins})
+}
+
 func (h *Handler) GetPin(c *gin.Context) {
 	pin, err := h.service.GetPin(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -175,6 +210,23 @@ func canViewHidden(c *gin.Context, pin PinDetail) bool {
 
 	role := middleware.GetRole(c)
 	return role == "admin" || role == "owner"
+}
+
+// RegisterView counts a view of a pin. It is public: anyone who opens a pin
+// counts, so SSR fetches and crawlers calling GET /pins/:id do not inflate the
+// number — the client registers views explicitly when a detail is opened.
+func (h *Handler) RegisterView(c *gin.Context) {
+	views, err := h.service.RegisterView(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.NotFound(c, "pin not found")
+			return
+		}
+		response.Internal(c, "pins: register view", err, "pin_id", c.Param("id"))
+		return
+	}
+
+	response.OK(c, gin.H{"views": views})
 }
 
 func (h *Handler) DeletePin(c *gin.Context) {

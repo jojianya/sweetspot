@@ -93,7 +93,7 @@ export default function SavedPinsPanel({
   };
 
   return (
-    <PanelSheet role="dialog" aria-modal="true" aria-label="Saved pins">
+    <PanelSheet role="dialog" aria-modal="true" aria-label="Saved pins" onClose={onClose}>
       <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3.5 dark:border-zinc-800">
         <div className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           <span className="text-zinc-400">

@@ -37,15 +37,6 @@ export default function PinEditSheet({
     return () => previews.forEach((u) => URL.revokeObjectURL(u));
   }, [previews]);
 
-  useEffect(() => {
-    if (files.length > 0) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [files.length, onClose]);
-
   const handleFiles = (list: FileList | null) => {
     if (!list) return;
     const picked = Array.from(list);
@@ -86,7 +77,7 @@ export default function PinEditSheet({
   };
 
   return (
-    <PanelSheet role="dialog" aria-modal="true" aria-label="Edit pin">
+    <PanelSheet role="dialog" aria-modal="true" aria-label="Edit pin" onClose={onClose}>
       <header className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           Edit pin

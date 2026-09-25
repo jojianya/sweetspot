@@ -2,7 +2,6 @@ package reports
 
 import (
 	"errors"
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -27,7 +26,7 @@ func NewHandler(service Service) *Handler {
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateReportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c, err.Error())
 		return
 	}
 
@@ -39,21 +38,21 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "pin not found"})
+		response.NotFound(c, "pin not found")
 		return
 	}
 
 	report, err := h.service.CreateReport(c.Request.Context(), pinID, middleware.GetUserID(c), req.Reason)
 	if err != nil {
 		if errors.Is(err, ErrAlreadyReported) {
-			c.JSON(http.StatusConflict, gin.H{"error": "you already reported this pin"})
+			response.Conflict(c, "you already reported this pin")
 			return
 		}
 		response.Internal(c, "report: create", err, "pin_id", pinID)
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"report": report})
+	response.Created(c, gin.H{"report": report})
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -63,7 +62,7 @@ func (h *Handler) List(c *gin.Context) {
 		case StatusPending, StatusReviewed, StatusActioned:
 			status = &s
 		default:
-			c.JSON(http.StatusBadRequest, gin.H{"error": "status must be one of pending, reviewed, actioned"})
+			response.BadRequest(c, "status must be one of pending, reviewed, actioned")
 			return
 		}
 	}
@@ -77,7 +76,7 @@ func (h *Handler) List(c *gin.Context) {
 	if oStr := c.Query("offset"); oStr != "" {
 		o, err := strconv.Atoi(oStr)
 		if err != nil || o < 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "offset must be a non-negative integer"})
+			response.BadRequest(c, "offset must be a non-negative integer")
 			return
 		}
 		offset = o
@@ -89,13 +88,13 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"reports": reports})
+	response.OK(c, gin.H{"reports": reports})
 }
 
 func (h *Handler) Review(c *gin.Context) {
 	var req ReviewReportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.BadRequest(c, err.Error())
 		return
 	}
 
@@ -103,14 +102,14 @@ func (h *Handler) Review(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrReportNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "report not found"})
+			response.NotFound(c, "report not found")
 		case errors.Is(err, ErrAlreadyResolved):
-			c.JSON(http.StatusConflict, gin.H{"error": "report already resolved"})
+			response.Conflict(c, "report already resolved")
 		default:
 			response.Internal(c, "report: review", err)
 		}
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"report": report})
+	response.OK(c, gin.H{"report": report})
 }

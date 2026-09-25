@@ -19,6 +19,7 @@ type Pin struct {
 	Caption    *string     `json:"caption"`
 	CategoryID int         `json:"category_id"`
 	IsHidden   bool        `json:"is_hidden"`
+	Views      int64       `json:"views"`
 	CreatedAt  time.Time   `json:"created_at"`
 }
 
@@ -43,4 +44,12 @@ type PinListEntry struct {
 	Pin
 	CoverURL string  `json:"cover_url"`
 	Username *string `json:"username"`
+}
+
+// TrendingPin is a viewport list entry plus the engagement metrics that drive
+// the trending ranking (surfaced to the client for display).
+type TrendingPin struct {
+	PinListEntry
+	CommentCount int     `json:"comment_count"`
+	Score        float64 `json:"score"`
 }

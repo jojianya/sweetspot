@@ -23,6 +23,8 @@ type Config struct {
 	RedisAddr          string
 	RedisPassword      string
 	CORSAllowedOrigins []string
+	SentryDSN          string
+	SentryEnv          string
 }
 
 func Load() *Config {
@@ -30,7 +32,7 @@ func Load() *Config {
 		log.Println("no .env file found, reading from environment")
 	}
 
-	return &Config{
+	cfg := &Config{
 		Port:               getEnv("PORT", "8080"),
 		DBHost:             getEnv("DB_HOST", "localhost"),
 		DBPort:             getEnv("DB_PORT", "5432"),
@@ -44,7 +46,18 @@ func Load() *Config {
 		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
 		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001")),
+		SentryDSN:          getEnv("SENTRY_DSN", ""),
+		SentryEnv:          getEnv("SENTRY_ENV", "development"),
 	}
+
+	// A missing JWT_SECRET would silently boot with an empty HMAC key, letting
+	// anyone mint tokens for any user/role. Fail fast instead of running
+	// insecure. (docker-compose also fail-fasts via `:?` on this variable.)
+	if cfg.JWTSecret == "" {
+		log.Fatal("JWT_SECRET is required: set it in .env or the environment (generate with: openssl rand -hex 32)")
+	}
+
+	return cfg
 }
 
 func getOrigins(raw string) []string {

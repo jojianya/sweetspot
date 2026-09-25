@@ -18,6 +18,84 @@ export function parsePoint(point: string): { lng: number; lat: number } | null {
   return { lng, lat };
 }
 
+export type PinCoordinate = {
+  id: string;
+  lng: number;
+  lat: number;
+};
+
+type LocatedPin = {
+  id: string;
+  location: string;
+};
+
+export const PIN_NEIGHBOR_RADIUS_METERS = 2_000;
+export const PIN_NEIGHBOR_LIMIT = 8;
+
+const EARTH_RADIUS_METERS = 6_371_000;
+
+function toRadians(degrees: number): number {
+  return (degrees * Math.PI) / 180;
+}
+
+/** Approximate great-circle distance between two WGS84 coordinates. */
+export function distanceMeters(
+  first: { lng: number; lat: number },
+  second: { lng: number; lat: number }
+): number {
+  const latDelta = toRadians(second.lat - first.lat);
+  const lngDelta = toRadians(second.lng - first.lng);
+  const firstLat = toRadians(first.lat);
+  const secondLat = toRadians(second.lat);
+  const haversine =
+    Math.sin(latDelta / 2) ** 2 +
+    Math.cos(firstLat) * Math.cos(secondLat) * Math.sin(lngDelta / 2) ** 2;
+
+  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(haversine)));
+}
+
+/**
+ * Returns the clicked pin followed by its nearest loaded neighbors within a
+ * radius. The map uses this loaded viewport data to frame a useful cluster of
+ * pins without issuing another request.
+ */
+export function selectNearbyPins(
+  clickedId: string,
+  pins: readonly LocatedPin[],
+  radiusMeters = PIN_NEIGHBOR_RADIUS_METERS,
+  limit = PIN_NEIGHBOR_LIMIT
+): PinCoordinate[] {
+  const clickedPin = pins.find((pin) => pin.id === clickedId);
+  if (!clickedPin) return [];
+
+  const clickedPoint = parsePoint(clickedPin.location);
+  if (!clickedPoint) return [];
+
+  const clicked: PinCoordinate = { id: clickedId, ...clickedPoint };
+  if (!Number.isFinite(radiusMeters) || radiusMeters < 0 || limit <= 0) {
+    return [clicked];
+  }
+
+  const nearby: Array<{ point: PinCoordinate; distance: number }> = [];
+  for (const pin of pins) {
+    if (pin.id === clickedId) continue;
+    const point = parsePoint(pin.location);
+    if (!point) continue;
+
+    const distance = distanceMeters(clickedPoint, point);
+    if (distance <= radiusMeters) {
+      nearby.push({ point: { id: pin.id, ...point }, distance });
+    }
+  }
+
+  nearby.sort((first, second) => {
+    const distanceDifference = first.distance - second.distance;
+    return distanceDifference || first.point.id.localeCompare(second.point.id);
+  });
+
+  return [clicked, ...nearby.slice(0, limit).map(({ point }) => point)];
+}
+
 export type GeoCoords = {
   lat: number;
   lng: number;

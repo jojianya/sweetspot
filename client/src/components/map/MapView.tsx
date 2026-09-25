@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  LngLatBounds,
   Map as MapLibreMap,
   Marker,
   setWorkerUrl,
@@ -12,7 +13,12 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { PinListEntry } from "@/lib/types";
-import { boundsToValidBbox, parsePoint } from "@/lib/utils";
+import {
+  boundsToValidBbox,
+  parsePoint,
+  selectNearbyPins,
+  type PinCoordinate,
+} from "@/lib/utils";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import type { Theme } from "@/store/theme";
 import { ensurePinLayers, notCluster, type GeoFeature } from "./pinLayers";
@@ -27,6 +33,58 @@ setWorkerUrl("/maplibre-gl-worker.js");
 export interface MapLocation {
   lat: number;
   lng: number;
+}
+
+const PIN_FIT_MAX_ZOOM = 15;
+const PIN_FIT_MIN_SPAN_DEGREES = 0.01;
+const PIN_FIT_DURATION_MS = 650;
+const PIN_FIT_PADDING = {
+  top: 96,
+  right: 96,
+  bottom: 160,
+  left: 96,
+};
+
+function fitPinNeighborhood(
+  map: MaplibreMap,
+  pins: readonly PinListEntry[],
+  clickedId: string
+): void {
+  const points: PinCoordinate[] = selectNearbyPins(clickedId, pins);
+  if (points.length < 2) return;
+
+  let bounds = new LngLatBounds();
+  for (const point of points) {
+    bounds.extend([point.lng, point.lat]);
+  }
+
+  // Avoid asking fitBounds to maximize zoom when pins share (or nearly share)
+  // a coordinate. A small geographic floor keeps the detail view readable.
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+  const south = bounds.getSouth();
+  const north = bounds.getNorth();
+  const centerLng = (west + east) / 2;
+  const centerLat = (south + north) / 2;
+  const lngSpan = Math.max(east - west, PIN_FIT_MIN_SPAN_DEGREES);
+  const latSpan = Math.max(north - south, PIN_FIT_MIN_SPAN_DEGREES);
+
+  if (
+    east - west < PIN_FIT_MIN_SPAN_DEGREES ||
+    north - south < PIN_FIT_MIN_SPAN_DEGREES
+  ) {
+    bounds = new LngLatBounds(
+      [centerLng - lngSpan / 2, centerLat - latSpan / 2],
+      [centerLng + lngSpan / 2, centerLat + latSpan / 2]
+    );
+  }
+
+  map.fitBounds(bounds, {
+    padding: PIN_FIT_PADDING,
+    maxZoom: PIN_FIT_MAX_ZOOM,
+    duration: PIN_FIT_DURATION_MS,
+    bearing: map.getBearing(),
+  });
 }
 
 /** Data carried by a hover tooltip; only fields actually rendered. */
@@ -73,6 +131,7 @@ export default function MapView({
   const onBoundsRef = useRef(onBoundsChange);
   const onSelectRef = useRef(onSelectPin);
   const onMapClickRef = useRef(onMapClick);
+  const pinsRef = useRef(pins);
 
   useEffect(() => {
     onBoundsRef.current = onBoundsChange;
@@ -81,13 +140,17 @@ export default function MapView({
   });
 
   useEffect(() => {
+    pinsRef.current = pins;
+  }, [pins]);
+
+  useEffect(() => {
     if (!MAPTILER_KEY) return;
     const map = new MapLibreMap({
       container: containerRef.current!,
       style: theme === "dark" ? DARK_STYLE : LIGHT_STYLE,
       zoom: 10,
       minZoom: 5,
-      maxZoom: 18,
+      maxZoom: 25,
     });
     mapRef.current = map;
 
@@ -108,7 +171,11 @@ export default function MapView({
         // Typed overload: MapLibre v6 accepts string[] layer ids directly.
         map.on("click", pinLayers, (e) => {
           const id = e.features?.[0]?.properties?.id;
-          if (id) onSelectRef.current(String(id));
+          if (!id) return;
+
+          const pinId = String(id);
+          onSelectRef.current(pinId);
+          fitPinNeighborhood(map, pinsRef.current, pinId);
         });
         map.on("mouseenter", pinLayers, () => {
           map.getCanvas().style.cursor = "pointer";
@@ -263,9 +330,9 @@ export default function MapView({
     const hasSelected = map.getLayer("pins-selected");
     if (!hasBase || !hasSelected) return;
 
-    const baseFilter: ExpressionSpecification = highlightId
-      ? ["all", notCluster, ["!=", ["get", "id"], highlightId]]
-      : notCluster;
+    // Keep the base layer populated so a selected pin's nearby neighbors
+    // remain visible; the selected layer provides the highlight overlay.
+    const baseFilter: ExpressionSpecification = notCluster;
     const selectedFilter: ExpressionSpecification = highlightId
       ? ["all", notCluster, ["==", ["get", "id"], highlightId]]
       : notCluster;

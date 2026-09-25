@@ -3,6 +3,7 @@ RUN apk add --no-cache vips-dev build-base pkgconf
 WORKDIR /app
 
 ENV CGO_ENABLED=1
+ENV APP_ENV=development
 ENV PATH="$PATH:/go/bin"
 
 # Cache module downloads before copying source so rebuilds are fast.

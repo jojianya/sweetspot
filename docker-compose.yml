@@ -56,6 +56,7 @@ services:
       - "127.0.0.1:8081:8081"
     environment:
       PORT: 8081
+      APP_ENV: ${APP_ENV:-development}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
@@ -65,7 +66,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       STORAGE_BACKEND: local
-      STORAGE_BASE_URL: http://localhost:8081
+      STORAGE_BASE_URL: ${STORAGE_BASE_URL:-http://localhost:8081}
       LOG_LEVEL: debug
       # This box is RAM-constrained; cap the Go toolchain so builds don't OOM.
       GOGC: "50"
@@ -96,6 +97,7 @@ services:
     environment:
       NEXT_PUBLIC_MAPTILER_API_KEY: ${NEXT_PUBLIC_MAPTILER_API_KEY:?set NEXT_PUBLIC_MAPTILER_API_KEY in .env}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8081}
+      SITE_URL: ${SITE_URL:-http://localhost:3000}
       # Server-side fetches (e.g. SSR pin pages) reach the API via the compose
       # service name; the browser keeps using the loopback-published port above.
       API_INTERNAL_URL: http://server:8081

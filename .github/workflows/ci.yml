@@ -70,9 +70,11 @@ jobs:
         env:
           NEXT_PUBLIC_MAPTILER_API_KEY: ci-test-key
           NEXT_PUBLIC_API_URL: http://localhost:8081
+          SITE_URL: http://localhost:3000
 
       - name: Build
         run: pnpm build
         env:
           NEXT_PUBLIC_MAPTILER_API_KEY: ci-test-key
           NEXT_PUBLIC_API_URL: http://localhost:8081
+          SITE_URL: http://localhost:3000

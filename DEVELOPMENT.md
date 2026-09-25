@@ -29,6 +29,27 @@ the server refuses to boot and tells you why (see `verifySchema`).
 `docker compose build`, `docker compose up -d`, and `docker compose down`
 **never delete data**. Building images doesn't touch volumes at all.
 
+## Production media with local-disk storage
+
+The current storage implementation writes every processed photo to `./uploads` and
+serves that directory from the API's public `/uploads` route. A deployed instance
+must therefore provide all of the following:
+
+- exactly one backend instance (local disk is not shared between replicas);
+- a persistent volume mounted at `/app/uploads` (do not rely on container-layer
+  storage or an anonymous Docker volume);
+- a public HTTPS API origin that proxies `/uploads` with long-lived cache headers;
+- `APP_ENV=production`, `STORAGE_BASE_URL=https://api.example.com`, and
+  `SITE_URL=https://goodspot.example` in the deployment environment.
+
+The production server rejects missing, non-HTTPS, or localhost media origins. The
+production Next.js image also requires the `SITE_URL` build argument. Local Docker
+development keeps explicit localhost defaults.
+
+This is sufficient for a single-host deployment, but it is not a CDN or durable
+multi-region storage strategy. Cloudflare R2 variables are not wired yet; setting
+`STORAGE_BACKEND=r2` fails rather than silently writing to local disk.
+
 ## Commands that DESTROY data — never run these casually
 
 | Command                                                   | Effect                                    |

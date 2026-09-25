@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"log"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 
@@ -11,6 +13,7 @@ import (
 
 type Config struct {
 	Port               string
+	AppEnv             string
 	DBHost             string
 	DBPort             string
 	DBUser             string
@@ -19,6 +22,7 @@ type Config struct {
 	LogLevel           string
 	LogFormat          string
 	JWTSecret          string
+	StorageBackend     string
 	StorageBase        string
 	RedisAddr          string
 	RedisPassword      string
@@ -34,6 +38,7 @@ func Load() *Config {
 
 	cfg := &Config{
 		Port:               getEnv("PORT", "8080"),
+		AppEnv:             strings.ToLower(getEnv("APP_ENV", "development")),
 		DBHost:             getEnv("DB_HOST", "localhost"),
 		DBPort:             getEnv("DB_PORT", "5432"),
 		DBUser:             getEnv("DB_USER", "postgres"),
@@ -42,7 +47,8 @@ func Load() *Config {
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		LogFormat:          getEnv("LOG_FORMAT", "text"),
 		JWTSecret:          getEnv("JWT_SECRET", ""),
-		StorageBase:        getEnv("STORAGE_BASE_URL", ""),
+		StorageBackend:     getEnv("STORAGE_BACKEND", "local"),
+		StorageBase:        getEnv("STORAGE_BASE_URL", "http://localhost:8081"),
 		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
 		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001")),
@@ -56,8 +62,64 @@ func Load() *Config {
 	if cfg.JWTSecret == "" {
 		log.Fatal("JWT_SECRET is required: set it in .env or the environment (generate with: openssl rand -hex 32)")
 	}
+	if err := validateAppEnv(cfg.AppEnv); err != nil {
+		log.Fatal(err)
+	}
+	if err := validateStorageBackend(cfg.StorageBackend); err != nil {
+		log.Fatal(err)
+	}
+	if err := validateStorageBase(cfg.StorageBase, cfg.AppEnv); err != nil {
+		log.Fatal(err)
+	}
 
 	return cfg
+}
+
+func validateAppEnv(value string) error {
+	if value != "development" && value != "production" {
+		return fmt.Errorf("APP_ENV must be development or production, got %q", value)
+	}
+	return nil
+}
+
+func validateStorageBackend(value string) error {
+	if value != "local" {
+		return fmt.Errorf("STORAGE_BACKEND %q is not supported; only local storage is implemented", value)
+	}
+	return nil
+}
+
+func validateStorageBase(raw, appEnv string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fmt.Errorf("STORAGE_BASE_URL is required")
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return fmt.Errorf("STORAGE_BASE_URL must be an absolute http or https URL")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return fmt.Errorf("STORAGE_BASE_URL must not include credentials, a query, or a fragment")
+	}
+
+	loopback := isLoopbackHost(parsed.Hostname())
+	if parsed.Scheme != "https" && !loopback {
+		return fmt.Errorf("STORAGE_BASE_URL must use https unless it is a local address")
+	}
+	if strings.EqualFold(appEnv, "production") && loopback {
+		return fmt.Errorf("STORAGE_BASE_URL must be publicly reachable in production")
+	}
+	return nil
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.ToLower(strings.Trim(host, "[]"))
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
 }
 
 func getOrigins(raw string) []string {

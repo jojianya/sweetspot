@@ -8,6 +8,7 @@ RUN GOMAXPROCS=1 GOFLAGS=-p=1 go build -o server ./cmd/api
 
 FROM alpine:3.20
 WORKDIR /app
+ENV APP_ENV=production
 RUN apk add --no-cache vips
 COPY --from=builder /app/server .
 COPY --from=builder /app/internal/platform/database/migrations ./internal/platform/database/migrations

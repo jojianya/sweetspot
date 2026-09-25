@@ -451,9 +451,20 @@ func (h *Handler) ListByUser(c *gin.Context) {
 		return
 	}
 
-	pins, err := h.repo.ListByUser(c.Request.Context(), c.Param("id"), limit)
+	userID := c.Param("id")
+	exists, err := h.repo.UserExists(c.Request.Context(), userID)
 	if err != nil {
-		response.Internal(c, "pins: list by user", err, "user_id", c.Param("id"))
+		response.Internal(c, "pins: check profile user", err, "user_id", userID)
+		return
+	}
+	if !exists {
+		response.NotFound(c, "user not found")
+		return
+	}
+
+	pins, err := h.repo.ListByUser(c.Request.Context(), userID, limit)
+	if err != nil {
+		response.Internal(c, "pins: list by user", err, "user_id", userID)
 		return
 	}
 

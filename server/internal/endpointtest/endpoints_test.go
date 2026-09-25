@@ -399,7 +399,13 @@ func TestUserEndpoints(t *testing.T) {
 	usersSvc := &mockUserService{
 		users: map[string]users.User{
 			testUUID1: {ID: testUUID1, Email: "a@example.com", Username: "alice", Role: users.RoleOwner},
-			testUUID2: {ID: testUUID2, Email: "b@example.com", Username: "bob", Role: users.RoleUser},
+			testUUID2: {
+				ID:        testUUID2,
+				Email:     "b@example.com",
+				Username:  "bob",
+				Role:      users.RoleUser,
+				UpdatedAt: time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC),
+			},
 		},
 	}
 	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
@@ -430,6 +436,9 @@ func TestUserEndpoints(t *testing.T) {
 		body := decodeBody(t, w)
 		if body["email"] != "b@example.com" {
 			t.Fatalf("expected own email in response, got %v", body["email"])
+		}
+		if body["updated_at"] != "2026-01-02T03:04:05Z" {
+			t.Fatalf("expected updated_at in private profile, got %v", body["updated_at"])
 		}
 	})
 

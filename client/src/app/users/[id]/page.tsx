@@ -124,7 +124,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
-  const { stats, busy, error: followError, toggle } = useFollow(id, !isSelf);
+  const { stats, busy, error: followError, toggle } = useFollow(id);
 
   useEffect(() => {
     let cancelled = false;
@@ -339,7 +339,10 @@ export default function ProfilePage({ params }: ProfilePageProps) {
             )}
 
             {/* Stats */}
-            <dl className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+            <dl
+              aria-label="Profile statistics"
+              className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm"
+            >
               <div className="flex items-baseline gap-1">
                 <dt className="sr-only">Pins</dt>
                 <dd className="font-semibold text-zinc-900 dark:text-zinc-100">
@@ -377,7 +380,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
             <button
               type="button"
               onClick={toggle}
-              disabled={busy}
+              disabled={busy || !stats}
               className={`shrink-0 rounded-full px-5 py-2 text-sm font-medium transition-colors disabled:opacity-60 ${
                 stats?.is_following
                   ? "border border-zinc-300 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"

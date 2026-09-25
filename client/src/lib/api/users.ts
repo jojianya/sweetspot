@@ -4,8 +4,8 @@ import type { PinListEntry, PublicProfile, User } from "@/lib/types";
 
 /** Raw profile payload (GET /users/:id returns the user object directly). */
 export async function fetchUser(userId: string): Promise<PublicProfile> {
-  const { data } = await api.get<PublicProfile>(`/users/${userId}`);
-  return data;
+  const { data } = await api.get<unknown>(`/users/${userId}`);
+  return publicUserSchema.parse(data);
 }
 
 /**

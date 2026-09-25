@@ -403,11 +403,21 @@ func TestUpdatePin(t *testing.T) {
 }
 
 func TestListUserPins(t *testing.T) {
-	r, _ := setupFeaturesRouter(t, &stubPinRepo{userPins: []pins.PinListEntry{}}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{}, newUsersSvc())
-	w := doJSON(t, r, http.MethodGet, "/users/"+testUUID1+"/pins", "", nil)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
-	}
+	t.Run("ExistingUser", func(t *testing.T) {
+		r, _ := setupFeaturesRouter(t, &stubPinRepo{userExists: true, userPins: []pins.PinListEntry{}}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{}, newUsersSvc())
+		w := doJSON(t, r, http.MethodGet, "/users/"+testUUID1+"/pins", "", nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("UnknownUser", func(t *testing.T) {
+		r, _ := setupFeaturesRouter(t, &stubPinRepo{userExists: false}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{}, newUsersSvc())
+		w := doJSON(t, r, http.MethodGet, "/users/"+testUUID1+"/pins", "", nil)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
 }
 
 // --- trending pins (viewport hotness) --------------------------------------

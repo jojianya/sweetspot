@@ -21,16 +21,18 @@ func (u *User) ToPublic() PublicUser {
 }
 
 // PrivateUser is the shape returned to the account owner themselves: the
-// public profile plus the verified email address.
+// public profile plus private account fields.
 type PrivateUser struct {
 	PublicUser
-	Email string `json:"email"`
+	Email     string `json:"email"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 func (u *User) ToPrivate() PrivateUser {
 	return PrivateUser{
 		PublicUser: u.ToPublic(),
 		Email:      u.Email,
+		UpdatedAt:  u.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 }
 

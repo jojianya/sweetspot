@@ -13,7 +13,7 @@ import (
 func CORS(origins ...string) gin.HandlerFunc {
 	allowed := origins
 	if len(allowed) == 0 {
-		allowed = []string{"http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"}
+		allowed = []string{"http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "http://127.0.0.1:3002"}
 	}
 
 	return cors.New(cors.Config{

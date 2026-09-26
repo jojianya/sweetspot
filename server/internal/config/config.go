@@ -51,7 +51,7 @@ func Load() *Config {
 		StorageBase:        getEnv("STORAGE_BASE_URL", "http://localhost:8081"),
 		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
-		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001")),
+		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002")),
 		SentryDSN:          getEnv("SENTRY_DSN", ""),
 		SentryEnv:          getEnv("SENTRY_ENV", "development"),
 	}

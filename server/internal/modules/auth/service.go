@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -29,6 +30,13 @@ func NewService(userSvc users.Service, jwtSecret string) Service {
 }
 
 func (s *service) Register(ctx context.Context, req RegisterRequest) (users.User, string, error) {
+	// Checked here rather than via the DTO's binding tag: the tag counts runes
+	// and bcrypt counts bytes, so only this check reflects what bcrypt will
+	// accept. Wrapped in ErrInvalidPassword so the handler answers 400.
+	if err := password.Validate(req.Password); err != nil {
+		return users.User{}, "", fmt.Errorf("%w: %w", ErrInvalidPassword, err)
+	}
+
 	hash, err := password.Hash(req.Password)
 	if err != nil {
 		return users.User{}, "", err

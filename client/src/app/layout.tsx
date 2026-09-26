@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
-import ErrorBoundary from "@/components/ErrorBoundary";
 import RuntimeErrorReporter from "@/components/RuntimeErrorReporter";
 import { getSiteUrl } from "@/lib/site";
 import "./globals.css";
@@ -49,9 +48,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="flex h-dvh flex-col overflow-hidden">
         <RuntimeErrorReporter />
-        <ErrorBoundary>
-          <main className="relative flex flex-1 flex-col overflow-hidden">{children}</main>
-        </ErrorBoundary>
+        <main className="relative flex flex-1 flex-col overflow-hidden">{children}</main>
       </body>
     </html>
   );

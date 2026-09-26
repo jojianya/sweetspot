@@ -2,7 +2,9 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    # development is where work actually lands; without it a broken test can
+    # sit there for weeks and only surface on the next PR.
+    branches: [main, development]
   pull_request:
 
 jobs:

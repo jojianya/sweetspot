@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 )
 
 // CreateCollectionRequest / UpdateCollectionRequest share the same shape:
@@ -19,10 +20,13 @@ type CollectionRequest struct {
 
 type Handler struct {
 	repo Repository
+	// roles resolves moderation rights from the database rather than the JWT,
+	// so a demotion takes effect on the caller's next request.
+	roles users.RoleReader
 }
 
-func NewHandler(repo Repository) *Handler {
-	return &Handler{repo: repo}
+func NewHandler(repo Repository, roles users.RoleReader) *Handler {
+	return &Handler{repo: repo, roles: roles}
 }
 
 func (h *Handler) ListMine(c *gin.Context) {
@@ -132,8 +136,8 @@ func (h *Handler) requireOwner(c *gin.Context) bool {
 
 	userID := middleware.GetUserID(c)
 	if collection.UserID.String() != userID {
-		role := middleware.GetRole(c)
-		if role != "admin" && role != "owner" {
+		// Only non-owners reach the role lookup, keeping it off the common path.
+		if !users.IsModerator(h.roles, c) {
 			response.Forbidden(c, "you can only modify your own collections")
 			return false
 		}

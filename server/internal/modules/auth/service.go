@@ -43,7 +43,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (users.User
 		return users.User{}, "", err
 	}
 
-	token, err := jwt.Generate(s.jwtSecret, u.ID, u.Role, tokenExpiry)
+	token, err := jwt.Generate(s.jwtSecret, u.ID, tokenExpiry)
 	if err != nil {
 		return users.User{}, "", err
 	}
@@ -63,7 +63,7 @@ func (s *service) Login(ctx context.Context, req LoginRequest) (users.User, stri
 		return users.User{}, "", ErrInvalidCredentials
 	}
 
-	token, err := jwt.Generate(s.jwtSecret, u.ID, u.Role, tokenExpiry)
+	token, err := jwt.Generate(s.jwtSecret, u.ID, tokenExpiry)
 	if err != nil {
 		return users.User{}, "", err
 	}

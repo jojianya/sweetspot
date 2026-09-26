@@ -1,11 +1,8 @@
 package users
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
-	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/pkg/validid"
 )
@@ -34,31 +31,4 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 	)
 }
 
-// CurrentRole resolves the caller role from the request context using the user service.
-func CurrentRole(svc Service, c *gin.Context) string {
-	user, err := svc.GetByID(c.Request.Context(), middleware.GetUserID(c))
-	if err != nil {
-		return ""
-	}
-	return user.Role
-}
-
-func RequireAdmin(svc Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if role := CurrentRole(svc, c); role != RoleAdmin && role != RoleOwner {
-			response.AbortError(c, http.StatusForbidden, "admin access required")
-			return
-		}
-		c.Next()
-	}
-}
-
-func RequireOwner(svc Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if role := CurrentRole(svc, c); role != RoleOwner {
-			response.AbortError(c, http.StatusForbidden, "owner access required")
-			return
-		}
-		c.Next()
-	}
-}
+// CurrentRole, IsModerator, RequireAdmin and RequireOwner live in role.go.

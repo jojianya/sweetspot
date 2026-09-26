@@ -244,16 +244,16 @@ func setupFeaturesRouter(
 	// Registered on uploadRoutes: PATCH /users/me is multipart (avatar upload).
 	users.RegisterRoutes(uploadRoutes, userH, users.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
-	pinH := pins.NewHandler(pinRepo, store, nil)
+	pinH := pins.NewHandler(pinRepo, store, nil, usersSvc)
 	pins.RegisterRoutes(uploadRoutes, pinH, pins.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
-	commentH := comments.NewHandler(commentRepo)
+	commentH := comments.NewHandler(commentRepo, usersSvc)
 	comments.RegisterRoutes(jsonRoutes, commentH, comments.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
 	socialH := social.NewHandler(socialRepo)
 	social.RegisterRoutes(jsonRoutes, socialH, social.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
-	colH := collections.NewHandler(collectionRepo)
+	colH := collections.NewHandler(collectionRepo, usersSvc)
 	collections.RegisterRoutes(jsonRoutes, colH, collections.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
 	return r, store
@@ -362,7 +362,7 @@ func uuidStr() string { return testUUID3 }
 
 func TestUpdatePin(t *testing.T) {
 	r, _ := setupFeaturesRouter(t, &stubPinRepo{pinDetail: pinDetailOf(testUUID1)}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{}, newUsersSvc())
-	token := newToken(t, testUUID1, "user")
+	token := newToken(t, testUUID1)
 
 	t.Run("OwnerEditsCaption", func(t *testing.T) {
 		w := doMultipart(t, r, http.MethodPatch, "/pins/"+testUUID1, map[string]string{"caption": "new caption"}, authHeaders(token))
@@ -372,7 +372,7 @@ func TestUpdatePin(t *testing.T) {
 	})
 
 	t.Run("NonOwnerForbidden", func(t *testing.T) {
-		otherToken := newToken(t, testUUID2, "user")
+		otherToken := newToken(t, testUUID2)
 		w := doMultipart(t, r, http.MethodPatch, "/pins/"+testUUID1, map[string]string{"caption": "hi"}, authHeaders(otherToken))
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d (%s)", w.Code, w.Body.String())
@@ -467,8 +467,8 @@ func TestSearchUsers(t *testing.T) {
 	svc := newUsersSvc()
 	svc.users[testUUID1] = users.User{ID: testUUID1, Email: "a@example.com", Username: "alice", Role: users.RoleOwner}
 	r, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{}, svc)
-	ownerToken := newToken(t, testUUID1, "owner")
-	userToken := newToken(t, testUUID2, "user")
+	ownerToken := newToken(t, testUUID1)
+	userToken := newToken(t, testUUID2)
 
 	t.Run("OwnerCanSearch", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodGet, "/users?q=ali", "", authHeaders(ownerToken))
@@ -544,7 +544,7 @@ func TestSearchUsers(t *testing.T) {
 func TestUpdateMyProfile(t *testing.T) {
 	svc := newUsersSvc()
 	r, store := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{}, svc)
-	token := newToken(t, testUUID1, "user")
+	token := newToken(t, testUUID1)
 
 	t.Run("EditsUsernameAndSocials", func(t *testing.T) {
 		w := doMultipart(t, r, http.MethodPatch, "/users/me", map[string]string{
@@ -682,9 +682,17 @@ func TestCommentEndpoints(t *testing.T) {
 	commentRepo := &mockCommentRepo{
 		get: comments.Comment{PinID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), Body: "nice"},
 	}
-	r, _ := setupFeaturesRouter(t, &stubPinRepo{}, commentRepo, &mockSocialRepo{}, &mockCollectionRepo{}, newUsersSvc())
-	token := newToken(t, testUUID1, "user")
-	adminToken := newToken(t, testUUID2, "admin")
+	usersSvc := newUsersSvc()
+	// The moderator path reads the role from the database, so the privilege has
+	// to be granted there rather than baked into the token. testUUID3 stays a
+	// plain user, giving the "neither author nor moderator" case an identity
+	// that is genuinely unprivileged.
+	setRole(usersSvc, testUUID2, users.RoleAdmin)
+	setRole(usersSvc, testUUID3, users.RoleUser)
+
+	r, _ := setupFeaturesRouter(t, &stubPinRepo{}, commentRepo, &mockSocialRepo{}, &mockCollectionRepo{}, usersSvc)
+	token := newToken(t, testUUID1)
+	adminToken := newToken(t, testUUID2)
 
 	t.Run("ListComments", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodGet, "/pins/"+testUUID1+"/comments", "", nil)
@@ -735,7 +743,8 @@ func TestCommentEndpoints(t *testing.T) {
 	})
 
 	t.Run("NonOwnerCannotDelete", func(t *testing.T) {
-		otherToken := newToken(t, testUUID2, "user")
+		// testUUID3 is neither the comment author nor a moderator.
+		otherToken := newToken(t, testUUID3)
 		w := doJSON(t, r, http.MethodDelete, "/comments/"+testUUID1, "", authHeaders(otherToken))
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d (%s)", w.Code, w.Body.String())
@@ -748,7 +757,7 @@ func TestCommentEndpoints(t *testing.T) {
 func TestFollowEndpoints(t *testing.T) {
 	socialRepo := &mockSocialRepo{userExists: true, followers: 3, following: 1, pinsCount: 5, isFollowing: true}
 	r, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, socialRepo, &mockCollectionRepo{}, newUsersSvc())
-	token := newToken(t, testUUID1, "user")
+	token := newToken(t, testUUID1)
 
 	t.Run("Follow", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodPut, "/users/"+testUUID2+"/follow", "", authHeaders(token))
@@ -805,7 +814,7 @@ func TestFollowEndpoints(t *testing.T) {
 func TestFeed(t *testing.T) {
 	socialRepo := &mockSocialRepo{feed: []pins.PinListEntry{}}
 	r, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, socialRepo, &mockCollectionRepo{}, newUsersSvc())
-	token := newToken(t, testUUID1, "user")
+	token := newToken(t, testUUID1)
 
 	t.Run("FeedRequiresAuth", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodGet, "/feed", "", nil)
@@ -833,8 +842,8 @@ func TestCollectionEndpoints(t *testing.T) {
 		pinExists:  true,
 	}
 	r, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, colRepo, newUsersSvc())
-	token := newToken(t, testUUID1, "user")
-	otherToken := newToken(t, testUUID2, "user")
+	token := newToken(t, testUUID1)
+	otherToken := newToken(t, testUUID2)
 
 	t.Run("ListMine", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodGet, "/collections", "", authHeaders(token))

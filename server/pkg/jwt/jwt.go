@@ -11,13 +11,18 @@ import (
 
 var ErrInvalidToken = errors.New("invalid token")
 
+// Claims carries the caller's identity.
+//
+// There is deliberately no Role field. A role baked in at login goes stale: a
+// demoted admin would keep their privileges until the token expired, which was
+// 30 days. Authorization reads the role live from the database instead — see
+// users.CurrentRole and users.IsModerator.
 type Claims struct {
 	UserID string `json:"user_id"`
-	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-func Generate(secret, userID, role string, expiry time.Duration) (string, error) {
+func Generate(secret, userID string, expiry time.Duration) (string, error) {
 	jti, err := newJTI()
 	if err != nil {
 		return "", err
@@ -25,7 +30,6 @@ func Generate(secret, userID, role string, expiry time.Duration) (string, error)
 
 	claims := Claims{
 		UserID: userID,
-		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),

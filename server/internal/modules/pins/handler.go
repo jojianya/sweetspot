@@ -17,6 +17,7 @@ import (
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins/imaging"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/pkg/geohash"
 )
@@ -53,13 +54,16 @@ type Handler struct {
 	repo   Repository
 	store  *storage.Local
 	events Events
+	// roles resolves moderation rights from the database rather than the JWT,
+	// so a demotion takes effect on the caller's next request.
+	roles users.RoleReader
 }
 
-func NewHandler(repo Repository, store *storage.Local, events Events) *Handler {
+func NewHandler(repo Repository, store *storage.Local, events Events, roles users.RoleReader) *Handler {
 	if events == nil {
 		events = nopEvents{}
 	}
-	return &Handler{repo: repo, store: store, events: events}
+	return &Handler{repo: repo, store: store, events: events, roles: roles}
 }
 
 // nopEvents is the zero-value event publisher used when realtime is disabled.
@@ -153,7 +157,7 @@ func (h *Handler) GetPin(c *gin.Context) {
 		return
 	}
 
-	if pin.IsHidden && !canViewHidden(c, pin) {
+	if pin.IsHidden && !h.canViewHidden(c, pin) {
 		response.NotFound(c, "pin not found")
 		return
 	}
@@ -161,7 +165,7 @@ func (h *Handler) GetPin(c *gin.Context) {
 	response.OK(c, gin.H{"pin": pin})
 }
 
-func canViewHidden(c *gin.Context, pin PinDetail) bool {
+func (h *Handler) canViewHidden(c *gin.Context, pin PinDetail) bool {
 	viewerID := middleware.GetUserID(c)
 	if viewerID == "" {
 		return false
@@ -170,8 +174,9 @@ func canViewHidden(c *gin.Context, pin PinDetail) bool {
 		return true
 	}
 
-	role := middleware.GetRole(c)
-	return role == "admin" || role == "owner"
+	// Only reached for a hidden pin owned by someone else, so the lookup below
+	// is off the common path.
+	return users.IsModerator(h.roles, c)
 }
 
 // RegisterView counts a view of a pin. It is public: anyone who opens a pin
@@ -499,8 +504,8 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		return
 	}
 
-	role := middleware.GetRole(c)
-	if existing.UserID.String() != userID && role != "admin" && role != "owner" {
+	// Only non-owners reach the role lookup, keeping it off the common path.
+	if existing.UserID.String() != userID && !users.IsModerator(h.roles, c) {
 		response.Forbidden(c, "you can only edit your own pins")
 		return
 	}

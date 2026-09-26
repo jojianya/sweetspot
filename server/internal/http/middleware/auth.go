@@ -13,7 +13,6 @@ import (
 
 const (
 	CtxUserID    = "user_id"
-	CtxRole      = "role"
 	CtxJWTClaims = "jwt_claims"
 )
 
@@ -45,9 +44,12 @@ func parseBearerClaims(c *gin.Context, jwtSecret string, bl *cache.Blacklist) (c
 }
 
 // applyClaims stores the validated identity on the request context.
+//
+// The role is deliberately not stored here. A role baked into the token at
+// login goes stale, so authorization reads it live from the database via
+// users.CurrentRole / users.IsModerator instead.
 func applyClaims(c *gin.Context, claims *jwt.Claims) {
 	c.Set(CtxUserID, claims.UserID)
-	c.Set(CtxRole, claims.Role)
 	c.Set(CtxJWTClaims, claims)
 }
 
@@ -77,8 +79,4 @@ func OptionalAuth(jwtSecret string, bl *cache.Blacklist) gin.HandlerFunc {
 
 func GetUserID(c *gin.Context) string {
 	return c.GetString(CtxUserID)
-}
-
-func GetRole(c *gin.Context) string {
-	return c.GetString(CtxRole)
 }

@@ -1,0 +1,598 @@
+{
+  "repo": "jojianya/sweetspot",
+  "baseBranch": "development",
+  "source": "CODE_REVIEW.md",
+  "milestones": [
+    {
+      "title": "P0-critical",
+      "description": "P0 \u2014 critical: fix before any deploy"
+    },
+    {
+      "title": "P1-high",
+      "description": "P1 \u2014 high: fix this cycle"
+    },
+    {
+      "title": "P2-medium",
+      "description": "P2 \u2014 medium: scheduled work"
+    },
+    {
+      "title": "P3-polish",
+      "description": "P3 \u2014 polish: opportunistic"
+    }
+  ],
+  "extraLabels": [
+    {
+      "name": "P0-critical",
+      "color": "b60205",
+      "description": "Critical: security, data loss, or outage"
+    },
+    {
+      "name": "P1-high",
+      "color": "d93f0b",
+      "description": "High: real bug or significant regression risk"
+    },
+    {
+      "name": "P2-medium",
+      "color": "fbca04",
+      "description": "Medium: correctness, perf, or robustness gap"
+    },
+    {
+      "name": "P3-polish",
+      "color": "0e8a16",
+      "description": "Polish: cleanup, consistency, DX"
+    },
+    {
+      "name": "backend",
+      "color": "1d76db",
+      "description": "Go server code"
+    },
+    {
+      "name": "frontend",
+      "color": "5319e7",
+      "description": "Next.js / React client code"
+    },
+    {
+      "name": "security",
+      "color": "b60205",
+      "description": "Security or auth defect"
+    },
+    {
+      "name": "performance",
+      "color": "f9d0c4",
+      "description": "Latency, throughput, or resource usage"
+    },
+    {
+      "name": "sql",
+      "color": "c5def5",
+      "description": "Database query or migration"
+    },
+    {
+      "name": "devops",
+      "color": "bfd4f2",
+      "description": "Docker, CI, or process"
+    },
+    {
+      "name": "needs-design",
+      "color": "d4c5f9",
+      "description": "Needs a decision before implementation"
+    }
+  ],
+  "issues": [
+    {
+      "id": "P0.1",
+      "file": "p0-1.md",
+      "title": "[P0.1] HTTP server has no read/idle timeouts \u2192 Slowloris DoS",
+      "labels": [
+        "P0-critical",
+        "backend",
+        "bug",
+        "devops",
+        "security"
+      ],
+      "milestone": "P0-critical"
+    },
+    {
+      "id": "P0.2",
+      "file": "p0-2.md",
+      "title": "[P0.2] Process exits 0 when the server fails \u2192 orchestrators never restart it",
+      "labels": [
+        "P0-critical",
+        "backend",
+        "bug",
+        "devops"
+      ],
+      "milestone": "P0-critical"
+    },
+    {
+      "id": "P0.3",
+      "file": "p0-3.md",
+      "title": "[P0.3] Role escalation window: admin rights live in the JWT for 30 days",
+      "labels": [
+        "P0-critical",
+        "backend",
+        "bug",
+        "needs-design",
+        "security"
+      ],
+      "milestone": "P0-critical"
+    },
+    {
+      "id": "P0.4",
+      "file": "p0-4.md",
+      "title": "[P0.4] Password length limit counts runes, bcrypt counts bytes \u2192 silent truncation",
+      "labels": [
+        "P0-critical",
+        "backend",
+        "bug",
+        "security"
+      ],
+      "milestone": "P0-critical"
+    },
+    {
+      "id": "P1.1",
+      "file": "p1-1.md",
+      "title": "[P1.1] ListTrending aggregates the entire comments table on every request",
+      "labels": [
+        "P1-high",
+        "backend",
+        "bug",
+        "performance",
+        "sql"
+      ],
+      "milestone": "P1-high"
+    },
+    {
+      "id": "P1.2",
+      "file": "p1-2.md",
+      "title": "[P1.2] pins has no index supporting ORDER BY created_at DESC",
+      "labels": [
+        "P1-high",
+        "backend",
+        "bug",
+        "performance",
+        "sql"
+      ],
+      "milestone": "P1-high"
+    },
+    {
+      "id": "P1.3",
+      "file": "p1-3.md",
+      "title": "[P1.3] Bbox filter uses ST_DWithin(..., 0) \u2014 obscure and index-hostile",
+      "labels": [
+        "P1-high",
+        "backend",
+        "bug",
+        "performance",
+        "sql"
+      ],
+      "milestone": "P1-high"
+    },
+    {
+      "id": "P1.4",
+      "file": "p1-4.md",
+      "title": "[P1.4] ListUsers runs a full COUNT(*) on every page",
+      "labels": [
+        "P1-high",
+        "backend",
+        "bug",
+        "performance",
+        "sql"
+      ],
+      "milestone": "P1-high"
+    },
+    {
+      "id": "P1.5",
+      "file": "p1-5.md",
+      "title": "[P1.5] Axios interceptor throws away the HTTP status, forcing string-matching for control flow",
+      "labels": [
+        "P1-high",
+        "bug",
+        "frontend"
+      ],
+      "milestone": "P1-high"
+    },
+    {
+      "id": "P1.6",
+      "file": "p1-6.md",
+      "title": "[P1.6] No error.tsx, not-found.tsx, global-error.tsx, or loading.tsx in app/",
+      "labels": [
+        "P1-high",
+        "bug",
+        "frontend"
+      ],
+      "milestone": "P1-high"
+    },
+    {
+      "id": "P1.7",
+      "file": "p1-7.md",
+      "title": "[P1.7] pin/[id] has no error handling \u2014 a 5s API timeout 500s the route",
+      "labels": [
+        "P1-high",
+        "bug",
+        "frontend"
+      ],
+      "milestone": "P1-high"
+    },
+    {
+      "id": "P1.8",
+      "file": "p1-8.md",
+      "title": "[P1.8] SSR_API_URL silently falls back to the browser-visible URL \u2192 wrong host in Docker",
+      "labels": [
+        "P1-high",
+        "bug",
+        "devops",
+        "frontend"
+      ],
+      "milestone": "P1-high"
+    },
+    {
+      "id": "P1.9",
+      "file": "p1-9.md",
+      "title": "[P1.9] JWT is stored in localStorage \u2192 any XSS exfiltrates a 30-day session",
+      "labels": [
+        "P1-high",
+        "bug",
+        "frontend",
+        "needs-design",
+        "security"
+      ],
+      "milestone": "P1-high"
+    },
+    {
+      "id": "P1.10",
+      "file": "p1-10.md",
+      "title": "[P1.10] GET /pins/:id owner gets 404 for their own hidden pin on SSR",
+      "labels": [
+        "P1-high",
+        "backend",
+        "bug",
+        "frontend"
+      ],
+      "milestone": "P1-high"
+    },
+    {
+      "id": "P2.1",
+      "file": "p2-1.md",
+      "title": "[P2.1] MapView re-renders ~200 DOM nodes on every mouse move over the map",
+      "labels": [
+        "P2-medium",
+        "bug",
+        "frontend",
+        "performance"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.2",
+      "file": "p2-2.md",
+      "title": "[P2.2] SSE connection is torn down and rebuilt on every map pan",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "frontend",
+        "performance"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.3",
+      "file": "p2-3.md",
+      "title": "[P2.3] maplibre-gl-shared.mjs is imported into the client bundle \u2014 ~513 KB of vendored source",
+      "labels": [
+        "P2-medium",
+        "bug",
+        "devops",
+        "frontend",
+        "performance"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.4",
+      "file": "p2-4.md",
+      "title": "[P2.4] pinLayers.ts pulls react-dom/server into the client bundle and rebuilds 18 icons per theme switch",
+      "labels": [
+        "P2-medium",
+        "bug",
+        "frontend",
+        "performance"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.5",
+      "file": "p2-5.md",
+      "title": "[P2.5] URL.createObjectURL called inside useMemo during render \u2192 object-URL leak",
+      "labels": [
+        "P2-medium",
+        "bug",
+        "frontend",
+        "performance"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.6",
+      "file": "p2-6.md",
+      "title": "[P2.6] SearchBar highlights the wrong pin while arrowing through results",
+      "labels": [
+        "P2-medium",
+        "bug",
+        "frontend"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.7",
+      "file": "p2-7.md",
+      "title": "[P2.7] MapNavBar account menu is a role=\"menu\" with no keyboard handling",
+      "labels": [
+        "P2-medium",
+        "accessibility",
+        "bug",
+        "frontend"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.8",
+      "file": "p2-8.md",
+      "title": "[P2.8] CreatePinButton hand-rolls its dialog \u2014 no focus trap, no focus restore",
+      "labels": [
+        "P2-medium",
+        "accessibility",
+        "bug",
+        "frontend"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.9",
+      "file": "p2-9.md",
+      "title": "[P2.9] CreatePinButton keeps stale state when dismissed via the map",
+      "labels": [
+        "P2-medium",
+        "bug",
+        "frontend"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.10",
+      "file": "p2-10.md",
+      "title": "[P2.10] Unauthenticated POST /errors with no rate limit \u2192 Sentry/log flooding",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "devops",
+        "security"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.11",
+      "file": "p2-11.md",
+      "title": "[P2.11] Recover returns a non-JSON body, breaking the API's error envelope",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.12",
+      "file": "p2-12.md",
+      "title": "[P2.12] Recover reports an empty request_id",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "devops"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.13",
+      "file": "p2-13.md",
+      "title": "[P2.13] SSE /events has no heartbeat and no connection cap",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "devops",
+        "performance"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.14",
+      "file": "p2-14.md",
+      "title": "[P2.14] sslmode=disable is hardcoded in the DSN",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "devops",
+        "security"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.15",
+      "file": "p2-15.md",
+      "title": "[P2.15] docker-compose.yml silently drops CORS_ALLOWED_ORIGINS and SENTRY_DSN",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "devops",
+        "frontend"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.16",
+      "file": "p2-16.md",
+      "title": "[P2.16] Logout hard-fails with a 500 when Redis is down, and the token is never revoked",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "security"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.17",
+      "file": "p2-17.md",
+      "title": "[P2.17] Two Redis clients, never closed",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "devops"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.18",
+      "file": "p2-18.md",
+      "title": "[P2.18] Shutdown blocks for the full 10 s on every deploy because SSE connections never finish",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "devops"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.19",
+      "file": "p2-19.md",
+      "title": "[P2.19] RequireAdmin/RequireOwner add a DB round-trip to every admin request",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "needs-design",
+        "performance"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.20",
+      "file": "p2-20.md",
+      "title": "[P2.20] RequestLogger has dead code, and /health is logged on every probe",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.21",
+      "file": "p2-21.md",
+      "title": "[P2.21] GetByLogin OR-blocks two columns \u2192 full scan, and usernames are case-inconsistent",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "performance",
+        "sql"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.22",
+      "file": "p2-22.md",
+      "title": "[P2.22] comments.Create doesn't check the pin exists \u2192 500 instead of 404",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "sql"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.23",
+      "file": "p2-23.md",
+      "title": "[P2.23] UpdatePin treats an absent caption field as \"clear the caption\"",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "P2.24",
+      "file": "p2-24.md",
+      "title": "[P2.24] UpdatePin photo cleanup leaks files on moderation",
+      "labels": [
+        "P2-medium",
+        "backend",
+        "bug",
+        "performance"
+      ],
+      "milestone": "P2-medium"
+    },
+    {
+      "id": "polish-client-perf",
+      "file": "polish-client-perf.md",
+      "title": "[P3] Polish: client-side performance cleanups",
+      "labels": [
+        "P3-polish",
+        "frontend",
+        "performance"
+      ],
+      "milestone": "P3-polish"
+    },
+    {
+      "id": "polish-a11y",
+      "file": "polish-a11y.md",
+      "title": "[P3] Polish: accessibility gaps",
+      "labels": [
+        "P3-polish",
+        "accessibility",
+        "frontend"
+      ],
+      "milestone": "P3-polish"
+    },
+    {
+      "id": "polish-tests",
+      "file": "polish-tests.md",
+      "title": "[P3] Polish: test coverage and CI hardening",
+      "labels": [
+        "P3-polish",
+        "backend",
+        "devops"
+      ],
+      "milestone": "P3-polish"
+    },
+    {
+      "id": "polish-deadcode",
+      "file": "polish-deadcode.md",
+      "title": "[P3] Polish: remove dead scaffolding and unused code",
+      "labels": [
+        "P3-polish",
+        "backend"
+      ],
+      "milestone": "P3-polish"
+    },
+    {
+      "id": "polish-consistency",
+      "file": "polish-consistency.md",
+      "title": "[P3] Polish: client consistency and partial-failure fixes",
+      "labels": [
+        "P3-polish",
+        "frontend"
+      ],
+      "milestone": "P3-polish"
+    }
+  ]
+}

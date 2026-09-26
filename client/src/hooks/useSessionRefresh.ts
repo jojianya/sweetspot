@@ -7,17 +7,20 @@ import { useAuth } from "@/store/auth";
  * (promotions/demotions) show up in the UI without re-logging in. The server
  * role gates already read the role from the DB per request; this keeps the
  * client cache in step with them.
+ *
+ * Authentication is via an httpOnly cookie, so there is no token to check —
+ * the cookie is sent automatically with the fetchMe request.
  */
 export function useSessionRefresh() {
-  const { user, token, setAuth } = useAuth();
+  const { user, setUser } = useAuth();
   const userId = user?.id;
 
   useEffect(() => {
-    if (!token || !userId) return;
+    if (!userId) return;
     let cancelled = false;
     fetchMe(userId)
       .then((fresh) => {
-        if (!cancelled) setAuth(fresh, token);
+        if (!cancelled) setUser(fresh);
       })
       .catch(() => {
         // keep the cached user if the refresh fails (offline etc.)
@@ -25,5 +28,5 @@ export function useSessionRefresh() {
     return () => {
       cancelled = true;
     };
-  }, [token, userId, setAuth]);
+  }, [userId, setUser]);
 }

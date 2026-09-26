@@ -21,7 +21,7 @@ const ROLE_STYLES: Record<string, string> = {
 const PAGE_SIZE = 50;
 
 export default function RolesPage() {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const isOwner = user?.role === "owner";
 
   const [query, setQuery] = useState("");
@@ -112,7 +112,7 @@ export default function RolesPage() {
     }
   };
 
-  if (!token || !user) {
+  if (!user) {
     return (
       <>
         <Navbar backHref="/" backLabel="Back to map" />

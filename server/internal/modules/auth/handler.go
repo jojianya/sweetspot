@@ -44,7 +44,8 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	response.Created(c, gin.H{"user": u, "token": token})
+	SetSessionCookie(c.Writer, token, tokenExpiry)
+	response.Created(c, gin.H{"user": u})
 }
 
 func (h *Handler) Login(c *gin.Context) {
@@ -76,7 +77,8 @@ func (h *Handler) Login(c *gin.Context) {
 		h.emailLim.Reset(req.Identifier)
 	}
 
-	response.OK(c, gin.H{"user": u, "token": token})
+	SetSessionCookie(c.Writer, token, tokenExpiry)
+	response.OK(c, gin.H{"user": u})
 }
 
 func (h *Handler) Logout(c *gin.Context) {
@@ -93,6 +95,7 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
+	ClearSessionCookie(c.Writer)
 	response.OK(c, gin.H{"message": "logged out"})
 }
 

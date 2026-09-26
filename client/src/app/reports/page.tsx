@@ -24,7 +24,7 @@ const STATUS_STYLES: Record<ReportStatus, string> = {
 };
 
 export default function ReportsPage() {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const isModerator = user?.role === "admin" || user?.role === "owner";
 
   const [status, setStatus] = useState<ReportStatus | "all">("pending");
@@ -83,7 +83,7 @@ export default function ReportsPage() {
     }
   };
 
-  if (!token || !user) {
+  if (!user) {
     return (
       <>
         <Navbar backHref="/" backLabel="Back to map" />

@@ -69,9 +69,8 @@ func RunMigrations(pool *pgxpool.Pool, migrationsDir string) error {
 			return fmt.Errorf("reading %s: %w", file, err)
 		}
 
-		_, err = pool.Exec(context.Background(), string(sql))
-		if err != nil {
-			return fmt.Errorf("executing %s: %w", file, err)
+		if err := executeMigration(pool, file, string(sql)); err != nil {
+			return err
 		}
 
 		_, err = pool.Exec(context.Background(), "INSERT INTO schema_migrations (filename) VALUES ($1)", file)
@@ -87,6 +86,121 @@ func RunMigrations(pool *pgxpool.Pool, migrationsDir string) error {
 	}
 
 	return nil
+}
+
+// executeMigration runs a migration file. When the file contains
+// CREATE INDEX CONCURRENTLY, the statements are executed individually
+// because CONCURRENTLY cannot run inside a transaction block.
+func executeMigration(pool *pgxpool.Pool, file, sql string) error {
+	// Fast path: no CONCURRENTLY, run as before.
+	if !strings.Contains(strings.ToUpper(sql), "CONCURRENTLY") {
+		_, err := pool.Exec(context.Background(), sql)
+		if err != nil {
+			return fmt.Errorf("executing %s: %w", file, err)
+		}
+		return nil
+	}
+
+	// CONCURRENTLY detected: split and run each statement separately.
+	statements := splitStatements(sql)
+	for _, stmt := range statements {
+		if strings.TrimSpace(stmt) == "" {
+			continue
+		}
+		if _, err := pool.Exec(context.Background(), stmt); err != nil {
+			return fmt.Errorf("executing %s: %w", file, err)
+		}
+	}
+	return nil
+}
+
+// splitStatements splits a SQL string into individual statements, respecting
+// comments and string literals. It is sufficient for migration files that do
+// not use dollar-quoted function bodies.
+func splitStatements(sql string) []string {
+	var statements []string
+	var current strings.Builder
+	inString := false
+	inLineComment := false
+	inBlockComment := false
+
+	for i := 0; i < len(sql); i++ {
+		c := sql[i]
+
+		if inLineComment {
+			current.WriteByte(c)
+			if c == '\n' {
+				inLineComment = false
+			}
+			continue
+		}
+		if inBlockComment {
+			current.WriteByte(c)
+			if c == '*' && i+1 < len(sql) && sql[i+1] == '/' {
+				current.WriteByte('/')
+				inBlockComment = false
+				i++
+			}
+			continue
+		}
+		if inString {
+			current.WriteByte(c)
+			if c == '\'' {
+				if i+1 < len(sql) && sql[i+1] == '\'' {
+					current.WriteByte('\'')
+					i++
+				} else {
+					inString = false
+				}
+			}
+			continue
+		}
+
+		switch c {
+		case '-':
+			if i+1 < len(sql) && sql[i+1] == '-' {
+				inLineComment = true
+				current.WriteByte(c)
+				current.WriteByte('-')
+				i++
+			} else {
+				current.WriteByte(c)
+			}
+		case '/':
+			if i+1 < len(sql) && sql[i+1] == '*' {
+				inBlockComment = true
+				current.WriteByte(c)
+				current.WriteByte('*')
+				i++
+			} else {
+				current.WriteByte(c)
+			}
+		case '\'':
+			inString = true
+			current.WriteByte(c)
+		case ';':
+			current.WriteByte(c)
+			statements = append(statements, current.String())
+			current.Reset()
+		default:
+			current.WriteByte(c)
+		}
+	}
+
+	if current.Len() > 0 {
+		statements = append(statements, current.String())
+	}
+
+	// Trim whitespace and filter out empty statements.
+	var result []string
+	for _, s := range statements {
+		trimmed := strings.TrimSpace(s)
+		if trimmed != "" {
+			result = append(result, s)
+		}
+	}
+
+	return result
 }
 
 var requiredTables = []string{

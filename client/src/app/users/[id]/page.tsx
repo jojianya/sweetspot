@@ -113,7 +113,7 @@ function PinGrid({ pins }: { pins: PinListEntry[] }) {
 
 export default function ProfilePage({ params }: ProfilePageProps) {
   const { id } = use(params);
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const isSelf = user !== null && user.id === id;
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
@@ -376,7 +376,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               Edit profile
             </button>
           )}
-          {!isSelf && token && (
+          {!isSelf && user && (
             <button
               type="button"
               onClick={toggle}
@@ -390,7 +390,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               {stats?.is_following ? "Following" : "Follow"}
             </button>
           )}
-          {!isSelf && !token && (
+          {!isSelf && !user && (
             <Link
               href="/login"
               className="shrink-0 rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"

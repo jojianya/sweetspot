@@ -36,8 +36,8 @@ export default function CreatePinButton({
   onCreated,
   onSetLocation,
 }: CreatePinButtonProps) {
-  const { token } = useAuth();
-  const isLoggedIn = token !== null;
+  const { user } = useAuth();
+  const isLoggedIn = user !== null;
   const [files, setFiles] = useState<File[]>([]);
   const [caption, setCaption] = useState("");
   const [categoryId, setCategoryId] = useState<number>(categories[0]?.id ?? 1);
@@ -116,7 +116,7 @@ export default function CreatePinButton({
   };
 
   const submit = async () => {
-    if (!token) return;
+    if (!user) return;
     if (files.length < 1) {
       setError("Select at least one photo");
       return;

@@ -20,36 +20,35 @@ function readPersisted() {
 }
 
 describe("auth store", () => {
-  it("persists only the token and a pruned user without email", async () => {
+  it("persists only a pruned user — no token", async () => {
     useAuth.getState().clearAuth();
-    useAuth.getState().setAuth(fullUser, "tok.123");
+    useAuth.getState().setUser(fullUser);
 
     await vi.waitFor(() => {
       const stored = readPersisted();
-      expect(stored.state.token).toBe("tok.123");
+      expect(stored.state.token).toBeUndefined();
       expect(stored.state.user.email).toBeUndefined();
       expect(stored.state.user.username).toBe("alice");
       expect(stored.state.user.id).toBe("u1");
     });
   });
 
-  it("clears the persisted token on logout", async () => {
-    useAuth.getState().setAuth(fullUser, "tok.123");
+  it("clears the persisted user on logout", async () => {
+    useAuth.getState().setUser(fullUser);
     useAuth.getState().clearAuth();
 
     await vi.waitFor(() => {
       const stored = readPersisted();
-      expect(stored.state.token).toBeNull();
       expect(stored.state.user).toBeNull();
     });
   });
 
   it("keeps the action methods out of persisted state", async () => {
-    useAuth.getState().setAuth(fullUser, "tok.123");
+    useAuth.getState().setUser(fullUser);
 
     await vi.waitFor(() => {
       const stored = readPersisted();
-      expect(stored.state.setAuth).toBeUndefined();
+      expect(stored.state.setUser).toBeUndefined();
       expect(stored.state.clearAuth).toBeUndefined();
     });
   });

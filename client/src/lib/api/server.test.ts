@@ -1,4 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Mock next/headers — in the test environment there is no Next.js request
+// context, so headers() would throw. Return an empty cookie header.
+vi.mock("next/headers", () => ({
+  headers: async () => ({
+    get: () => null,
+  }),
+}));
+
 import type { PinDetail } from "@/lib/types";
 import { fetchPinServer } from "./server";
 

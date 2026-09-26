@@ -16,16 +16,36 @@ const (
 	CtxJWTClaims = "jwt_claims"
 )
 
-// parseBearerClaims validates the Authorization header against the JWT secret
-// and blacklist. When the request is invalid it returns ok=false with the
-// exact client-facing reason; callers decide whether to abort or continue.
+// parseBearerClaims validates the session from either the Authorization header
+// (Bearer token) or the httpOnly session cookie. The cookie is the primary
+// mechanism; the Bearer header is still accepted for API clients that cannot
+// use cookies. When the request is invalid it returns ok=false with the exact
+// client-facing reason; callers decide whether to abort or continue.
 func parseBearerClaims(c *gin.Context, jwtSecret string, bl *cache.Blacklist) (claims *jwt.Claims, reason string, ok bool) {
+	// Try the cookie first — it is the primary session mechanism.
+	if cookie, err := c.Cookie("session_token"); err == nil && cookie != "" {
+		claims, reason, ok = validateToken(c, jwtSecret, bl, cookie)
+		if ok {
+			return claims, "", true
+		}
+		// Cookie exists but is invalid — fall through to try Bearer.
+	}
+
+	// Fall back to the Bearer header for API clients.
 	header := c.GetHeader("Authorization")
 	if !strings.HasPrefix(header, "Bearer ") {
-		return nil, "missing or invalid Authorization header", false
+		if reason == "" {
+			reason = "missing or invalid Authorization header"
+		}
+		return nil, reason, false
 	}
 
 	tokenString := strings.TrimPrefix(header, "Bearer ")
+	return validateToken(c, jwtSecret, bl, tokenString)
+}
+
+// validateToken checks a JWT against the secret and blacklist.
+func validateToken(c *gin.Context, jwtSecret string, bl *cache.Blacklist, tokenString string) (claims *jwt.Claims, reason string, ok bool) {
 	claims, err := jwt.Validate(jwtSecret, tokenString)
 	if err != nil {
 		return nil, "invalid or expired token", false

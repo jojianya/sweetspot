@@ -23,6 +23,51 @@ import (
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
 )
 
+// getSessionCookie extracts the session_token cookie from a response, or nil
+// if it is absent.
+func getSessionCookie(w *httptest.ResponseRecorder) *http.Cookie {
+	for _, line := range w.Header().Values("Set-Cookie") {
+		for _, part := range strings.Split(line, ";") {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, auth.CookieName+"=") {
+				// Re-parse the full Set-Cookie header to get the attributes.
+				return parseSetCookie(line)
+			}
+		}
+	}
+	return nil
+}
+
+// parseSetCookie parses a single Set-Cookie header value into an http.Cookie.
+func parseSetCookie(header string) *http.Cookie {
+	parts := strings.Split(header, ";")
+	if len(parts) == 0 {
+		return nil
+	}
+	kv := strings.SplitN(strings.TrimSpace(parts[0]), "=", 2)
+	if len(kv) != 2 {
+		return nil
+	}
+	c := &http.Cookie{Name: kv[0], Value: kv[1]}
+	for _, attr := range parts[1:] {
+		attr = strings.TrimSpace(attr)
+		lower := strings.ToLower(attr)
+		switch {
+		case strings.HasPrefix(lower, "httponly"):
+			c.HttpOnly = true
+		case strings.HasPrefix(lower, "secure"):
+			c.Secure = true
+		case strings.HasPrefix(lower, "samesite=strict"):
+			c.SameSite = http.SameSiteStrictMode
+		case strings.HasPrefix(lower, "samesite=lax"):
+			c.SameSite = http.SameSiteLaxMode
+		case strings.HasPrefix(lower, "samesite=none"):
+			c.SameSite = http.SameSiteNoneMode
+		}
+	}
+	return c
+}
+
 const testSecret = "endpoint-test-secret"
 
 var (
@@ -332,11 +377,21 @@ func TestAuthEndpoints(t *testing.T) {
 			t.Fatalf("expected 201, got %d (%s)", w.Code, w.Body.String())
 		}
 		body := decodeBody(t, w)
-		if _, ok := body["token"]; !ok {
-			t.Fatalf("expected token in response, got %v", body)
-		}
 		if _, ok := body["user"]; !ok {
 			t.Fatalf("expected user in response, got %v", body)
+		}
+		cookie := getSessionCookie(w)
+		if cookie == nil {
+			t.Fatal("expected session_token cookie in response")
+		}
+		if cookie.Value == "" {
+			t.Fatal("session cookie is empty")
+		}
+		if !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode {
+			t.Fatalf("session cookie flags are not hardened: %+v", cookie)
+		}
+		if _, ok := body["token"]; ok {
+			t.Fatal("token must not be returned in the response body")
 		}
 	})
 
@@ -362,9 +417,13 @@ func TestAuthEndpoints(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
 		}
+		cookie := getSessionCookie(w)
+		if cookie == nil || cookie.Value == "" {
+			t.Fatalf("expected session_token cookie, got %v", cookie)
+		}
 		body := decodeBody(t, w)
-		if _, ok := body["token"]; !ok {
-			t.Fatalf("expected token, got %v", body)
+		if _, ok := body["token"]; ok {
+			t.Fatal("token must not be returned in the response body")
 		}
 	})
 
@@ -375,9 +434,9 @@ func TestAuthEndpoints(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
 		}
-		body := decodeBody(t, w)
-		if _, ok := body["token"]; !ok {
-			t.Fatalf("expected token, got %v", body)
+		cookie := getSessionCookie(w)
+		if cookie == nil || cookie.Value == "" {
+			t.Fatalf("expected session_token cookie, got %v", cookie)
 		}
 	})
 

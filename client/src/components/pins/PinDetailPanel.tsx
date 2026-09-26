@@ -36,7 +36,7 @@ interface PinDetailPanelProps {
 
 export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPanelProps) {
   const router = useRouter();
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const { categories } = useCategories();
   const [pin, setPin] = useState<PinDetail>(initialPin);
   const [index, setIndex] = useState(0);
@@ -47,7 +47,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPa
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
-  const { saved, setSaved } = useSavedStatus(pin.id, token !== null);
+  const { saved, setSaved } = useSavedStatus(pin.id, user !== null);
 
   const photo = pin.photos[index];
   const count = pin.photos.length;
@@ -72,7 +72,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPa
   }, [point]);
 
   const handleSave = () => {
-    if (!token) {
+    if (!user) {
       router.push("/login");
       return;
     }
@@ -292,7 +292,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPa
             >
               Open page
             </Link>
-            {token && user?.id !== pin.user_id && (
+            {user && user?.id !== pin.user_id && (
               <button
                 type="button"
                 onClick={() => setReportOpen(true)}

@@ -17,13 +17,13 @@ const QUICK_REASONS = ["Inappropriate content", "Spam", "Misleading location"];
 
 /** Report a pin: shown from the pin detail panel / pin page to logged-in users. */
 export default function ReportSheet({ pinId, onClose }: ReportSheetProps) {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  if (!token) {
+  if (!user) {
     return (
       <PanelSheet role="dialog" aria-modal="true" aria-label="Report pin" onClose={onClose}>
         <header className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">

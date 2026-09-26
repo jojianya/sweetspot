@@ -17,7 +17,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const { setAuth } = useAuth();
+  const { setUser } = useAuth();
   const router = useRouter();
 
   const submit = async (e: FormEvent) => {
@@ -34,12 +34,8 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
-      const { user, token } = await register(
-        email.trim(),
-        username.trim(),
-        password
-      );
-      setAuth(user, token);
+      const { user } = await register(email.trim(), username.trim(), password);
+      setUser(user);
       router.push("/");
     } catch (err) {
       setError(errorMessage(err));

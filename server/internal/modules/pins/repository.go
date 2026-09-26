@@ -204,9 +204,9 @@ const pinListEntrySelect = `
 	WHERE p.is_hidden = false`
 
 func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error) {
-	// ST_MakeEnvelope(xmin, ymin, xmax, ymax) expects minLng, minLat, maxLng, maxLat.
-	// bbox is [minLng, minLat, maxLng, maxLat].
-	args := []any{bbox[0], bbox[1], bbox[2], bbox[3]}
+	// bbox is [minLat, minLng, maxLat, maxLng]; ST_MakeEnvelope(xmin, ymin, xmax, ymax)
+	// expects (minLng, minLat, maxLng, maxLat).
+	args := []any{bbox[1], bbox[0], bbox[3], bbox[2]}
 	if categoryID != nil {
 		args = append(args, *categoryID)
 	} else {
@@ -260,14 +260,14 @@ const trendingPinSelect = `
 	WHERE p.is_hidden = false`
 
 func (r *postgresRepository) ListTrending(ctx context.Context, bbox [4]float64, limit int) ([]TrendingPin, error) {
-	// ST_MakeEnvelope(xmin, ymin, xmax, ymax) expects minLng, minLat, maxLng, maxLat.
-	// bbox is [minLng, minLat, maxLng, maxLat].
+	// bbox is [minLat, minLng, maxLat, maxLng]; ST_MakeEnvelope(xmin, ymin, xmax, ymax)
+	// expects (minLng, minLat, maxLng, maxLat).
 	query := trendingPinSelect + `
 		  AND ST_Intersects(p.location, ST_MakeEnvelope($1, $2, $3, $4, 4326))
 		ORDER BY score DESC, p.created_at DESC
 		LIMIT $5`
 
-	rows, err := r.pool.Query(ctx, query, bbox[0], bbox[1], bbox[2], bbox[3], limit)
+	rows, err := r.pool.Query(ctx, query, bbox[1], bbox[0], bbox[3], bbox[2], limit)
 	if err != nil {
 		return nil, err
 	}

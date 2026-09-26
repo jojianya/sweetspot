@@ -16,7 +16,7 @@ interface CommentsSectionProps {
 
 export default function CommentsSection({ pinId, compact = false }: CommentsSectionProps) {
   const { comments, loading, error, retry, add, remove } = useComments(pinId);
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const [body, setBody] = useState("");
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export default function CommentsSection({ pinId, compact = false }: CommentsSect
             </span>
           )}
         </h3>
-        {!token && (
+        {!user && (
           <Link
             href="/login"
             className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400"
@@ -146,7 +146,7 @@ export default function CommentsSection({ pinId, compact = false }: CommentsSect
         ))}
       </ul>
 
-      {token && (
+      {user && (
         <div className="mt-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
           <div className="flex items-end gap-2">
             <textarea

@@ -74,8 +74,8 @@ func (m *mockRepository) SearchUsers(_ context.Context, _ string, _ int) ([]User
 	return m.search, m.searchErr
 }
 
-func (m *mockRepository) ListUsers(_ context.Context, _ int, _ int) ([]User, error) {
-	return m.list, nil
+func (m *mockRepository) ListUsers(_ context.Context, _ int, _ int) ([]User, int, error) {
+	return m.list, m.count, nil
 }
 
 func (m *mockRepository) CountUsers(_ context.Context) (int, error) {
@@ -179,12 +179,15 @@ func TestListUsersDelegatesToRepository(t *testing.T) {
 		},
 		count: 2,
 	})
-	got, err := svc.ListUsers(context.Background(), 10, 0)
+	got, total, err := svc.ListUsers(context.Background(), 10, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 2 || got[0].Username != "alice" || got[1].Role != RoleAdmin {
 		t.Fatalf("unexpected results: %+v", got)
+	}
+	if total != 2 {
+		t.Fatalf("expected total 2, got %d", total)
 	}
 	n, err := svc.CountUsers(context.Background())
 	if err != nil || n != 2 {

@@ -204,7 +204,9 @@ const pinListEntrySelect = `
 	WHERE p.is_hidden = false`
 
 func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error) {
-	args := []any{bbox[1], bbox[0], bbox[3], bbox[2]}
+	// ST_MakeEnvelope(xmin, ymin, xmax, ymax) expects minLng, minLat, maxLng, maxLat.
+	// bbox is [minLng, minLat, maxLng, maxLat].
+	args := []any{bbox[0], bbox[1], bbox[2], bbox[3]}
 	if categoryID != nil {
 		args = append(args, *categoryID)
 	} else {
@@ -214,7 +216,7 @@ func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, cate
 
 	query := pinListEntrySelect + `
 		  AND ($5::int IS NULL OR p.category_id = $5)
-		  AND ST_DWithin(p.location, ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography, 0)
+		  AND ST_Intersects(p.location, ST_MakeEnvelope($1, $2, $3, $4, 4326))
 		ORDER BY p.created_at DESC
 		LIMIT $6`
 
@@ -232,6 +234,10 @@ func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, cate
 // keeps recent pins competitive while still rewarding engagement:
 //
 //	score = (views + 5*comments) / (age_hours + 2)
+//
+// The comment count uses a LATERAL join per pin so it can use the
+// comments_pin_idx (pin_id, created_at) instead of scanning the whole
+// comments table. This is P1.1.
 const trendingPinSelect = `
 	SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
 	       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username,
@@ -246,21 +252,22 @@ const trendingPinSelect = `
 		LIMIT 1
 	) pp ON true
 	LEFT JOIN users u ON u.id = p.user_id
-	LEFT JOIN (
-		SELECT pin_id, COUNT(*) AS comment_count
+	LEFT JOIN LATERAL (
+		SELECT COUNT(*) AS comment_count
 		FROM comments
-		WHERE is_hidden = false
-		GROUP BY pin_id
-	) c ON c.pin_id = p.id
+		WHERE pin_id = p.id AND is_hidden = false
+	) c ON true
 	WHERE p.is_hidden = false`
 
 func (r *postgresRepository) ListTrending(ctx context.Context, bbox [4]float64, limit int) ([]TrendingPin, error) {
+	// ST_MakeEnvelope(xmin, ymin, xmax, ymax) expects minLng, minLat, maxLng, maxLat.
+	// bbox is [minLng, minLat, maxLng, maxLat].
 	query := trendingPinSelect + `
-		  AND ST_DWithin(p.location, ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography, 0)
+		  AND ST_Intersects(p.location, ST_MakeEnvelope($1, $2, $3, $4, 4326))
 		ORDER BY score DESC, p.created_at DESC
 		LIMIT $5`
 
-	rows, err := r.pool.Query(ctx, query, bbox[1], bbox[0], bbox[3], bbox[2], limit)
+	rows, err := r.pool.Query(ctx, query, bbox[0], bbox[1], bbox[2], bbox[3], limit)
 	if err != nil {
 		return nil, err
 	}

@@ -9,7 +9,8 @@ type Service interface {
 	GetByLogin(ctx context.Context, identifier string) (User, error)
 	GetByID(ctx context.Context, id string) (User, error)
 	CountUsers(ctx context.Context) (int, error)
-	ListUsers(ctx context.Context, limit, offset int) ([]User, error)
+	CountOwners(ctx context.Context) (int, error)
+	ListUsers(ctx context.Context, limit, offset int) ([]User, int, error)
 	UpdateRole(ctx context.Context, actorID, userID, role string) (User, error)
 	UpdateProfile(ctx context.Context, id string, patch UpdateProfilePatch) (User, error)
 	SearchUsers(ctx context.Context, query string, limit int) ([]User, error)
@@ -51,7 +52,11 @@ func (s *service) CountUsers(ctx context.Context) (int, error) {
 	return s.repo.CountUsers(ctx)
 }
 
-func (s *service) ListUsers(ctx context.Context, limit, offset int) ([]User, error) {
+func (s *service) CountOwners(ctx context.Context) (int, error) {
+	return s.repo.CountOwners(ctx)
+}
+
+func (s *service) ListUsers(ctx context.Context, limit, offset int) ([]User, int, error) {
 	return s.repo.ListUsers(ctx, limit, offset)
 }
 

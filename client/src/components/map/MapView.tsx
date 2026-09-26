@@ -150,18 +150,25 @@ export default function MapView({
       style: theme === "dark" ? DARK_STYLE : LIGHT_STYLE,
       zoom: 10,
       minZoom: 5,
-      maxZoom: 18,
+      maxZoom: 21,
     });
     mapRef.current = map;
 
     const pinLayers = ["pins-base", "pins-selected"];
     let initialized = false;
+    let active = true;
 
     map.on("style.load", () => {
-      ensurePinLayers(map);
-      // Re-runs the pin-data and highlight-filter effects against the
-      // freshly loaded style.
-      setStyleVersion((v) => v + 1);
+      void ensurePinLayers(map, () => active)
+        .then(() => {
+          if (!active) return;
+          // Re-runs the pin-data and highlight-filter effects against the
+          // freshly loaded style.
+          setStyleVersion((v) => v + 1);
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to load map pin icons", error);
+        });
     });
 
     map.on("load", () => {
@@ -253,6 +260,7 @@ export default function MapView({
     });
 
     return () => {
+      active = false;
       map.remove();
       mapRef.current = null;
     };

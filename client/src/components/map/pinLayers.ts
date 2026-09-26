@@ -1,3 +1,6 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { IoPinSharp } from "react-icons/io5";
 import {
   type ExpressionSpecification,
   type GeoJSONSource,
@@ -26,13 +29,13 @@ export const EMPTY_GEOJSON: GeoJSONLike = {
   features: [],
 };
 
-// Pins stop clustering once the map zooms past this level.
-export const CLUSTER_MAX_ZOOM = 8;
+  // Pins stop clustering once the map zooms past this level.
+  export const CLUSTER_MAX_ZOOM = 8;
 
 // Set to false to disable clustering without changing the source or layer setup.
 export const CLUSTERING_ENABLED = true;
 
-const PIN_ICON_SIZE = 64;
+const PIN_ICON_SIZE = 54; //64
 const PIN_VIEWBOX_SIZE = 256;
 
 // These are the same category colors used by CategoryDropdown. The map
@@ -63,46 +66,130 @@ function colorForCategory(categoryId: number, selected: boolean): string {
   return colors[categoryId % colors.length];
 }
 
-/** Draws a high-contrast teardrop pin with a centered category-color core. */
-function drawSimplePin(
-  ctx: CanvasRenderingContext2D,
-  size: number,
-  color: string,
-  ringColor: string | null
-): void {
-  const scale = size / PIN_VIEWBOX_SIZE;
+function drawCategoryGlyph(ctx: CanvasRenderingContext2D, categoryId: number): void {
   ctx.save();
-  ctx.translate(
-    (size - PIN_VIEWBOX_SIZE * scale) / 2,
-    (size - PIN_VIEWBOX_SIZE * scale) / 2
-  );
-  ctx.scale(scale, scale);
-
-  // Keep the silhouette inset so its outline remains crisp at small sizes.
-  ctx.beginPath();
-  ctx.moveTo(128, 244);
-  ctx.bezierCurveTo(110, 218, 42, 144, 42, 91);
-  ctx.bezierCurveTo(42, 43, 80, 12, 128, 12);
-  ctx.bezierCurveTo(176, 12, 214, 43, 214, 91);
-  ctx.bezierCurveTo(214, 144, 146, 218, 128, 244);
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.strokeStyle = ringColor ?? "#ffffff";
-  ctx.lineWidth = ringColor ? 14 : 10;
-  ctx.lineJoin = "round";
-  ctx.stroke();
-
-  // A white inset keeps category colors legible without hollowing out the pin.
-  ctx.beginPath();
-  ctx.arc(128, 88, 33, 0, Math.PI * 2);
+  ctx.strokeStyle = "#ffffff";
   ctx.fillStyle = "#ffffff";
-  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
 
-  ctx.beginPath();
-  ctx.arc(128, 88, 15, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
+  switch (categoryId) {
+    case 1: // Food
+      ctx.beginPath();
+      ctx.moveTo(96, 61);
+      ctx.lineTo(96, 77);
+      ctx.moveTo(86, 61);
+      ctx.lineTo(86, 74);
+      ctx.lineTo(106, 74);
+      ctx.lineTo(106, 61);
+      ctx.moveTo(96, 77);
+      ctx.lineTo(96, 115);
+      ctx.moveTo(148, 61);
+      ctx.bezierCurveTo(138, 73, 138, 84, 138, 88);
+      ctx.lineTo(150, 88);
+      ctx.lineTo(150, 115);
+      ctx.stroke();
+      break;
+    case 2: // Nature
+      ctx.beginPath();
+      ctx.moveTo(128, 113);
+      ctx.lineTo(128, 76);
+      ctx.moveTo(128, 96);
+      ctx.bezierCurveTo(111, 95, 106, 84, 108, 72);
+      ctx.bezierCurveTo(120, 72, 128, 79, 128, 91);
+      ctx.moveTo(128, 86);
+      ctx.bezierCurveTo(130, 70, 141, 64, 153, 66);
+      ctx.bezierCurveTo(153, 79, 144, 88, 128, 91);
+      ctx.stroke();
+      break;
+    case 3: // Event
+      ctx.strokeRect(98, 69, 60, 45);
+      ctx.beginPath();
+      ctx.moveTo(98, 83);
+      ctx.lineTo(158, 83);
+      ctx.moveTo(112, 62);
+      ctx.lineTo(112, 75);
+      ctx.moveTo(144, 62);
+      ctx.lineTo(144, 75);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(113, 97, 3, 0, Math.PI * 2);
+      ctx.arc(128, 97, 3, 0, Math.PI * 2);
+      ctx.arc(143, 97, 3, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 4: // Nightlife
+      ctx.beginPath();
+      ctx.moveTo(94, 63);
+      ctx.lineTo(162, 63);
+      ctx.lineTo(132, 91);
+      ctx.lineTo(132, 111);
+      ctx.moveTo(117, 114);
+      ctx.lineTo(147, 114);
+      ctx.stroke();
+      break;
+    case 5: // Art
+      ctx.strokeRect(98, 67, 60, 48);
+      ctx.beginPath();
+      ctx.arc(143, 80, 5, 0, Math.PI * 2);
+      ctx.moveTo(105, 105);
+      ctx.lineTo(119, 90);
+      ctx.lineTo(129, 100);
+      ctx.lineTo(138, 91);
+      ctx.lineTo(152, 106);
+      ctx.stroke();
+      break;
+    case 6: // Sports
+      ctx.beginPath();
+      ctx.arc(128, 88, 27, 0, Math.PI * 2);
+      ctx.moveTo(119, 73);
+      ctx.lineTo(137, 73);
+      ctx.lineTo(143, 89);
+      ctx.lineTo(128, 100);
+      ctx.lineTo(113, 89);
+      ctx.closePath();
+      ctx.moveTo(119, 73);
+      ctx.lineTo(111, 64);
+      ctx.moveTo(137, 73);
+      ctx.lineTo(145, 64);
+      ctx.moveTo(113, 89);
+      ctx.lineTo(101, 91);
+      ctx.moveTo(143, 89);
+      ctx.lineTo(155, 91);
+      ctx.moveTo(128, 100);
+      ctx.lineTo(128, 115);
+      ctx.stroke();
+      break;
+    case 7: // Travel
+      ctx.strokeRect(99, 73, 58, 41);
+      ctx.beginPath();
+      ctx.moveTo(114, 73);
+      ctx.lineTo(114, 64);
+      ctx.lineTo(142, 64);
+      ctx.lineTo(142, 73);
+      ctx.moveTo(99, 86);
+      ctx.lineTo(157, 86);
+      ctx.moveTo(128, 86);
+      ctx.lineTo(128, 98);
+      ctx.stroke();
+      break;
+    default: // Other
+      ctx.beginPath();
+      ctx.moveTo(104, 65);
+      ctx.lineTo(148, 65);
+      ctx.lineTo(158, 75);
+      ctx.lineTo(158, 105);
+      ctx.lineTo(104, 105);
+      ctx.closePath();
+      ctx.moveTo(148, 65);
+      ctx.lineTo(148, 76);
+      ctx.lineTo(158, 76);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(119, 85, 4, 0, Math.PI * 2);
+      ctx.fill();
+  }
 
   ctx.restore();
 }
@@ -110,18 +197,49 @@ function drawSimplePin(
 function makePinIcon(
   size: number,
   color: string,
-  ringColor: string | null
-): ImageData {
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    throw new Error("Unable to create a 2D canvas for map pin icons");
-  }
+  ringColor: string | null,
+  categoryId: number
+): Promise<ImageData> {
+  const svg = renderToStaticMarkup(
+    createElement(IoPinSharp, {
+      color,
+      size: PIN_VIEWBOX_SIZE,
+      stroke: ringColor ?? color,
+      strokeWidth: ringColor ? 12 : 0,
+      strokeLinejoin: "round",
+    })
+  ).replaceAll("currentColor", color);
+  const imageURL = URL.createObjectURL(
+    new Blob([svg], { type: "image/svg+xml;charset=utf-8" })
+  );
 
-  drawSimplePin(ctx, size, color, ringColor);
-  return ctx.getImageData(0, 0, size, size);
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(imageURL);
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Unable to create a 2D canvas for map pin icons"));
+        return;
+      }
+
+      ctx.drawImage(image, 0, 0, size, size);
+      ctx.save();
+      ctx.scale(size / PIN_VIEWBOX_SIZE, size / PIN_VIEWBOX_SIZE);
+      ctx.translate(0, -42);
+      drawCategoryGlyph(ctx, categoryId);
+      ctx.restore();
+      resolve(ctx.getImageData(0, 0, size, size));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(imageURL);
+      reject(new Error("Unable to render the IoPinSharp map icon"));
+    };
+    image.src = imageURL;
+  });
 }
 
 function registerImage(
@@ -145,41 +263,34 @@ export const notCluster: ExpressionSpecification = ["!", ["has", "point_count"]]
 // fires "style.load" again ("load" only fires once per map), but the
 // diff path can keep previously added images, so re-creation must be
 // guarded per resource.
-export function ensurePinLayers(map: MaplibreMap): void {
-  // Category images differ only by tint. There are no category glyphs or
-  // category-specific shapes in the marker set.
-  for (const categoryId of CATEGORY_IDS) {
-    registerImage(
-      map,
-      `pin-cat-${categoryId}`,
+export async function ensurePinLayers(
+  map: MaplibreMap,
+  isActive: () => boolean = () => true
+): Promise<void> {
+  const images = await Promise.all([
+    ...CATEGORY_IDS.flatMap((categoryId) => [
       makePinIcon(
         PIN_ICON_SIZE,
         colorForCategory(categoryId, false),
-        null
-      )
-    );
-    registerImage(
-      map,
-      `pin-cat-${categoryId}-selected`,
+        null,
+        categoryId
+      ).then((image) => [`pin-cat-${categoryId}`, image] as const),
       makePinIcon(
         PIN_ICON_SIZE,
         colorForCategory(categoryId, true),
-        "#ffffff"
-      )
-    );
-  }
-
-  // Fallback images for features without a recognized category_id.
-  registerImage(
-    map,
-    "pin-default",
-    makePinIcon(PIN_ICON_SIZE, DOT_COLORS[0], null)
-  );
-  registerImage(
-    map,
-    "pin-selected",
-    makePinIcon(PIN_ICON_SIZE, DOT_COLORS_SELECTED[0], "#ffffff")
-  );
+        "#ffffff",
+        categoryId
+      ).then((image) => [`pin-cat-${categoryId}-selected`, image] as const),
+    ]),
+    makePinIcon(PIN_ICON_SIZE, DOT_COLORS[0], null, 8).then(
+      (image) => ["pin-default", image] as const
+    ),
+    makePinIcon(PIN_ICON_SIZE, DOT_COLORS_SELECTED[0], "#ffffff", 8).then(
+      (image) => ["pin-selected", image] as const
+    ),
+  ]);
+  if (!isActive()) return;
+  for (const [id, image] of images) registerImage(map, id, image);
 
   const clusterOptions = {
     cluster: CLUSTERING_ENABLED,

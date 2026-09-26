@@ -228,13 +228,30 @@ func (m *mockFavoriteRepo) ListIDs(context.Context, string) ([]string, error) {
 	return m.ids, m.idsErr
 }
 
-func newToken(t *testing.T, userID, role string) string {
+// newToken mints a token for userID. It takes no role: the JWT deliberately
+// carries only the user ID, and every authorization decision reads the role
+// live from the user service. Tests that need a privileged caller must seed
+// the user's role in the mock user service.
+func newToken(t *testing.T, userID string) string {
 	t.Helper()
-	tok, err := jwt.Generate(testSecret, userID, role, time.Hour)
+	tok, err := jwt.Generate(testSecret, userID, time.Hour)
 	if err != nil {
 		t.Fatalf("jwt.Generate: %v", err)
 	}
 	return tok
+}
+
+// setRole changes a seeded user's role, standing in for the role column in the
+// database. Tests that need a privileged caller use this to promote them, and
+// tests for demotion use it to take privileges away again.
+//
+// The rest of the record is preserved so email/username lookups and timestamps
+// asserted by other tests keep working.
+func setRole(svc *mockUserService, userID, role string) {
+	u := svc.users[userID]
+	u.ID = userID
+	u.Role = role
+	svc.users[userID] = u
 }
 
 func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo favorites.Repository, bl *cache.Blacklist, store *storage.Local) *gin.Engine {
@@ -369,7 +386,7 @@ func TestAuthEndpoints(t *testing.T) {
 	})
 
 	t.Run("MeAuthenticated", func(t *testing.T) {
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodGet, "/me", "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
@@ -428,7 +445,7 @@ func TestUserEndpoints(t *testing.T) {
 	})
 
 	t.Run("GetSelfIncludesEmail", func(t *testing.T) {
-		ownTok := newToken(t, testUUID2, users.RoleUser)
+		ownTok := newToken(t, testUUID2)
 		w := doJSON(t, r, http.MethodGet, "/users/"+testUUID2, "", map[string]string{"Authorization": "Bearer " + ownTok})
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
@@ -443,7 +460,7 @@ func TestUserEndpoints(t *testing.T) {
 	})
 
 	t.Run("GetOtherUserOmitsEmail", func(t *testing.T) {
-		otherTok := newToken(t, testUUID2, users.RoleUser)
+		otherTok := newToken(t, testUUID2)
 		w := doJSON(t, r, http.MethodGet, "/users/"+testUUID1, "", map[string]string{"Authorization": "Bearer " + otherTok})
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
@@ -469,7 +486,7 @@ func TestUserEndpoints(t *testing.T) {
 	})
 
 	t.Run("UpdateRoleAsOwner", func(t *testing.T) {
-		ownerTok := newToken(t, testUUID1, users.RoleOwner)
+		ownerTok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodPatch, "/users/"+testUUID2+"/role", `{"role":"admin"}`, map[string]string{"Authorization": "Bearer " + ownerTok})
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
@@ -477,7 +494,7 @@ func TestUserEndpoints(t *testing.T) {
 	})
 
 	t.Run("UpdateRoleNotOwnerForbidden", func(t *testing.T) {
-		userTok := newToken(t, testUUID2, users.RoleUser)
+		userTok := newToken(t, testUUID2)
 		w := doJSON(t, r, http.MethodPatch, "/users/"+testUUID1+"/role", `{"role":"owner"}`, map[string]string{"Authorization": "Bearer " + userTok})
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d (%s)", w.Code, w.Body.String())
@@ -492,7 +509,7 @@ func TestUserEndpoints(t *testing.T) {
 	})
 
 	t.Run("UpdateRoleInvalidBody", func(t *testing.T) {
-		ownerTok := newToken(t, testUUID1, users.RoleOwner)
+		ownerTok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodPatch, "/users/"+testUUID2+"/role", `{"role":"superuser"}`, map[string]string{"Authorization": "Bearer " + ownerTok})
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
@@ -516,7 +533,7 @@ func TestReportEndpoints(t *testing.T) {
 	r := setupRouter(usersSvc, reportRepo, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
 
 	t.Run("CreateReport", func(t *testing.T) {
-		tok := newToken(t, testUUID2, users.RoleUser)
+		tok := newToken(t, testUUID2)
 		w := doJSON(t, r, http.MethodPost, "/pins/"+testUUID3+"/report", `{"reason":"this is spam"}`, map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusCreated {
 			t.Fatalf("expected 201, got %d (%s)", w.Code, w.Body.String())
@@ -526,7 +543,7 @@ func TestReportEndpoints(t *testing.T) {
 	t.Run("CreateReportPinNotFound", func(t *testing.T) {
 		reportRepo.pinExistsFn = func(ctx context.Context, pinID string) (bool, error) { return false, nil }
 		defer func() { reportRepo.pinExistsFn = nil }()
-		tok := newToken(t, testUUID2, users.RoleUser)
+		tok := newToken(t, testUUID2)
 		w := doJSON(t, r, http.MethodPost, "/pins/"+testUUID3+"/report", `{"reason":"this is spam"}`, map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
@@ -534,7 +551,7 @@ func TestReportEndpoints(t *testing.T) {
 	})
 
 	t.Run("CreateReportInvalidBody", func(t *testing.T) {
-		tok := newToken(t, testUUID2, users.RoleUser)
+		tok := newToken(t, testUUID2)
 		w := doJSON(t, r, http.MethodPost, "/pins/"+testUUID3+"/report", `{"reason":"sp"}`, map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
@@ -542,7 +559,7 @@ func TestReportEndpoints(t *testing.T) {
 	})
 
 	t.Run("CreateReportReasonTooLong", func(t *testing.T) {
-		tok := newToken(t, testUUID2, users.RoleUser)
+		tok := newToken(t, testUUID2)
 		long := strings.Repeat("a", 1001)
 		w := doJSON(t, r, http.MethodPost, "/pins/"+testUUID3+"/report", `{"reason":"`+long+`"}`, map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusBadRequest {
@@ -566,7 +583,7 @@ func TestReportEndpoints(t *testing.T) {
 	})
 
 	t.Run("ListReportsAsAdmin", func(t *testing.T) {
-		ownerTok := newToken(t, testUUID1, users.RoleOwner)
+		ownerTok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodGet, "/reports", "", map[string]string{"Authorization": "Bearer " + ownerTok})
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
@@ -574,7 +591,7 @@ func TestReportEndpoints(t *testing.T) {
 	})
 
 	t.Run("ListReportsAsUserForbidden", func(t *testing.T) {
-		userTok := newToken(t, testUUID2, users.RoleUser)
+		userTok := newToken(t, testUUID2)
 		w := doJSON(t, r, http.MethodGet, "/reports", "", map[string]string{"Authorization": "Bearer " + userTok})
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d (%s)", w.Code, w.Body.String())
@@ -582,7 +599,7 @@ func TestReportEndpoints(t *testing.T) {
 	})
 
 	t.Run("ListReportsInvalidStatus", func(t *testing.T) {
-		ownerTok := newToken(t, testUUID1, users.RoleOwner)
+		ownerTok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodGet, "/reports?status=bogus", "", map[string]string{"Authorization": "Bearer " + ownerTok})
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
@@ -590,7 +607,7 @@ func TestReportEndpoints(t *testing.T) {
 	})
 
 	t.Run("ReviewReport", func(t *testing.T) {
-		ownerTok := newToken(t, testUUID1, users.RoleOwner)
+		ownerTok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodPatch, "/reports/"+testUUID3, `{"action":"dismiss"}`, map[string]string{"Authorization": "Bearer " + ownerTok})
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
@@ -598,7 +615,7 @@ func TestReportEndpoints(t *testing.T) {
 	})
 
 	t.Run("ReviewReportUserForbidden", func(t *testing.T) {
-		userTok := newToken(t, testUUID2, users.RoleUser)
+		userTok := newToken(t, testUUID2)
 		w := doJSON(t, r, http.MethodPatch, "/reports/"+testUUID3, `{"action":"dismiss"}`, map[string]string{"Authorization": "Bearer " + userTok})
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d (%s)", w.Code, w.Body.String())
@@ -616,7 +633,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 	r := setupRouter(usersSvc, &mockReportRepo{}, favRepo, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
 
 	t.Run("SaveFavorite", func(t *testing.T) {
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodPut, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("expected 204, got %d (%s)", w.Code, w.Body.String())
@@ -626,7 +643,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 	t.Run("SaveFavoriteDuplicateIdempotent", func(t *testing.T) {
 		// The repository inserts with ON CONFLICT DO NOTHING, so a repeated
 		// save is a successful no-op (204), not a conflict.
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodPut, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("expected 204 on duplicate save, got %d (%s)", w.Code, w.Body.String())
@@ -636,7 +653,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 	t.Run("SaveFavoritePinNotFound", func(t *testing.T) {
 		favRepo.exists = false
 		defer func() { favRepo.exists = true }()
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodPut, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
@@ -644,7 +661,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 	})
 
 	t.Run("SaveFavoriteInvalidPinID", func(t *testing.T) {
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodPut, "/favorites/not-a-uuid", "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
@@ -661,7 +678,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 	t.Run("SaveFavoriteRepoError", func(t *testing.T) {
 		favRepo.saveErr = errors.New("db unavailable")
 		defer func() { favRepo.saveErr = nil }()
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodPut, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusInternalServerError {
 			t.Fatalf("expected 500, got %d (%s)", w.Code, w.Body.String())
@@ -671,7 +688,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 	t.Run("UnsaveFavorite", func(t *testing.T) {
 		favRepo.isSaved = true
 		defer func() { favRepo.isSaved = false }()
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodDelete, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("expected 204, got %d (%s)", w.Code, w.Body.String())
@@ -679,7 +696,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 	})
 
 	t.Run("UnsaveFavoriteNotSaved", func(t *testing.T) {
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodDelete, "/favorites/"+testUUID3, "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
@@ -689,7 +706,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 	t.Run("ListSaved", func(t *testing.T) {
 		favRepo.entries = []favorites.Entry{{SavedAt: time.Now()}}
 		defer func() { favRepo.entries = nil }()
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodGet, "/favorites", "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
@@ -704,7 +721,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 	t.Run("ListSavedIDs", func(t *testing.T) {
 		favRepo.ids = []string{testUUID3}
 		defer func() { favRepo.ids = nil }()
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodGet, "/favorites/ids", "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
@@ -726,7 +743,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 	t.Run("ListSavedRepoError", func(t *testing.T) {
 		favRepo.listErr = errors.New("db unavailable")
 		defer func() { favRepo.listErr = nil }()
-		tok := newToken(t, testUUID1, users.RoleUser)
+		tok := newToken(t, testUUID1)
 		w := doJSON(t, r, http.MethodGet, "/favorites", "", map[string]string{"Authorization": "Bearer " + tok})
 		if w.Code != http.StatusInternalServerError {
 			t.Fatalf("expected 500, got %d (%s)", w.Code, w.Body.String())

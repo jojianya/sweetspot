@@ -8,22 +8,25 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 )
 
 const maxCommentLength = 500
 
 type Handler struct {
 	repo Repository
+	// roles resolves moderation rights from the database rather than the JWT,
+	// so a demotion takes effect on the caller's next request.
+	roles users.RoleReader
 }
 
-func NewHandler(repo Repository) *Handler {
-	return &Handler{repo: repo}
+func NewHandler(repo Repository, roles users.RoleReader) *Handler {
+	return &Handler{repo: repo, roles: roles}
 }
 
 // isModerator reports whether the caller holds a moderation role.
-func isModerator(c *gin.Context) bool {
-	role := middleware.GetRole(c)
-	return role == "admin" || role == "owner"
+func (h *Handler) isModerator(c *gin.Context) bool {
+	return users.IsModerator(h.roles, c)
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -75,7 +78,7 @@ func (h *Handler) Delete(c *gin.Context) {
 
 	// Moderators soft-delete (keeps an audit trail); the author removes it
 	// outright.
-	if isModerator(c) {
+	if h.isModerator(c) {
 		if err := h.repo.Hide(c.Request.Context(), comment.ID.String()); err != nil {
 			response.Internal(c, "comments: hide", err, "comment_id", comment.ID.String())
 			return

@@ -18,10 +18,13 @@ import (
 // connections pin a goroutine each and exhaust the server (Slowloris).
 const (
 	// Bounds the header block only, so it does not penalise the 64 MB
-	// multipart upload path.
-	readHeaderTimeout = 10 * time.Second
-	// Bounds how long an idle keep-alive connection is held open.
-	idleTimeout = 120 * time.Second
+	// multipart upload path. The header block is a few hundred bytes, so this
+	// is generous even on a high-latency mobile link.
+	readHeaderTimeout = 5 * time.Second
+	// Bounds how long an idle keep-alive connection is held open waiting for
+	// its next request. This does not apply to a response already in flight,
+	// so it does not shorten the SSE stream.
+	idleTimeout = 60 * time.Second
 	// Caps total request header memory. Go defaults to 1 MB.
 	maxHeaderBytes = 1 << 20
 )

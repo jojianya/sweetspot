@@ -70,20 +70,25 @@ func TestServeReturnsErrorOnBindFailure(t *testing.T) {
 
 // TestReadHeaderTimeoutIsBounded guards the Slowloris mitigation: a zero value
 // here reintroduces the unbounded header read.
+//
+// The exact values are asserted, not just their sign, because they are a
+// security boundary — a longer deadline means more connections held open. A
+// previous revision quietly shipped 10s/120s instead of the agreed 5s/60s and
+// nothing caught it.
 func TestReadHeaderTimeoutIsBounded(t *testing.T) {
-	if readHeaderTimeout <= 0 {
-		t.Fatalf("readHeaderTimeout must be positive, got %v", readHeaderTimeout)
+	if want := 5 * time.Second; readHeaderTimeout != want {
+		t.Errorf("readHeaderTimeout = %v, want %v", readHeaderTimeout, want)
 	}
-	if idleTimeout <= 0 {
-		t.Fatalf("idleTimeout must be positive, got %v", idleTimeout)
+	if want := 60 * time.Second; idleTimeout != want {
+		t.Errorf("idleTimeout = %v, want %v", idleTimeout, want)
 	}
-	if maxHeaderBytes <= 0 {
-		t.Fatalf("maxHeaderBytes must be positive, got %v", maxHeaderBytes)
+	if want := 1 << 20; maxHeaderBytes != want {
+		t.Errorf("maxHeaderBytes = %d, want %d", maxHeaderBytes, want)
 	}
 	// The header deadline must stay well under the idle deadline so a slow
 	// reader is dropped before its keep-alive slot expires.
 	if readHeaderTimeout >= idleTimeout {
-		t.Fatalf("readHeaderTimeout (%v) should be shorter than idleTimeout (%v)",
+		t.Errorf("readHeaderTimeout (%v) should be shorter than idleTimeout (%v)",
 			readHeaderTimeout, idleTimeout)
 	}
 }

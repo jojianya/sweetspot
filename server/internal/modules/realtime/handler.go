@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
@@ -13,8 +14,26 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
 
+// sseWriteTimeout bounds a single write to a stream client.
+//
+// The stream is intentionally unbounded in total duration, so the server-wide
+// WriteTimeout is left unset and each write carries its own deadline instead.
+// That way a peer that stops reading is detected and its goroutine released,
+// while an active-but-quiet stream is never cut off.
+const sseWriteTimeout = 10 * time.Second
+
 type Handler struct {
 	broker *Broker
+}
+
+// setWriteDeadline arms a per-write deadline on the underlying
+// http.ResponseWriter. gin.ResponseWriter implements http.ResponseWriter's
+// Unwrap convention, so ResponseController can reach the real writer.
+func setWriteDeadline(w http.ResponseWriter, timeout time.Duration) {
+	rc := http.NewResponseController(w)
+	// Unsupported is fine: it only means the ResponseWriter in this chain does
+	// not expose a deadline, in which case the stream still works.
+	_ = rc.SetWriteDeadline(time.Now().Add(timeout))
 }
 
 func NewHandler(broker *Broker) *Handler {
@@ -56,6 +75,10 @@ func (h *Handler) Stream(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
+
+	// Arm a deadline before the first flush too, so a client that connects and
+	// never reads cannot hold the handler open.
+	setWriteDeadline(c.Writer, sseWriteTimeout)
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.Flush()
 
@@ -73,6 +96,9 @@ func (h *Handler) Stream(c *gin.Context) {
 			if !matches(ev, bbox, category) {
 				continue
 			}
+			// Re-arm per write: the previous deadline has likely already
+			// passed, and each event gets a fresh window.
+			setWriteDeadline(c.Writer, sseWriteTimeout)
 			if _, err := fmt.Fprintf(c.Writer, "event: pin\ndata: %s\n\n", msg.Payload); err != nil {
 				return
 			}

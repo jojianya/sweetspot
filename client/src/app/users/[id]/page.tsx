@@ -5,6 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Avatar from "@/components/Avatar";
 import { fetchUser, fetchUserCollections, fetchUserPins, updateMyProfile, type ProfileEdit } from "@/lib/api";
+import { ApiError } from "@/lib/api/client";
 import { errorMessage, formatTime } from "@/lib/utils";
 import { useFollow } from "@/hooks/useFollow";
 import { useAuth } from "@/store/auth";
@@ -141,11 +142,10 @@ export default function ProfilePage({ params }: ProfilePageProps) {
         setCollections(userCollections);
       } catch (e) {
         if (cancelled) return;
-        const message = errorMessage(e);
-        if (/not found/i.test(message)) {
+        if (e instanceof ApiError && e.status === 404) {
           setNotFound(true);
         } else {
-          setError(message);
+          setError(errorMessage(e));
         }
       } finally {
         if (!cancelled) setLoading(false);

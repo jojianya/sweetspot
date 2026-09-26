@@ -3,6 +3,7 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PinListEntry, PublicProfile, User, UserStats } from "@/lib/types";
+import { ApiError } from "@/lib/api/client";
 import { useAuth } from "@/store/auth";
 import ProfilePage from "./page";
 
@@ -162,11 +163,20 @@ describe("ProfilePage", () => {
   });
 
   it("renders a not-found state when the profile does not exist", async () => {
-    apiMocks.fetchUser.mockRejectedValue(new Error("user not found"));
+    apiMocks.fetchUser.mockRejectedValue(new ApiError("user not found", 404));
 
     await renderProfile("missing-user");
 
     expect(container.textContent).toContain("User not found");
     expect(button(container, "Retry")).toBeUndefined();
+  });
+
+  it("renders a generic error for non-404 failures", async () => {
+    apiMocks.fetchUser.mockRejectedValue(new ApiError("server error", 500));
+
+    await renderProfile("some-user");
+
+    expect(container.textContent).not.toContain("User not found");
+    expect(container.textContent).toContain("server error");
   });
 });

@@ -119,19 +119,29 @@ func (m *mockUserService) SearchUsers(_ context.Context, query string, _ int) ([
 	return out, nil
 }
 
-func (m *mockUserService) ListUsers(_ context.Context, limit, offset int) ([]users.User, error) {
+func (m *mockUserService) ListUsers(_ context.Context, limit, offset int) ([]users.User, int, error) {
 	out := make([]users.User, 0, len(m.users))
 	for _, u := range m.users {
 		out = append(out, u)
 	}
 	if offset >= len(out) {
-		return []users.User{}, nil
+		return []users.User{}, len(m.users), nil
 	}
 	end := offset + limit
 	if end > len(out) {
 		end = len(out)
 	}
-	return out[offset:end], nil
+	return out[offset:end], len(m.users), nil
+}
+
+func (m *mockUserService) CountOwners(_ context.Context) (int, error) {
+	owners := 0
+	for _, u := range m.users {
+		if u.Role == users.RoleOwner {
+			owners++
+		}
+	}
+	return owners, nil
 }
 
 func (m *mockUserService) CountUsers(_ context.Context) (int, error) {

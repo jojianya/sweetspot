@@ -18,7 +18,10 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (User, error)
 	CountUsers(ctx context.Context) (int, error)
 	CountOwners(ctx context.Context) (int, error)
-	ListUsers(ctx context.Context, limit, offset int) ([]User, error)
+	// ListUsers returns a page of users plus the total count. The count comes
+	// from COUNT(*) OVER () in the same query (P1.4), with a fallback to the
+	// separate CountUsers call when the page is empty and the total is unknown.
+	ListUsers(ctx context.Context, limit, offset int) ([]User, int, error)
 	UpdateRole(ctx context.Context, id, role string) (User, error)
 	UpdateProfile(ctx context.Context, id string, patch UpdateProfilePatch) (User, error)
 	SearchUsers(ctx context.Context, query string, limit int) ([]User, error)
@@ -143,32 +146,44 @@ func (r *postgresRepository) CountUsers(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// ListUsers returns all users (newest first) for the owner's role-management
-// console. Only public fields are scanned — never password_hash.
-func (r *postgresRepository) ListUsers(ctx context.Context, limit, offset int) ([]User, error) {
+// ListUsers returns a page of users plus the total count. The count comes
+// from COUNT(*) OVER () in the same query (P1.4), avoiding a separate
+// round-trip. If the page is empty we cannot read the window function's
+// result, so we fall back to CountUsers.
+func (r *postgresRepository) ListUsers(ctx context.Context, limit, offset int) ([]User, int, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at
+		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at,
+		       COUNT(*) OVER () AS total
 		FROM users
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	users := []User{}
+	var total int
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
-			return nil, err
+		if err := rows.Scan(&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt, &total); err != nil {
+			return nil, 0, err
 		}
 		users = append(users, u)
 	}
 	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
-		return nil, err
+		return nil, 0, err
 	}
-	return users, nil
+
+	// Empty page: the window function returns nothing, so we fall back.
+	if len(users) == 0 {
+		total, err = r.CountUsers(ctx)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	return users, total, nil
 }
 
 func (r *postgresRepository) UpdateRole(ctx context.Context, id, role string) (User, error) {

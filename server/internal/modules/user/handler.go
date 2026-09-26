@@ -250,22 +250,23 @@ func (h *Handler) List(c *gin.Context) {
 
 	var (
 		found []User
+		total int
 		err   error
 	)
 	if query == "" {
-		found, err = h.service.ListUsers(c.Request.Context(), limit, offset)
+		found, total, err = h.service.ListUsers(c.Request.Context(), limit, offset)
 	} else {
 		found, err = h.service.SearchUsers(c.Request.Context(), query, limit)
-	}
-	if err != nil {
-		response.Internal(c, "user: list", err)
-		return
-	}
-
-	total, err := h.service.CountUsers(c.Request.Context())
-	if err != nil {
-		response.Internal(c, "user: count", err)
-		return
+		if err != nil {
+			response.Internal(c, "user: list", err)
+			return
+		}
+		// SearchUsers doesn't return total; fall back to CountUsers for searches.
+		total, err = h.service.CountUsers(c.Request.Context())
+		if err != nil {
+			response.Internal(c, "user: count", err)
+			return
+		}
 	}
 
 	items := make([]PublicUser, 0, len(found))

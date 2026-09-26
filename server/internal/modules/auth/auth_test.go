@@ -69,11 +69,15 @@ func (s *stubUserService) SearchUsers(context.Context, string, int) ([]users.Use
 	return []users.User{}, nil
 }
 
-func (s *stubUserService) ListUsers(context.Context, int, int) ([]users.User, error) {
-	return []users.User{}, nil
+func (s *stubUserService) ListUsers(_ context.Context, _ int, _ int) ([]users.User, int, error) {
+	return []users.User{}, 0, nil
 }
 
-func (s *stubUserService) CountUsers(context.Context) (int, error) {
+func (s *stubUserService) CountOwners(_ context.Context) (int, error) {
+	return 0, nil
+}
+
+func (s *stubUserService) CountUsers(_ context.Context) (int, error) {
 	return 0, nil
 }
 

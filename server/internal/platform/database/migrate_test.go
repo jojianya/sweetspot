@@ -180,5 +180,3 @@ CREATE INDEX CONCURRENTLY test_concurrent_partial ON users (email) WHERE role = 
 		t.Fatalf("cleanup: %v", err)
 	}
 }
-
-

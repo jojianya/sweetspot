@@ -43,7 +43,7 @@ function PersonIcon() {
 
 export default function PinPageClient({ initialPin }: PinPageClientProps) {
   const router = useRouter();
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const { categories } = useCategories();
   const [pin, setPin] = useState<PinDetail>(initialPin);
   const [index, setIndex] = useState(0);
@@ -54,7 +54,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
-  const { saved, setSaved } = useSavedStatus(pin.id, token !== null);
+  const { saved, setSaved } = useSavedStatus(pin.id, user !== null);
 
   const photo = pin.photos[index];
   const count = pin.photos.length;
@@ -77,7 +77,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
   }, [point]);
 
   const handleSave = () => {
-    if (!token) {
+    if (!user) {
       router.push("/login");
       return;
     }
@@ -270,7 +270,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
           >
             Add to collection
           </button>
-          {token && user?.id !== pin.user_id && (
+          {user && user?.id !== pin.user_id && (
             <button
               type="button"
               onClick={() => setReportOpen(true)}

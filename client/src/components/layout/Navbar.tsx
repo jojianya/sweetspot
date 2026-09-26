@@ -19,8 +19,8 @@ export default function Navbar({
   backHref,
   backLabel = "Back to map",
 }: NavbarProps) {
-  const { user, token } = useAuth();
-  const isLoggedIn = token !== null;
+  const { user } = useAuth();
+  const isLoggedIn = user !== null;
   const handleLogout = useLogout();
 
   // Role changes land in the DB instantly; refresh the cached user on mount so

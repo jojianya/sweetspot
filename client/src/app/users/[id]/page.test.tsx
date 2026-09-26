@@ -91,7 +91,7 @@ describe("ProfilePage", () => {
 
   beforeEach(() => {
     localStorage.clear();
-    useAuth.setState({ user: null, token: null });
+    useAuth.setState({ user: null });
     apiMocks.fetchUser.mockReset().mockResolvedValue(profile);
     apiMocks.fetchUserPins.mockReset().mockResolvedValue([pin]);
     apiMocks.fetchUserCollections.mockReset().mockResolvedValue([]);
@@ -124,7 +124,7 @@ describe("ProfilePage", () => {
   }
 
   it("shows current counts and edit controls on the viewer's own profile", async () => {
-    useAuth.getState().setAuth({ ...viewer, id: USER_ID, username: "alice" }, "token");
+    useAuth.getState().setUser({ ...viewer, id: USER_ID, username: "alice" });
     apiMocks.fetchUserStats.mockResolvedValue(
       stats({ followers: 12, following: 3, pins_count: 1 })
     );
@@ -143,7 +143,7 @@ describe("ProfilePage", () => {
   });
 
   it("follows another user from the profile and updates the count", async () => {
-    useAuth.getState().setAuth(viewer, "token");
+    useAuth.getState().setUser(viewer);
     apiMocks.fetchUserStats.mockResolvedValue(stats({ followers: 4, pins_count: 1 }));
 
     await renderProfile();

@@ -30,9 +30,9 @@ export default function MapNavBar({
   onSelectCategory,
   onOpenSaved,
 }: MapNavBarProps) {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
-  const isLoggedIn = token !== null;
+  const isLoggedIn = user !== null;
   const handleLogout = useLogout();
 
   // Keep the cached role in step with the DB so moderation menu items appear

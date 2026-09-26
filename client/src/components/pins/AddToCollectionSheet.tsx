@@ -15,14 +15,14 @@ interface AddToCollectionSheetProps {
 
 /** Picker used from pin detail: add the current pin to one of my collections. */
 export default function AddToCollectionSheet({ pinId, onClose }: AddToCollectionSheetProps) {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const { collections, loading, error, retry, create, addPin } = useCollections();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<string[]>([]);
 
-  if (!token) {
+  if (!user) {
     return (
       <PanelSheet role="dialog" aria-modal="true" aria-label="Add to collection" onClose={onClose}>
         <header className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">

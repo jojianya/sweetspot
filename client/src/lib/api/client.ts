@@ -7,12 +7,9 @@ export { API_BASE_URL };
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 20000,
-});
-
-api.interceptors.request.use((config) => {
-  const token = useAuth.getState().token;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
+  // The session token is an httpOnly cookie, so the browser sends it
+  // automatically on same-origin requests. No Authorization header is needed.
+  withCredentials: true,
 });
 
 api.interceptors.response.use(

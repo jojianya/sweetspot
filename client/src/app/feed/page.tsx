@@ -10,15 +10,15 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import type { PinListEntry } from "@/lib/types";
 
 export default function FeedPage() {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const { data, loading, error, retry } = useAsyncData<PinListEntry[]>(
     () => fetchFeed(),
-    [token],
-    { enabled: !!token }
+    [user],
+    { enabled: !!user }
   );
   const pins = data ?? [];
 
-  if (!token) {
+  if (!user) {
     return (
       <>
         <Navbar backHref="/" backLabel="Back to map" />

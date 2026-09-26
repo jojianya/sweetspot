@@ -1,7 +1,8 @@
 {
   "repo": "jojianya/sweetspot",
   "baseBranch": "development",
-  "source": "CODE_REVIEW.md",
+  "source": "docs/CODE_REVIEW.md",
+  "sourceUrl": "https://github.com/jojianya/sweetspot/blob/development/docs/CODE_REVIEW.md",
   "milestones": [
     {
       "title": "P0-critical",

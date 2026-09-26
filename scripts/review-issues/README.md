@@ -1,7 +1,7 @@
 # Review → GitHub issues
 
-Turns the findings in [`CODE_REVIEW.md`](../../CODE_REVIEW.md) into labelled,
-milestone-assigned GitHub issues.
+Turns the findings in [`CODE_REVIEW.md`](../../docs/CODE_REVIEW.md) into
+labelled, milestone-assigned GitHub issues.
 
 ## Files
 
@@ -45,6 +45,10 @@ duplicates.
 
 ## After filing
 
-Commit `CODE_REVIEW.md` to `development` so the `See CODE_REVIEW.md` permalinks
-in each issue resolve. They currently point at
-`blob/development/CODE_REVIEW.md`, which 404s until that file is pushed.
+Commit `docs/CODE_REVIEW.md` to `development` so the `See CODE_REVIEW.md`
+permalinks in each issue resolve. They point at
+`blob/development/docs/CODE_REVIEW.md`, which 404s until that file is pushed.
+
+If `docs/CODE_REVIEW.md` is ever moved again, the permalinks baked into the
+already-filed issues go stale. Re-run `generate.py` and update the live issue
+bodies rather than assuming the links still hold.

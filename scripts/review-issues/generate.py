@@ -16,7 +16,13 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent.parent
-SOURCE = REPO_ROOT / "CODE_REVIEW.md"
+# Docs were consolidated under docs/; the review lives at docs/CODE_REVIEW.md.
+# Accept the old root-level path too so a stale checkout still works.
+DOCS = REPO_ROOT / "docs"
+SOURCE = DOCS / "CODE_REVIEW.md"
+if not SOURCE.exists():
+    SOURCE = REPO_ROOT / "CODE_REVIEW.md"
+SOURCE_REL = SOURCE.relative_to(REPO_ROOT).as_posix()
 OUT = HERE / "bodies"
 MANIFEST = HERE / "manifest.json"
 
@@ -167,7 +173,9 @@ PRIORITY_LABEL = {
     "P3": "P3-polish",
 }
 
-SOURCE_LINK = "https://github.com/jojianya/sweetspot/blob/development/CODE_REVIEW.md"
+SOURCE_LINK = (
+    "https://github.com/jojianya/sweetspot/blob/development/" + SOURCE_REL
+)
 
 
 # --------------------------------------------------------------------------
@@ -432,7 +440,8 @@ def main() -> None:
     manifest = {
         "repo": "jojianya/sweetspot",
         "baseBranch": "development",
-        "source": "CODE_REVIEW.md",
+        "source": SOURCE_REL,
+        "sourceUrl": SOURCE_LINK,
         "milestones": [{"title": t, "description": d} for t, d in MILESTONES],
         "extraLabels": [{"name": n, "color": c, "description": d} for n, c, d in EXTRA_LABELS],
         "issues": issues,

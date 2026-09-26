@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,10 +21,18 @@ func serve(srv *http.Server) error {
 
 	select {
 	case err := <-errCh:
+		// ListenAndServe returns ErrServerClosed once Shutdown has run, which
+		// is a normal exit rather than a failure.
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
 		return err
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return srv.Shutdown(shutdownCtx)
+		// A graceful stop is the success path: report nil so the process does
+		// not log a server error on every SIGTERM.
+		_ = srv.Shutdown(shutdownCtx)
+		return nil
 	}
 }

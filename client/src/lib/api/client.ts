@@ -4,6 +4,25 @@ import { API_BASE_URL, reportError } from "@/lib/monitoring";
 
 export { API_BASE_URL };
 
+/**
+ * ApiError carries the HTTP status code alongside the message, so callers can
+ * branch on `error.status` instead of parsing the message string.
+ *
+ * The status is 0 when the request never reached the server (network error,
+ * timeout, CORS preflight failure) — there is no HTTP response to read.
+ */
+export class ApiError extends Error {
+  status: number;
+  code: string | undefined;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 20000,
@@ -15,7 +34,9 @@ const api = axios.create({
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    const status = error?.response?.status;
+    const status = error?.response?.status ?? 0;
+    const code = error?.code;
+
     if (status >= 500) {
       reportError(error, {
         kind: "api",
@@ -37,7 +58,8 @@ api.interceptors.response.use(
       typeof serverMessage === "string" && serverMessage.length > 0
         ? serverMessage
         : error?.message ?? "something went wrong";
-    return Promise.reject(new Error(message));
+
+    return Promise.reject(new ApiError(message, status, code));
   }
 );
 

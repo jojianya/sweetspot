@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PinDetail } from "@/lib/types";
+import { ApiError } from "@/lib/api/client";
 import PinPage, { generateMetadata } from "./page";
 
 const mocks = vi.hoisted(() => ({
@@ -79,5 +80,52 @@ describe("pin page metadata", () => {
       "NEXT_NOT_FOUND"
     );
     expect(mocks.notFound).toHaveBeenCalledOnce();
+  });
+
+  it("calls notFound() for a genuine 404 (ApiError status 404)", async () => {
+    mocks.getPinServer.mockRejectedValue(new ApiError("pin not found", 404));
+
+    await expect(PinPage({ params: Promise.resolve({ id: PIN_ID }) })).rejects.toThrow(
+      "NEXT_NOT_FOUND"
+    );
+    expect(mocks.notFound).toHaveBeenCalledOnce();
+  });
+
+  it("propagates a timeout to error.tsx instead of calling notFound()", async () => {
+    // AbortSignal.timeout(5000) in getPinServer rejects with status 0.
+    mocks.getPinServer.mockRejectedValue(new ApiError("network error", 0));
+
+    await expect(PinPage({ params: Promise.resolve({ id: PIN_ID }) })).rejects.toThrow(
+      "network error"
+    );
+    expect(mocks.notFound).not.toHaveBeenCalled();
+  });
+
+  it("propagates a 500 to error.tsx instead of calling notFound()", async () => {
+    mocks.getPinServer.mockRejectedValue(new ApiError("internal server error", 500));
+
+    await expect(PinPage({ params: Promise.resolve({ id: PIN_ID }) })).rejects.toThrow(
+      "internal server error"
+    );
+    expect(mocks.notFound).not.toHaveBeenCalled();
+  });
+
+  it("propagates metadata fetch errors instead of crashing", async () => {
+    mocks.getPinServer.mockRejectedValue(new ApiError("network error", 0));
+
+    await expect(
+      generateMetadata({ params: Promise.resolve({ id: PIN_ID }) })
+    ).rejects.toThrow("network error");
+  });
+
+  it("marks a genuine 404 in metadata as noindex", async () => {
+    mocks.getPinServer.mockRejectedValue(new ApiError("pin not found", 404));
+
+    const metadata = await generateMetadata({ params: Promise.resolve({ id: PIN_ID }) });
+
+    expect(metadata).toEqual({
+      title: "Pin not found · Goodspot",
+      robots: { index: false, follow: false },
+    });
   });
 });

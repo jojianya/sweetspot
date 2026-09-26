@@ -34,6 +34,12 @@ func (h *Handler) Register(c *gin.Context) {
 			response.Conflict(c, "email or username already taken")
 			return
 		}
+		if errors.Is(err, ErrInvalidPassword) {
+			// Client input, not a server fault. Return the specific reason so the
+			// user can tell a short password from an over-long one.
+			response.BadRequest(c, err.Error())
+			return
+		}
 		response.Internal(c, "auth: register", err)
 		return
 	}

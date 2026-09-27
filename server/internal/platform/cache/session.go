@@ -13,8 +13,16 @@ type Blacklist struct {
 	client *redis.Client
 }
 
+// New creates a Blacklist with its own client. Prefer NewWithClient so the
+// caller can share a single Redis connection across the app.
 func New(addr, password string) *Blacklist {
 	return &Blacklist{client: redis.NewClient(&redis.Options{Addr: addr, Password: password})}
+}
+
+// NewWithClient creates a Blacklist backed by an existing client, so the
+// connection is shared rather than duplicated.
+func NewWithClient(client *redis.Client) *Blacklist {
+	return &Blacklist{client: client}
 }
 
 func (b *Blacklist) Ping(ctx context.Context) error {

@@ -56,5 +56,13 @@ func Run(cfg *config.Config, pool *pgxpool.Pool, rep *report.Reporter) error {
 	}
 
 	lg.Info("server starting", "port", cfg.Port, "log_level", cfg.LogLevel, "log_format", cfg.LogFormat)
-	return serve(srv)
+	if err := serve(srv); err != nil {
+		return err
+	}
+
+	// Close the shared Redis client after the server has stopped.
+	if err := container.Redis.Close(); err != nil {
+		lg.Warn("redis close failed", "error", err.Error())
+	}
+	return nil
 }

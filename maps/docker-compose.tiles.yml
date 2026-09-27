@@ -22,7 +22,7 @@ services:
     command: ["--config", "/data/config.json", "--port", "8080", "--bind", "0.0.0.0"]
     volumes:
       - ${TILES_DIR:-.}/philippines.mbtiles:/data/philippines.mbtiles:ro
-      - ${TILES_DIR:-.}/style:/data/styles/goodspot:ro
+      - ./style/goodspot:/data/styles/goodspot:ro
       - ${TILES_DIR:-.}/sprites:/data/sprites:ro
       - ${TILES_DIR:-.}/tileserver-config.json:/data/config.json:ro
     ports:

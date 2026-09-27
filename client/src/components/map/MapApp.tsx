@@ -129,11 +129,22 @@ export default function MapApp({
     setDetailError(null);
   }, []);
 
+  // Debounced bbox updates so a burst of moveend events doesn't close and
+  // reopen the SSE connection on every pan/zoom. The bbox is quantized to
+  // ~11 m so a string-identical bbox doesn't re-run the effect either way.
+  const boundsTimerRef = useRef<number | null>(null);
+
   const handleBoundsChange = useCallback(
     (bboxValue: string, c: { lat: number; lng: number }) => {
-      setBbox(bboxValue);
       setCenter(c);
       setFlyTo(null);
+      if (boundsTimerRef.current !== null) {
+        window.clearTimeout(boundsTimerRef.current);
+      }
+      boundsTimerRef.current = window.setTimeout(() => {
+        setBbox(bboxValue);
+        boundsTimerRef.current = null;
+      }, 250);
     },
     []
   );

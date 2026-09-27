@@ -1,0 +1,174 @@
+package pins
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
+)
+
+func init() { gin.SetMode(gin.TestMode) }
+
+// stubRepo implements Repository with only the two methods DeletePin touches.
+// The embedded nil interface means any other call panics, which is what we want
+// from a test double.
+type stubRepo struct {
+	Repository
+
+	detail PinDetail
+	getErr error
+	delErr error
+
+	deletedID     string
+	deletedUserID string
+}
+
+func (s *stubRepo) GetPin(context.Context, string) (PinDetail, error) {
+	return s.detail, s.getErr
+}
+
+func (s *stubRepo) DeletePin(_ context.Context, id, userID string) error {
+	s.deletedID, s.deletedUserID = id, userID
+	return s.delErr
+}
+
+// newDeleteHarness wires a handler with a stub repo and a real local storage in
+// dir, behind a gin route whose auth middleware is stubbed to report userID.
+func newDeleteHarness(t *testing.T, repo *stubRepo, dir string) *gin.Engine {
+	t.Helper()
+	h := &Handler{repo: repo, store: storage.NewLocal(dir, "http://api.test")}
+
+	r := gin.New()
+	r.DELETE("/pins/:id", func(c *gin.Context) {
+		c.Set("user_id", "owner-1")
+		h.DeletePin(c)
+	})
+	return r
+}
+
+// stagePhoto writes a real file into the storage dir and returns the URL Save
+// would have returned for it.
+func stagePhoto(t *testing.T, dir, name string) string {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("img"), 0o644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+	return "http://api.test/uploads/" + name
+}
+
+func onDisk(t *testing.T, dir, name string) bool {
+	t.Helper()
+	_, err := os.Stat(filepath.Join(dir, name))
+	return err == nil
+}
+
+func deletePin(r *gin.Engine, id string) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/pins/"+id, nil))
+	return w
+}
+
+// TestDeletePinRemovesPhotoFiles is the regression test for the audit finding
+// that DeletePin left every uploaded file on disk, still publicly served, after
+// removing the pin row. pin_photos is ON DELETE CASCADE, so the handler has to
+// capture the URLs before the delete.
+func TestDeletePinRemovesPhotoFiles(t *testing.T) {
+	dir := t.TempDir()
+	photoURL := stagePhoto(t, dir, "photo-1.webp")
+	thumbURL := stagePhoto(t, dir, "thumb-1.webp")
+
+	r := newDeleteHarness(t, &stubRepo{detail: PinDetail{Photos: []PinPhoto{
+		{PhotoURL: photoURL, ThumbnailURL: thumbURL},
+	}}}, dir)
+
+	w := deletePin(r, "pin-1")
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	for _, name := range []string{"photo-1.webp", "thumb-1.webp"} {
+		if onDisk(t, dir, name) {
+			t.Errorf("%s still on disk after the pin was deleted", name)
+		}
+	}
+}
+
+// TestDeletePinForwardsOwnershipArgs guards the fetch-then-delete ordering: the
+// delete must still be scoped to the caller's user id, so knowing an id is not
+// enough to remove someone else's pin.
+func TestDeletePinForwardsOwnershipArgs(t *testing.T) {
+	repo := &stubRepo{}
+	r := newDeleteHarness(t, repo, t.TempDir())
+
+	if w := deletePin(r, "pin-42"); w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", w.Code)
+	}
+	if repo.deletedID != "pin-42" {
+		t.Errorf("DeletePin got id %q, want \"pin-42\"", repo.deletedID)
+	}
+	if repo.deletedUserID != "owner-1" {
+		t.Errorf("DeletePin got userID %q, want \"owner-1\"", repo.deletedUserID)
+	}
+}
+
+// TestDeletePinForbiddenLeavesFilesOnDisk proves cleanup only runs after a
+// successful delete: a refused delete must not remove files belonging to a pin
+// that still exists.
+func TestDeletePinForbiddenLeavesFilesOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	stagePhoto(t, dir, "photo-keep.webp")
+	store := storage.NewLocal(dir, "http://api.test")
+
+	repo := &stubRepo{
+		detail: PinDetail{Photos: []PinPhoto{
+			{PhotoURL: "http://api.test/uploads/photo-keep.webp", ThumbnailURL: "http://api.test/uploads/thumb-keep.webp"},
+		}},
+		delErr: ErrForbidden,
+	}
+	h := &Handler{repo: repo, store: store}
+	r := gin.New()
+	r.DELETE("/pins/:id", func(c *gin.Context) {
+		c.Set("user_id", "owner-1")
+		h.DeletePin(c)
+	})
+
+	if w := deletePin(r, "pin-1"); w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if !onDisk(t, dir, "photo-keep.webp") {
+		t.Error("photo was deleted even though the pin delete was refused")
+	}
+}
+
+// TestDeletePinNotFoundReturns404 keeps the 404 path intact now that the handler
+// reads the pin first: a missing pin must still be 404, not 500.
+func TestDeletePinNotFoundReturns404(t *testing.T) {
+	r := newDeleteHarness(t, &stubRepo{getErr: ErrNotFound}, t.TempDir())
+
+	w := deletePin(r, "gone")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not JSON: %v", err)
+	}
+	if body["error"] == "" {
+		t.Error("404 body has no error message")
+	}
+}
+
+// TestDeletePinHandlesPinWithNoPhotos covers the zero-photo case so the cleanup
+// loop cannot panic on an empty slice.
+func TestDeletePinHandlesPinWithNoPhotos(t *testing.T) {
+	r := newDeleteHarness(t, &stubRepo{detail: PinDetail{Photos: []PinPhoto{}}}, t.TempDir())
+
+	if w := deletePin(r, "pin-1"); w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}

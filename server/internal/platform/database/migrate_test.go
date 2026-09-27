@@ -145,7 +145,21 @@ func TestRunMigrationsWithConcurrently(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer pool.Close()
+	// Closed via t.Cleanup rather than defer: t.Cleanup callbacks run after the
+	// function's own defers, so a deferred Close would close the pool before the
+	// migration cleanup below could use it. Cleanups run last-registered-first,
+	// so registering the close here guarantees it happens after the cleanup.
+	t.Cleanup(pool.Close)
+
+	// This test runs against the live database named by DB_NAME, so it has to
+	// leave no trace. RunMigrations records the migration in schema_migrations
+	// and that record is what makes a second run skip the file, so dropping the
+	// indexes alone leaves the migration "already applied" and every later run
+	// fails on "expected 2 indexes, got 0". Clear up front too, in case a
+	// previous run leaked a record.
+	const migrationFile = "0001_test_concurrently.sql"
+	cleanupTestMigration(t, pool, migrationFile)
+	t.Cleanup(func() { cleanupTestMigration(t, pool, migrationFile) })
 
 	// Create a temporary migration directory with a CONCURRENTLY migration.
 	dir := t.TempDir()
@@ -171,12 +185,29 @@ CREATE INDEX CONCURRENTLY test_concurrent_partial ON users (email) WHERE role = 
 	if count != 2 {
 		t.Fatalf("expected 2 indexes, got %d", count)
 	}
+}
 
-	// Cleanup
+// cleanupTestMigration undoes everything TestRunMigrationsWithConcurrently does
+// to the live database: the two indexes it creates, and the schema_migrations
+// row that marks the migration applied.
+//
+// Both are needed. Leaving the indexes behind makes the next run's
+// CREATE INDEX CONCURRENTLY fail with "relation already exists"; leaving the
+// bookkeeping row behind makes the next run skip the file and then fail on
+// "expected 2 indexes, got 0". The original cleanup only dropped the indexes,
+// which is why the test poisoned the shared database and then failed on itself
+// from the second run onwards.
+func cleanupTestMigration(t *testing.T, pool *pgxpool.Pool, filename string) {
+	t.Helper()
+	ctx := context.Background()
 	if _, err := pool.Exec(ctx, `
 		DROP INDEX IF EXISTS test_concurrent_idx;
 		DROP INDEX IF EXISTS test_concurrent_partial;
 	`); err != nil {
-		t.Fatalf("cleanup: %v", err)
+		t.Fatalf("drop test indexes: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		"DELETE FROM schema_migrations WHERE filename = $1", filename); err != nil {
+		t.Fatalf("clear %s from schema_migrations: %v", filename, err)
 	}
 }

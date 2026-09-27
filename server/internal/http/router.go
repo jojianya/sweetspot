@@ -34,14 +34,41 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 
 	r.Static("/uploads", "./uploads")
 
+	// The DI container is shadowed by the gin handler's *gin.Context in the
+	// other closures below, so capture the blacklist here by name.
+	blacklist := c.Blacklist
+
 	r.GET("/health", func(c *gin.Context) {
+		// Ping both backing services. Redis is not optional: the auth
+		// middleware consults the session blacklist on every protected
+		// request, so a Redis outage is an authentication outage. Reporting
+		// "ok" while Redis is unreachable would let the container healthcheck
+		// and any load balancer keep routing to a server that cannot verify
+		// sessions.
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+
 		dbStatus := "connected"
-		if err := pool.Ping(context.Background()); err != nil {
+		if err := pool.Ping(ctx); err != nil {
 			dbStatus = "unreachable"
-			response.JSON(c, stdhttp.StatusServiceUnavailable, gin.H{"status": "ok", "db": dbStatus})
+		}
+
+		redisStatus := "connected"
+		if blacklist == nil {
+			redisStatus = "not_configured"
+		} else if err := blacklist.Ping(ctx); err != nil {
+			redisStatus = "unreachable"
+		}
+
+		if dbStatus != "connected" || redisStatus == "unreachable" {
+			response.JSON(c, stdhttp.StatusServiceUnavailable, gin.H{
+				"status": "degraded",
+				"db":     dbStatus,
+				"redis":  redisStatus,
+			})
 			return
 		}
-		response.JSON(c, stdhttp.StatusOK, gin.H{"status": "ok", "db": dbStatus})
+		response.JSON(c, stdhttp.StatusOK, gin.H{"status": "ok", "db": dbStatus, "redis": redisStatus})
 	})
 
 	jsonRoutes := r.Group("")

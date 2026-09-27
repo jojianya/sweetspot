@@ -51,8 +51,16 @@ func TestRealDBTrendingAndBbox(t *testing.T) {
 		t.Fatalf("seed user: %v", err)
 	}
 
-	// Create pins in a small area so they all match the bbox
-	bbox := [4]float64{-122.45, 37.75, -122.40, 37.80}
+	// Create pins in a small area so they all match the bbox.
+	//
+	// bbox is [minLat, minLng, maxLat, maxLng] - the order the handler's
+	// ParseBbox produces and the order ListTrending/ListPins index it as. The
+	// pins below are created around 37.77 N, -122.43 W, so the latitudes go
+	// first. Swapping the pairs silently asks for longitude 37.75 and latitude
+	// -122.45, which is a point in the Indian Ocean: the query then returns
+	// nothing for the right-looking-but-wrong reason, and the test fails on an
+	// envelope that never covered the data it seeded.
+	bbox := [4]float64{37.75, -122.45, 37.80, -122.40}
 	pinIDs := make([]string, 0, 5)
 	for i := 0; i < 5; i++ {
 		pin, err := repo.CreatePin(ctx, pins.NewPin{
@@ -119,21 +127,38 @@ func TestRealDBTrendingAndBbox(t *testing.T) {
 	}
 	t.Logf("ListPins returned %d pins", len(pinsList))
 
-	// ListPins without bbox - should use pins_visible_created_idx
-	// Use a valid world bbox (avoid antipodal edges)
-	worldBbox := [4]float64{-179.9, -89.9, 179.9, 89.9}
-	pinsAll, err := repo.ListPins(ctx, worldBbox, nil, 10)
+	// ListPins with a wide regional bbox - same envelope path as above but with
+	// a much larger span.
+	//
+	// Deliberately regional, not global. PostGIS ST_Intersects on a geography
+	// column against a near-global envelope gives the wrong answer regardless
+	// of the data: measured on this database, an envelope of lng +/-179.9 and
+	// lat +/-85 contains the seeded pins yet matches 0 of 55, while the same
+	// envelope cast to geometry matches all 55. The UI cannot reach that state
+	// (MapView clamps to minZoom 5, so the widest bbox it can emit is about
+	// 11 degrees), which makes it a latent API issue rather than a user-visible
+	// one. Do not "fix" this by widening the box - the assertion would then be
+	// asserting broken behaviour.
+	wideBbox := [4]float64{30, -130, 45, -110}
+	pinsAll, err := repo.ListPins(ctx, wideBbox, nil, 10)
 	if err != nil {
-		t.Fatalf("ListPins world: %v", err)
+		t.Fatalf("ListPins wide: %v", err)
 	}
-	t.Logf("ListPins (world) returned %d pins", len(pinsAll))
+	// The test seeds 5 pins itself, so a box covering the seeded region must see
+	// them. An empty result means the envelope missed the rows, which is
+	// exactly what the swapped pair produced.
+	if len(pinsAll) < len(pinIDs) {
+		t.Fatalf("expected the wide bbox to cover the %d seeded pins, got %d", len(pinIDs), len(pinsAll))
+	}
+	t.Logf("ListPins (wide) returned %d pins", len(pinsAll))
 
-	// Verify the sort index is used (first page should be newest)
-	if len(pinsAll) >= 2 {
-		if pinsAll[0].CreatedAt.Before(pinsAll[1].CreatedAt) {
-			t.Fatalf("pins not sorted by created_at DESC: first=%v second=%v",
-				pinsAll[0].CreatedAt, pinsAll[1].CreatedAt)
-		}
+	// Verify ordering (first page should be newest)
+	if len(pinsAll) < 2 {
+		t.Fatalf("need at least 2 pins to check ordering, got %d", len(pinsAll))
+	}
+	if pinsAll[0].CreatedAt.Before(pinsAll[1].CreatedAt) {
+		t.Fatalf("pins not sorted by created_at DESC: first=%v second=%v",
+			pinsAll[0].CreatedAt, pinsAll[1].CreatedAt)
 	}
 }
 

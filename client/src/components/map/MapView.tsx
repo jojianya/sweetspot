@@ -301,7 +301,6 @@ export default function MapView({
     });
 
     map.on("moveend", () => {
-      console.log("zoom:", map.getZoom());
       const [south, west, north, east] = boundsToValidBbox(map.getBounds());
       onBoundsRef.current(`${south},${west},${north},${east}`, {
         lat: map.getCenter().lat,

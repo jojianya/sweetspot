@@ -54,8 +54,15 @@ func validateToken(c *gin.Context, jwtSecret string, bl *cache.Blacklist, tokenS
 	if bl != nil {
 		revoked, err := bl.IsRevoked(c.Request.Context(), claims.ID)
 		if err != nil {
-			slog.Default().Warn("blacklist check failed", "error", err.Error())
-		} else if revoked {
+			// Fail closed. If the blacklist cannot be consulted we cannot know
+			// whether this token was revoked, and accepting it would silently
+			// un-revoke every logged-out session for the life of the token.
+			// Denying is the safe default; a Redis outage reads as "sign in
+			// again" rather than as a silently resurrected session.
+			slog.Default().Error("blacklist check failed, denying request", "error", err.Error(), "jti", claims.ID)
+			return nil, "session verification unavailable, please try again", false
+		}
+		if revoked {
 			return nil, "session was logged out, please sign in again", false
 		}
 	}

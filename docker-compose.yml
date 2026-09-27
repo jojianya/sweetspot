@@ -96,8 +96,6 @@ services:
       - "127.0.0.1:3000:3000"
     environment:
       NEXT_PUBLIC_MAPTILER_API_KEY: ${NEXT_PUBLIC_MAPTILER_API_KEY:?set NEXT_PUBLIC_MAPTILER_API_KEY in .env}
-      # Self-hosted vector tile server (see the top-level maps/ module).
-      NEXT_PUBLIC_TILES_URL: ${NEXT_PUBLIC_TILES_URL:-http://localhost:8080}
       # Not the browser's API origin any more: next.config.ts rewrites /api/* to
       # the Go server so the browser stays same-origin. This value is still read
       # for SSR metadata (lib/site.ts) and as the SSR fetch fallback.

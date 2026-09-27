@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party bundles — not our code, and linting them
+    // produces ~1098 warnings that drown out real issues.
+    "public/**",
   ]),
 ]);
 

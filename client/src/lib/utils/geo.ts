@@ -136,11 +136,22 @@ export function toGeoCoords(pos: GeolocationPosition): GeoCoords {
   return { lat: pos.coords.latitude, lng: pos.coords.longitude };
 }
 
+/**
+ * Quantize a coordinate to ~4 decimal places (~11 m). The bbox string is an
+ * effect dependency in usePinStream, so full float precision would produce a
+ * different string on every map move — closing and reopening the SSE
+ * connection each time. Quantizing makes small pans produce a string-identical
+ * bbox, so the effect doesn't re-run.
+ */
+function quantizeCoord(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
 export function boundsToValidBbox(b: LngLatBounds): [number, number, number, number] {
-  const south = Math.max(-90, Math.min(90, b.getSouth()));
-  const north = Math.max(-90, Math.min(90, b.getNorth()));
-  const west = b.getWest();
-  const east = b.getEast();
+  const south = Math.max(-90, Math.min(90, quantizeCoord(b.getSouth())));
+  const north = Math.max(-90, Math.min(90, quantizeCoord(b.getNorth())));
+  const west = quantizeCoord(b.getWest());
+  const east = quantizeCoord(b.getEast());
   if (east - west >= 360) return [south, -180, north, 180];
   const wrap = (lng: number) => ((((lng % 360) + 540) % 360) - 180);
   const lngMin = wrap(west);

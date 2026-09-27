@@ -194,7 +194,41 @@ function drawCategoryGlyph(ctx: CanvasRenderingContext2D, categoryId: number): v
   ctx.restore();
 }
 
+/**
+ * Module-scope cache for generated pin icons. The icon markup is a pure
+ * function of (size, color, selected, categoryId) and never changes at
+ * runtime, so we build each variant once and reuse it. Without this, every
+ * style.load (map init and every light/dark toggle) re-renders 18 SVGs,
+ * decodes 18 blobs, and re-uploads 18 textures.
+ */
+const iconCache = new Map<string, Promise<ImageData>>();
+
+function getCacheKey(
+  size: number,
+  color: string,
+  selected: boolean,
+  categoryId: number
+): string {
+  return `${size}|${color}|${selected}|${categoryId}`;
+}
+
 function makePinIcon(
+  size: number,
+  color: string,
+  ringColor: string | null,
+  categoryId: number
+): Promise<ImageData> {
+  const selected = ringColor !== null;
+  const cacheKey = getCacheKey(size, color, selected, categoryId);
+  const cached = iconCache.get(cacheKey);
+  if (cached) return cached;
+
+  const promise = buildPinIcon(size, color, ringColor, categoryId);
+  iconCache.set(cacheKey, promise);
+  return promise;
+}
+
+function buildPinIcon(
   size: number,
   color: string,
   ringColor: string | null,

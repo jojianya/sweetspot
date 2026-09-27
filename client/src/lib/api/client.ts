@@ -1,6 +1,7 @@
 import axios from "axios";
 import { useAuth } from "@/store/auth";
 import { API_BASE_URL, reportError } from "@/lib/monitoring";
+import { isSessionEnded } from "./session";
 
 export { API_BASE_URL };
 
@@ -46,10 +47,12 @@ api.interceptors.response.use(
       });
     }
 
-    if (
-      status === 401 &&
-      !error?.config?.url?.includes("/auth/login")
-    ) {
+    // A 401 from a session-protected endpoint means the httpOnly cookie can no
+    // longer authenticate anything, so the cached user is stale and goes. The
+    // credential endpoints are excluded: a failed login is a 401 too, but the
+    // caller has no session to lose. Boot-time reconciliation lives in
+    // useSessionSync — this is the backstop for a session that dies mid-visit.
+    if (status === 401 && isSessionEnded(error?.config?.url)) {
       useAuth.getState().clearAuth();
     }
 

@@ -387,8 +387,13 @@ func TestAuthEndpoints(t *testing.T) {
 		if cookie.Value == "" {
 			t.Fatal("session cookie is empty")
 		}
-		if !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode {
+		if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
 			t.Fatalf("session cookie flags are not hardened: %+v", cookie)
+		}
+		// Secure must be true for HTTPS requests and false for HTTP.
+		// The test server uses HTTP, so Secure should be false.
+		if cookie.Secure {
+			t.Fatalf("Secure flag should be false for HTTP requests, got %v", cookie.Secure)
 		}
 		if _, ok := body["token"]; ok {
 			t.Fatal("token must not be returned in the response body")

@@ -3,10 +3,18 @@ package auth
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
+	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
 )
 
@@ -222,5 +230,49 @@ func TestRoleByID(t *testing.T) {
 	}
 	if role != users.RoleOwner {
 		t.Fatalf("expected role %q, got %q", users.RoleOwner, role)
+	}
+}
+
+func TestLogoutSucceedsWhenRedisIsDown(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Simulate a Redis outage: use a real Blacklist pointing at a closed port.
+	// Revoke will fail with a connection error, which is what we're testing.
+	bl := cache.New("127.0.0.1:1", "")
+	h := NewHandler(newTestService(&stubUserService{}), bl, nil)
+
+	// Create a valid JWT so the handler can extract claims.
+	token, err := jwt.Generate("test-secret", "u1", time.Hour)
+	if err != nil {
+		t.Fatalf("jwt.Generate: %v", err)
+	}
+	claims, err := jwt.Validate("test-secret", token)
+	if err != nil {
+		t.Fatalf("jwt.Validate: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+	c.Set(middleware.CtxJWTClaims, claims)
+
+	h.Logout(c)
+
+	// The logout must succeed (200) even when Redis is down.
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	// The cookie must be cleared.
+	cookies := w.Header().Values("Set-Cookie")
+	found := false
+	for _, line := range cookies {
+		if strings.Contains(line, "session_token=;") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected session_token cookie to be cleared, got %v", cookies)
 	}
 }

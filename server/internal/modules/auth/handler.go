@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -44,7 +45,7 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	SetSessionCookie(c.Writer, token, tokenExpiry)
+	SetSessionCookie(c.Writer, c.Request, token, tokenExpiry)
 	response.Created(c, gin.H{"user": u})
 }
 
@@ -77,7 +78,7 @@ func (h *Handler) Login(c *gin.Context) {
 		h.emailLim.Reset(req.Identifier)
 	}
 
-	SetSessionCookie(c.Writer, token, tokenExpiry)
+	SetSessionCookie(c.Writer, c.Request, token, tokenExpiry)
 	response.OK(c, gin.H{"user": u})
 }
 
@@ -88,14 +89,20 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
+	// Clear the cookie first so the client is logged out regardless of
+	// whether the revoke succeeds. The token will expire naturally if the
+	// revoke fails, but the client should not be told the logout failed.
+	ClearSessionCookie(c.Writer, c.Request)
+
 	jwtClaims := claims.(*jwt.Claims)
 	ttl := time.Until(jwtClaims.ExpiresAt.Time)
 	if err := h.bl.Revoke(c.Request.Context(), jwtClaims.ID, ttl); err != nil {
-		response.Internal(c, "logout revoke failed", err)
-		return
+		// Log the failure but do not fail the request. The cookie is already
+		// cleared, and the token will expire on its own. A Redis outage should
+		// not prevent logout.
+		slog.Warn("logout: failed to revoke token", "error", err.Error())
 	}
 
-	ClearSessionCookie(c.Writer)
 	response.OK(c, gin.H{"message": "logged out"})
 }
 

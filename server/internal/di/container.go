@@ -13,6 +13,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
+	"github.com/redis/go-redis/v9"
 )
 
 type Container struct {
@@ -27,9 +28,11 @@ type Container struct {
 	Store          *storage.Local
 	Blacklist      *cache.Blacklist
 	Events         *realtime.Broker
+	Redis          *redis.Client
 }
 
 func Build(cfg *config.Config, pool *pgxpool.Pool) *Container {
+	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr, Password: cfg.RedisPassword})
 	return &Container{
 		Config:         cfg,
 		UserService:    users.NewService(users.NewRepository(pool)),
@@ -40,7 +43,8 @@ func Build(cfg *config.Config, pool *pgxpool.Pool) *Container {
 		SocialRepo:     social.NewRepository(pool),
 		CollectionRepo: collections.NewRepository(pool),
 		Store:          storage.NewLocal("./uploads", cfg.StorageBase),
-		Blacklist:      cache.New(cfg.RedisAddr, cfg.RedisPassword),
-		Events:         realtime.NewBroker(cfg.RedisAddr, cfg.RedisPassword),
+		Blacklist:      cache.NewWithClient(redisClient),
+		Events:         realtime.NewBrokerWithClient(redisClient),
+		Redis:          redisClient,
 	}
 }

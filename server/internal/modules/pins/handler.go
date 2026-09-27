@@ -203,7 +203,23 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.DeletePin(c.Request.Context(), c.Param("id"), userID); err != nil {
+	// Read the pin before deleting it. pin_photos rows are removed with the pin
+	// (ON DELETE CASCADE), so afterwards there is no way to learn which files
+	// belonged to it and they would sit on disk forever, still publicly served
+	// under their original URL. GetPin reads the same data the public
+	// GET /pins/:id returns, so this is not a privileged read.
+	id := c.Param("id")
+	existing, err := h.repo.GetPin(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.NotFound(c, "pin not found")
+			return
+		}
+		response.Internal(c, "delete pin: load pin", err, "pin_id", id, "user_id", userID)
+		return
+	}
+
+	if err := h.repo.DeletePin(c.Request.Context(), id, userID); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
 			return
@@ -212,8 +228,20 @@ func (h *Handler) DeletePin(c *gin.Context) {
 			response.Forbidden(c, "you can only delete your own pins")
 			return
 		}
-		response.Internal(c, "delete pin", err, "pin_id", c.Param("id"), "user_id", userID)
+		response.Internal(c, "delete pin", err, "pin_id", id, "user_id", userID)
 		return
+	}
+
+	// Best-effort cleanup, matching what UpdatePin does for replaced photos. The
+	// pin is already gone, so a storage failure must not fail the request; the
+	// files are unreferenced either way. Logged so an operator can sweep them.
+	for _, ph := range existing.Photos {
+		if err := h.store.Delete(ph.PhotoURL); err != nil {
+			slog.Warn("delete pin: remove photo", "error", err.Error(), "url", ph.PhotoURL, "pin_id", id)
+		}
+		if err := h.store.Delete(ph.ThumbnailURL); err != nil {
+			slog.Warn("delete pin: remove thumbnail", "error", err.Error(), "url", ph.ThumbnailURL, "pin_id", id)
+		}
 	}
 
 	response.NoContent(c)

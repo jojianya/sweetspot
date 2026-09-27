@@ -11,6 +11,18 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// defaultCORSAllowedOrigins is the fallback for CORS_ALLOWED_ORIGINS.
+//
+// The Next.js client proxies /api/* to this server (client/next.config.ts), so
+// the browser reaches the API on its own origin and never triggers a CORS
+// check. These defaults are therefore NOT load-bearing for the app. They exist
+// so a developer can still hit the API directly from a browser on a loopback
+// origin (devtools console, a scratch page) while debugging — non-browser
+// clients such as curl and the Go tests are not subject to CORS at all. Set
+// CORS_ALLOWED_ORIGINS to override the list, or to "" to allow nothing.
+const defaultCORSAllowedOrigins = "http://localhost:3000,http://localhost:3001,http://localhost:3002," +
+	"http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002"
+
 type Config struct {
 	Port               string
 	AppEnv             string
@@ -51,7 +63,7 @@ func Load() *Config {
 		StorageBase:        getEnv("STORAGE_BASE_URL", "http://localhost:8081"),
 		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
-		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002")),
+		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
 		SentryDSN:          getEnv("SENTRY_DSN", ""),
 		SentryEnv:          getEnv("SENTRY_ENV", "development"),
 	}

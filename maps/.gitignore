@@ -1,0 +1,15 @@
+# --- Large data & generated artifacts (never commit) ---
+# Raw OSM extract (~579 MB) — provision with `curl -L -o data/philippines-latest.osm.pbf \
+# https://download.geofabrik.de/asia/philippines-latest.osm.pbf`
+data/*.osm.pbf
+
+# Generated tile archive (491 MB Shortbread / ~? MB OpenMapTiles) — see README
+*.mbtiles
+*.mbtiles.part
+
+# Planetiler binary + cache, fetched on demand by build-tiles.sh
+planetiler.jar
+.planetiler-cache/
+
+# Ad-hoc logs
+*.log

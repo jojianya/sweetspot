@@ -1,0 +1,4 @@
+# TileServer GL requires options.paths.sprites to exist on disk, even when the
+# styles reference no sprite sheet. These styles are icon-free, so this
+# directory is intentionally empty. Run a real sprite build here if you add
+# icon layers to style/style.json (see docs/tileserver-gl "sprites").

@@ -1,0 +1,365 @@
+<!doctype html>
+<!--
+  maps/test.html — standalone smoke-test page for the self-hosted tile stack.
+
+  Renders the GoodSpot247 Philippines basemap with MapLibre GL JS straight from
+  a CDN (no Next.js / React / build step), pointed at the local TileServer GL
+  (see maps/docker-compose.tiles.yml).
+
+  SERVE OVER HTTP — do not double-click this file. Browsers block cross-origin
+  requests (style JSON, tiles) from `file://` pages by design, so opening it
+  directly from disk will always fail. From this directory:
+
+      python3 -m http.server 8899
+
+  then open http://localhost:8899/test.html
+
+  (8899 on purpose: it is outside every port the stacks use — 3000 client,
+  5432 postgres, 6379 redis, 8080 tiles, 8081 app API — and is not a common
+  tool default, so nothing will ever collide with it. In particular, never
+  run the static server on 8081; that is the Go API's port.)
+
+  Query overrides (no file edits needed):
+    ?tiles=http://192.168.1.10:8080    point at another tile host
+    ?style=goodspot-dark               render the dark style instead
+
+  The badge in the top-left shows the tile host being hit, runs a style +
+  TileJSON + sample-tile fetch against it, and flips red on any failure or
+  MapLibre render error — so it's obvious at a glance whether the map is
+  pointed at localhost or somewhere else. Open DevTools → Network to see the
+  actual per-tile requests (/data/philippines/*.pbf).
+
+  Note on URLs: TileServer GL serves the style with root-relative source URLs
+  ("tiles": ["/data/..."]), absolutizing only `glyphs`. MapLibre fetches tiles
+  inside its worker, where relative URLs have no base and every request dies
+  with "Failed to execute 'open' on 'XMLHttpRequest': Invalid URL". So this
+  page fetches the style first, rewrites all root-relative URLs onto the tile
+  host, and passes MapLibre the style object. (The app must do the equivalent
+  via map.setTransformRequest/transformRequest — see maps/README.md.)
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GoodSpot247 — self-hosted tiles test</title>
+    <!-- MapLibre pinned to v5.24.0: the last major shipping the classic
+         dist/maplibre-gl.js UMD bundle usable via a plain <script> tag
+         (v6+ is ESM-only). Same style/tiles the v6 app build renders. -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css"
+    />
+    <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+      #map { position: absolute; inset: 0; }
+
+      #badge {
+        position: absolute; top: 10px; left: 10px; z-index: 1000;
+        max-width: min(460px, calc(100vw - 20px));
+        background: #fff; border-radius: 12px; padding: 10px 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+        font-size: 13px; line-height: 1.45; color: #27272a;
+        border: 2px solid #d4d4d8; /* grey = checking */
+      }
+      #badge.ok { border-color: #22c55e; }      /* green = localhost, rendering */
+      #badge.warn { border-color: #f59e0b; }    /* amber = non-localhost host */
+      #badge.fail { border-color: #ef4444; }    /* red = something is broken */
+      #badge .row { margin: 2px 0; overflow-wrap: anywhere; }
+      #badge .small { font-size: 11.5px; color: #52525b; }
+      #badge code {
+        background: #f4f4f5; border-radius: 4px; padding: 0 4px;
+        font-size: 12px;
+      }
+      #badge input {
+        width: 210px; font-size: 12px; padding: 3px 6px;
+        border: 1px solid #d4d4d8; border-radius: 6px;
+      }
+      #badge button {
+        font-size: 12px; padding: 3px 10px; margin-left: 6px; cursor: pointer;
+        border: 1px solid #d4d4d8; border-radius: 6px; background: #fafafa;
+      }
+      #badge button:hover { background: #f4f4f5; }
+      #status.ok { color: #15803d; font-weight: 600; }
+      #status.warn { color: #b45309; font-weight: 600; }
+      #status.fail { color: #b91c1c; font-weight: 600; }
+      .maplibregl-ctrl-attrib { font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div id="badge">
+      <div class="row">
+        <strong>Tile server:</strong> <code id="tiles-url">…</code>
+      </div>
+      <div class="row">
+        <input id="tiles-input" spellcheck="false" aria-label="Tile server URL" />
+        <button id="tiles-apply">Apply &amp; reload</button>
+      </div>
+      <div class="row" id="status">checking tile server…</div>
+      <div class="row small">Style: <code id="style-url">…</code></div>
+      <div class="row small">
+        Overrides: <code>?tiles=http://host:8080</code> ·
+        <code>?style=goodspot-dark</code>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        var qs = new URLSearchParams(location.search);
+        var TILES = (qs.get("tiles") || "http://localhost:8080").replace(
+          /\/+$/,
+          ""
+        );
+        var STYLE_PATH =
+          "styles/" + (qs.get("style") || "goodspot") + "/style.json";
+        var STYLE_URL = TILES + "/" + STYLE_PATH;
+        // Manila — the map opens here instead of wherever the viewport
+        // defaults would land.
+        var MANILA = { center: [120.9842, 14.5995], zoom: 10 };
+
+        var badge = document.getElementById("badge");
+        var statusEl = document.getElementById("status");
+        document.getElementById("tiles-url").textContent = TILES;
+        document.getElementById("style-url").textContent = STYLE_URL;
+        document.getElementById("tiles-input").value = TILES;
+        document.title = "tiles: " + TILES; // visible in the browser tab too
+
+        // Make it obvious at a glance if we're NOT pointed at localhost.
+        try {
+          var host = new URL(TILES).hostname;
+          if (host !== "localhost" && host !== "127.0.0.1") {
+            badge.classList.add("warn");
+          }
+        } catch (e) {
+          setStatus("fail", "✗ tile URL is not a valid URL: " + TILES);
+          return;
+        }
+
+        if (location.protocol === "file:") {
+          // Hard requirement: browsers block cross-origin fetches from file://
+          // pages, so tiles can never load this way. Tell the user exactly
+          // what to run instead of failing mysteriously below.
+          badge.classList.add("fail");
+          var note = document.createElement("div");
+          note.className = "row small";
+          note.innerHTML =
+            "✗ Opened as <code>file://</code> — the browser will block all " +
+            "tile requests. Serve it instead: <code>cd maps &amp;&amp; " +
+            "python3 -m http.server 8899</code>, then open " +
+            "<code>http://localhost:8899/test.html</code>";
+          badge.appendChild(note);
+        }
+
+        function setStatus(kind, html) {
+          statusEl.className = kind;
+          statusEl.innerHTML = html;
+        }
+
+        // Web Mercator tile numbers for the Manila smoke-test tile.
+        function tileXY(lng, lat, z) {
+          var n = Math.pow(2, z);
+          var latRad = (lat * Math.PI) / 180;
+          return [
+            Math.floor(((lng + 180) / 360) * n),
+            Math.floor(
+              ((1 -
+                Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
+                2) *
+                n
+            ),
+          ];
+        }
+
+        var xy = tileXY(MANILA.center[0], MANILA.center[1], 10);
+        var SMOKE_TILE_URL =
+          TILES + "/data/philippines/10/" + xy[0] + "/" + xy[1] + ".pbf";
+
+        // Pure string concatenation on purpose: new URL() would percent-encode
+        // the {z}/{x}/{y} / {fontstack} template braces (%7Bz%7D), which breaks
+        // MapLibre's placeholder substitution and 404s every request.
+        function absolutize(u) {
+          if (u.indexOf("http://") === 0 || u.indexOf("https://") === 0) {
+            return u;
+          }
+          if (u.indexOf("/") === 0) {
+            return TILES + u;
+          }
+          return TILES + "/" + u;
+        }
+
+        // Rewrite every root-relative URL in the style onto the tile host.
+        // Without this, MapLibre's worker cannot resolve "/data/..." and every
+        // tile request fails with XMLHttpRequest 'Invalid URL'.
+        function rewriteStyle(style) {
+          if (typeof style.glyphs === "string") {
+            style.glyphs = absolutize(style.glyphs);
+          }
+          if (typeof style.sprite === "string") {
+            style.sprite = absolutize(style.sprite);
+          } else if (Array.isArray(style.sprite)) {
+            style.sprite = style.sprite.map(function (s) {
+              s.url = absolutize(s.url);
+              return s;
+            });
+          }
+          Object.keys(style.sources || {}).forEach(function (id) {
+            var src = style.sources[id];
+            if (Array.isArray(src.tiles)) {
+              src.tiles = src.tiles.map(absolutize);
+            }
+            if (typeof src.url === "string") {
+              src.url = absolutize(src.url);
+            }
+          });
+          return style;
+        }
+
+        // Direct reachability check, independent of MapLibre: style, TileJSON
+        // and one real .pbf tile over Manila. Failures surface in the badge
+        // even if the map canvas itself stays blank.
+        Promise.all([
+          fetch(STYLE_URL, { cache: "no-store" }),
+          fetch(TILES + "/data/philippines.json", { cache: "no-store" }),
+          fetch(SMOKE_TILE_URL, { cache: "no-store" }),
+        ])
+          .then(function (responses) {
+            for (var i = 0; i < responses.length; i++) {
+              if (!responses[i].ok) {
+                throw new Error(
+                  "HTTP " + responses[i].status + " on " + responses[i].url
+                );
+              }
+            }
+            setStatus(
+              "ok",
+              "✓ style + TileJSON + smoke tile reachable — waiting for render…"
+            );
+          })
+          .catch(function (e) {
+            setStatus(
+              "fail",
+              "✗ tile server check FAILED — " +
+                e.message +
+                " — is <code>" +
+                TILES +
+                "</code> up?"
+            );
+          });
+
+        // MapLibre's UMD build exposes itself as the global `maplibregl`
+        // (not `maplibre`). If this is undefined, the CDN script tag above
+        // didn't load — offline, blocked, or 404.
+        if (typeof maplibregl === "undefined") {
+          setStatus(
+            "fail",
+            "✗ MapLibre GL JS did not load from unpkg.com — check your " +
+              "network / ad-blocker, or the browser console for the script 404"
+          );
+          return;
+        }
+
+        var errorCount = 0;
+        var loadTimer = setTimeout(function () {
+          if (errorCount === 0) {
+            setStatus(
+              "fail",
+              "✗ map did not finish loading within 15 s — check DevTools " +
+                "Network tab for requests to <code>" +
+                TILES +
+                "</code>"
+            );
+          }
+        }, 15000);
+
+        // Fetch → rewrite → render. Passing the style object (not the URL)
+        // is what guarantees the worker never sees a root-relative URL.
+        fetch(STYLE_URL, { cache: "no-store" })
+          .then(function (res) {
+            if (!res.ok) throw new Error("style HTTP " + res.status);
+            return res.json();
+          })
+          .then(rewriteStyle)
+          .then(function (style) {
+            var map = new maplibregl.Map({
+              container: "map",
+              style: style,
+              center: MANILA.center,
+              zoom: MANILA.zoom,
+            });
+
+            map.addControl(
+              new maplibregl.NavigationControl({
+                showCompass: true,
+                visualizePitch: true,
+              }),
+              "top-right"
+            );
+            map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+
+            map.on("error", function (e) {
+              errorCount++;
+              var msg =
+                e && e.error && e.error.message
+                  ? e.error.message
+                  : "unknown error (see console)";
+              console.error("[test.html] MapLibre error:", e);
+              // Errors before load are fatal-ish; after load they're usually
+              // one bad request among many. Either way, show the first one.
+              if (errorCount === 1) {
+                setStatus("fail", "✗ MapLibre error: " + msg);
+              }
+            });
+
+            map.on("load", function () {
+              clearTimeout(loadTimer);
+              if (errorCount > 0) {
+                setStatus(
+                  "fail",
+                  "✗ map loaded with " +
+                    errorCount +
+                    " request error(s) — first error shown above; see console"
+                );
+                return;
+              }
+              setStatus(
+                "ok",
+                "✓ map loaded &amp; rendering — tiles from <code>" +
+                  TILES +
+                  "</code> (smoke tile: 10/" +
+                  xy[0] +
+                  "/" +
+                  xy[1] +
+                  ".pbf)"
+              );
+            });
+          })
+          .catch(function (e) {
+            clearTimeout(loadTimer);
+            setStatus(
+              "fail",
+              "✗ could not load/rewrite style — " + e.message
+            );
+          });
+
+        document
+          .getElementById("tiles-apply")
+          .addEventListener("click", function () {
+            var v = document
+              .getElementById("tiles-input")
+              .value.trim()
+              .replace(/\/+$/, "");
+            var next = new URLSearchParams(location.search);
+            if (v && v !== "http://localhost:8080") next.set("tiles", v);
+            else next.delete("tiles");
+            var search = next.toString();
+            location.search = search; // reloads with the new host
+          });
+      })();
+    </script>
+  </body>
+</html>

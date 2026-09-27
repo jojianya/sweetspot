@@ -1,0 +1,40 @@
+# Self-contained vector tile stack for GoodSpot247 (Philippines).
+#
+# Standalone, from this directory:
+#   docker compose -f docker-compose.tiles.yml up -d
+#
+# Alongside the main app stack (when maps/ lives in the app repo, so paths in
+# this file resolve against the repo root):
+#   TILES_DIR=./maps docker compose -f docker-compose.yml -f maps/docker-compose.tiles.yml up -d
+#
+# This service is deliberately NOT merged into the app's docker-compose.yml —
+# tiles are an independent concern with their own data volume and release
+# cadence.
+#
+# The port is published on loopback only. Put Cloudflare (or another edge/CDN)
+# in front for public access + edge caching; see maps/README.md.
+
+services:
+  tiles:
+    image: maptiler/tileserver-gl:latest
+    container_name: goodspot247-tiles
+    restart: unless-stopped
+    command: ["--config", "/data/config.json", "--port", "8080", "--bind", "0.0.0.0"]
+    volumes:
+      - ${TILES_DIR:-.}/philippines.mbtiles:/data/philippines.mbtiles:ro
+      - ${TILES_DIR:-.}/style:/data/styles/goodspot:ro
+      - ${TILES_DIR:-.}/sprites:/data/sprites:ro
+      - ${TILES_DIR:-.}/tileserver-config.json:/data/config.json:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      # node is guaranteed in the image; hit a real style so we know the
+      # config, styles and mbtiles all loaded.
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "require('http').get('http://127.0.0.1:8080/styles/goodspot/style.json',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s

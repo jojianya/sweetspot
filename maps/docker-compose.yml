@@ -1,0 +1,10 @@
+# Compose shim: lets plain `docker compose up` work from this directory.
+#
+# The canonical service definition stays in docker-compose.tiles.yml, which
+# remains fully usable on its own:
+#   docker compose -f docker-compose.tiles.yml up -d
+# and mergeable with the main app stack (see README.md):
+#   TILES_DIR=./maps docker compose -f docker-compose.yml -f maps/docker-compose.tiles.yml up -d
+
+include:
+  - docker-compose.tiles.yml

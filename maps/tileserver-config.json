@@ -1,0 +1,21 @@
+{
+  "options": {
+    "paths": {
+      "root": "/data",
+      "styles": "/data/styles",
+      "mbtiles": "/data",
+      "fonts": "/usr/src/app/node_modules/tileserver-gl-styles/fonts",
+      "sprites": "/data/sprites"
+    },
+    "serveAllStyles": true
+  },
+  "styles": {
+    "goodspot": { "style": "goodspot/style.json" },
+    "goodspot-dark": { "style": "goodspot/style-dark.json" }
+  },
+  "data": {
+    "philippines": {
+      "mbtiles": "philippines.mbtiles"
+    }
+  }
+}

@@ -192,6 +192,12 @@ export default function MapView({
       zoom: 10,
       minZoom: 5,
       maxZoom: 21,
+      // The self-hosted styles reference their tiles/glyphs with root-relative
+      // URLs (e.g. "/data/philippines/{z}/{x}/{y}.pbf"). MapLibre would resolve
+      // those against the *page* origin, which is the app, not the tile server.
+      // Rewrite them onto the tile origin so tiles and glyphs load.
+      transformRequest: (url) =>
+        url.startsWith("/") ? { url: `${TILES_URL}${url}` } : { url },
     });
     mapRef.current = map;
 

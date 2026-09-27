@@ -45,7 +45,7 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	SetSessionCookie(c.Writer, token, tokenExpiry)
+	SetSessionCookie(c.Writer, c.Request, token, tokenExpiry)
 	response.Created(c, gin.H{"user": u})
 }
 
@@ -78,7 +78,7 @@ func (h *Handler) Login(c *gin.Context) {
 		h.emailLim.Reset(req.Identifier)
 	}
 
-	SetSessionCookie(c.Writer, token, tokenExpiry)
+	SetSessionCookie(c.Writer, c.Request, token, tokenExpiry)
 	response.OK(c, gin.H{"user": u})
 }
 
@@ -92,7 +92,7 @@ func (h *Handler) Logout(c *gin.Context) {
 	// Clear the cookie first so the client is logged out regardless of
 	// whether the revoke succeeds. The token will expire naturally if the
 	// revoke fails, but the client should not be told the logout failed.
-	ClearSessionCookie(c.Writer)
+	ClearSessionCookie(c.Writer, c.Request)
 
 	jwtClaims := claims.(*jwt.Claims)
 	ttl := time.Until(jwtClaims.ExpiresAt.Time)

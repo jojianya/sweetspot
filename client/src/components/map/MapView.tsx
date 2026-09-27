@@ -23,10 +23,14 @@ import { useGeolocation } from "@/hooks/useGeolocation";
 import type { Theme } from "@/store/theme";
 import { ensurePinLayers, notCluster, type GeoFeature } from "./pinLayers";
 
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
+// Self-hosted vector tiles (see the top-level maps/ module). TileServer GL
+// serves the base map, its glyphs and — for the styles we ship — its sprites,
+// so the map makes zero requests to any external paid tile provider.
+// NOTE: address geocoding still uses MapTiler; see lib/api/geocoding.ts.
+const TILES_URL = process.env.NEXT_PUBLIC_TILES_URL;
 
-const LIGHT_STYLE = `https://api.maptiler.com/maps/toner-lite/style.json?key=${MAPTILER_KEY}`;
-const DARK_STYLE = `https://api.maptiler.com/maps/basic-v2-dark/style.json?key=${MAPTILER_KEY}`;
+const LIGHT_STYLE = `${TILES_URL}/styles/goodspot/style.json`;
+const DARK_STYLE = `${TILES_URL}/styles/goodspot-dark/style.json`;
 
 setWorkerUrl("/maplibre-gl-worker.js");
 
@@ -181,7 +185,7 @@ export default function MapView({
   }, [pins]);
 
   useEffect(() => {
-    if (!MAPTILER_KEY) return;
+    if (!TILES_URL) return;
     const map = new MapLibreMap({
       container: containerRef.current!,
       style: theme === "dark" ? DARK_STYLE : LIGHT_STYLE,
@@ -395,7 +399,7 @@ export default function MapView({
     map.setFilter("pins-selected", selectedFilter);
   }, [highlightId, styleReady, styleVersion]);
 
-  if (!MAPTILER_KEY) {
+  if (!TILES_URL) {
     return (
       <div className="relative h-full w-full overflow-hidden">
         <div className="flex h-full w-full items-center justify-center bg-zinc-100 p-6 dark:bg-zinc-900">
@@ -407,12 +411,12 @@ export default function MapView({
               Map unavailable
             </p>
             <p className="mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
-              The map can&apos;t load because the MapTiler API key isn&apos;t
-              configured for this environment. Set{" "}
+              The map can&apos;t load because the self-hosted tile server URL
+              isn&apos;t configured for this environment. Set{" "}
               <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                NEXT_PUBLIC_MAPTILER_API_KEY
+                NEXT_PUBLIC_TILES_URL
               </code>{" "}
-              and restart the dev server.
+              (see maps/README.md) and restart the dev server.
             </p>
           </div>
         </div>

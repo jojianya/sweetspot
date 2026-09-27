@@ -18,8 +18,16 @@ type Broker struct {
 	client *redis.Client
 }
 
+// NewBroker creates a Broker with its own client. Prefer NewBrokerWithClient
+// so the caller can share a single Redis connection across the app.
 func NewBroker(addr, password string) *Broker {
 	return &Broker{client: redis.NewClient(&redis.Options{Addr: addr, Password: password})}
+}
+
+// NewBrokerWithClient creates a Broker backed by an existing client, so the
+// connection is shared rather than duplicated.
+func NewBrokerWithClient(client *redis.Client) *Broker {
+	return &Broker{client: client}
 }
 
 // Ping verifies the Redis connection (used at startup for an informative log).

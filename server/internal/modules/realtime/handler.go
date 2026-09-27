@@ -1,11 +1,13 @@
 package realtime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,6 +15,42 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
+
+// sseTracker tracks active SSE connections so graceful shutdown can notify
+// them to close rather than waiting for the full shutdown timeout.
+type sseTracker struct {
+	mu    sync.Mutex
+	conns map[context.Context]context.CancelFunc
+}
+
+var tracker = &sseTracker{conns: make(map[context.Context]context.CancelFunc)}
+
+// track registers an SSE connection for graceful shutdown notification.
+func track(ctx context.Context, cancel context.CancelFunc) {
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	tracker.conns[ctx] = cancel
+}
+
+// untrack removes an SSE connection from tracking.
+func untrack(ctx context.Context) {
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	delete(tracker.conns, ctx)
+}
+
+// CloseAllSSE signals all active SSE connections to close. Returns the
+// number of connections that were closed.
+func CloseAllSSE() int {
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	count := len(tracker.conns)
+	for _, cancel := range tracker.conns {
+		cancel()
+	}
+	clear(tracker.conns)
+	return count
+}
 
 // sseWriteTimeout bounds a single write to a stream client.
 //
@@ -48,6 +86,13 @@ func NewHandler(broker *Broker) *Handler {
 // The connection lives until the client disconnects; EventSource clients
 // reconnect automatically.
 func (h *Handler) Stream(c *gin.Context) {
+	// Track this connection so graceful shutdown can cancel it instead of
+	// waiting for the full shutdown timeout.
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
+	track(ctx, cancel)
+	defer untrack(ctx)
+
 	var bbox *[4]float64
 	if raw := strings.TrimSpace(c.Query("bbox")); raw != "" {
 		b, ok := httpx.ParseBbox(c)
@@ -67,7 +112,6 @@ func (h *Handler) Stream(c *gin.Context) {
 		category = &id
 	}
 
-	ctx := c.Request.Context()
 	sub := h.broker.Subscribe(ctx)
 	defer sub.Close()
 

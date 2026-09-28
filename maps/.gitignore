@@ -3,7 +3,13 @@
 # https://download.geofabrik.de/asia/philippines-latest.osm.pbf`
 data/*.osm.pbf
 
-# Generated tile archive (491 MB Shortbread / ~? MB OpenMapTiles) — see README
+# Source data archives (external downloads, not for git)
+data/sources/*.zip
+data/sources/*.shp.zip
+data/sources/*.sqlite.zip
+data/tile_weights.tsv.gz
+
+# Generated tile archive — see README
 *.mbtiles
 *.mbtiles.part
 
@@ -16,3 +22,6 @@ planetiler.jar
 
 # Dev test pages
 dev/
+
+# Playwright test scripts (dev only)
+../client/playwright-*.mjs

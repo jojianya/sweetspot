@@ -1,15 +1,4 @@
-# LOCAL DEVELOPMENT stack — hot reload with bind mounts (no rebuilds needed).
-#
-# Quick start:
-#   cp .env.example .env          (first time)
-#   docker compose up -d --build  (only needed when a Dockerfile or lockfile changes)
-#   docker compose up -d          (everything after: bind mounts pick up edits live)
-#
-# How hot reload works:
-#   - client: `./client` is bind-mounted; `next dev` (HMR) replays changes instantly.
-#   - server: `./server` is bind-mounted; Air rebuilds + restarts the Go binary on save.
-#   - node_modules / .next live in anonymous volumes so container deps aren't clobbered.
-#   Rebuild the images only when you touch a Dockerfile, package.json, or go.mod.
+version: '3.8'
 
 services:
   postgres:
@@ -17,9 +6,9 @@ services:
     container_name: goodspotdb-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: goodspotdb
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      DB_NAME: goodspotdb
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -36,27 +25,24 @@ services:
     container_name: goodspot247-redis
     restart: unless-stopped
     command: redis-server --requirepass ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 5s
 
   server:
     build:
       context: ./server
-      dockerfile: deployments/docker/server.Dockerfile.dev
+      dockerfile: Dockerfile.dev
     container_name: goodspot247-server
     restart: unless-stopped
     ports:
       - "127.0.0.1:8081:8081"
     environment:
-      PORT: 8081
-      APP_ENV: ${APP_ENV:-development}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
@@ -66,20 +52,14 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       STORAGE_BACKEND: local
-      STORAGE_BASE_URL: ${STORAGE_BASE_URL:-http://localhost:8081}
-      LOG_LEVEL: debug
-      # This box is RAM-constrained; cap the Go toolchain so builds don't OOM.
-      GOGC: "50"
-      GOMEMLIMIT: 2GiB
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/health || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 30s
+      STORAGE_BASE_URL: http://localhost:8081
+      LOG_LEVEL: info
+      LOG_FORMAT: text
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENV: ${SENTRY_ENV:-development}
     volumes:
       - ./server:/app
-      - server_uploads:/app/uploads
+      - /app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -95,23 +75,43 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      NEXT_PUBLIC_MAPTILER_API_KEY: ${NEXT_PUBLIC_MAPTILER_API_KEY:?set NEXT_PUBLIC_MAPTILER_API_KEY in .env}
-      # Not the browser's API origin any more: next.config.ts rewrites /api/* to
-      # the Go server so the browser stays same-origin. This value is still read
-      # for SSR metadata (lib/site.ts) and as the SSR fetch fallback.
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8081}
-      SITE_URL: ${SITE_URL:-http://localhost:3000}
-      # Server-side address of the API, for SSR fetches (pin pages) and as the
-      # /api/* rewrite destination. Must be the compose service name, not the
-      # published loopback port, because inside this container localhost is the
-      # container itself.
-      API_INTERNAL_URL: http://server:8081
+        NEXT_PUBLIC_MAPTILER_API_KEY: "${NEXT_PUBLIC_MAPTILER_API_KEY:?set NEXT_PUBLIC_MAPTILER_API_KEY in .env}"
+        NEXT_PUBLIC_TILES_URL: "http://localhost:8080"
+        # Not the browser's API origin any more: next.config.ts rewrites /api/* to
+        # the Go server so the browser stays same-origin. This value is still read
+        # for SSR metadata (lib/site.ts) and as the SSR fetch fallback.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8081}
+        SITE_URL: ${SITE_URL:-http://localhost:3000}
+        # Server-side address of the API, for SSR fetches (pin pages) and as the
+        # /api/* rewrite destination. Must be the compose service name, not the
+        # published loopback port, because inside this container localhost is the
+        # container itself.
+        API_INTERNAL_URL: http://server:8081
     volumes:
       - ./client:/app
       - /app/node_modules
       - /app/.next
     depends_on:
       - server
+
+  tiles:
+    image: maptiler/tileserver-gl:latest
+    container_name: goodspot247-tiles
+    restart: unless-stopped
+    command: ["--config", "/data/config.json", "--port", "8080", "--bind", "0.0.0.0"]
+    volumes:
+      - ${TILES_DIR:-.}/philippines.mbtiles:/data/philippines.mbtiles:ro
+      - ${TILES_DIR:-.}/style:/data/styles/goodspot:ro
+      - ${TILES_DIR:-.}/sprites:/data/sprites:ro
+      - ${TILES_DIR:-.}/tileserver-config.json:/data/config.json:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:8080/styles/goodspot/style.json',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
 volumes:
   postgres_data:

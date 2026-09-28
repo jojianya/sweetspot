@@ -23,16 +23,18 @@ import { useGeolocation } from "@/hooks/useGeolocation";
 import type { Theme } from "@/store/theme";
 import { ensurePinLayers, notCluster, type GeoFeature } from "./pinLayers";
 
-// MapTiler-hosted basemap styles (light + dark). The key is NEXT_PUBLIC_
-// (sent to the browser), so it MUST be scoped to your domains and the
-// styles/tiles APIs in the MapTiler dashboard — never a full-access key.
-// All tile/glyph/sprite URLs in these styles are absolute, so no
-// transformRequest is needed.
-// NOTE: address geocoding also uses MapTiler; see lib/api/geocoding.ts.
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
+// Self-hosted vector tiles (see the top-level maps/ module). TileServer GL
+// serves the base map, its glyphs and — for the styles we ship — its sprites,
+// so the map makes zero requests to any external paid tile provider.
+// NOTE: address geocoding still uses MapTiler; see lib/api/geocoding.ts.
+const TILES_URL = process.env.NEXT_PUBLIC_TILES_URL ?? "";
 
-const LIGHT_STYLE = `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`;
-const DARK_STYLE = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`;
+// Philippines bounds: approximately [minLng, minLat, maxLng, maxLat]
+// Covers the main Philippine archipelago
+const PHILIPPINES_BOUNDS: [number, number, number, number] = [116.5, 4.5, 127, 21.5];
+
+const LIGHT_STYLE = `${TILES_URL}/styles/goodspot/style.json`;
+const DARK_STYLE = `${TILES_URL}/styles/goodspot-dark/style.json`;
 
 setWorkerUrl("/maplibre-gl-worker.js");
 
@@ -187,13 +189,14 @@ export default function MapView({
   }, [pins]);
 
   useEffect(() => {
-    if (!MAPTILER_KEY) return;
+    if (!TILES_URL) return;
     const map = new MapLibreMap({
       container: containerRef.current!,
       style: theme === "dark" ? DARK_STYLE : LIGHT_STYLE,
       zoom: 10,
       minZoom: 5,
       maxZoom: 21,
+      maxBounds: PHILIPPINES_BOUNDS,
       // The self-hosted styles reference their tiles/glyphs with root-relative
       // URLs (e.g. "/data/philippines/{z}/{x}/{y}.pbf"). MapLibre would resolve
       // those against the *page* origin, which is the app, not the tile server.
@@ -383,8 +386,12 @@ export default function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !flyTo) return;
+    // Clamp flyTo coordinates to Philippines bounds
+    const [minLng, minLat, maxLng, maxLat] = PHILIPPINES_BOUNDS;
+    const clampedLng = Math.max(minLng, Math.min(maxLng, flyTo.lng));
+    const clampedLat = Math.max(minLat, Math.min(maxLat, flyTo.lat));
     map.flyTo({
-      center: [flyTo.lng, flyTo.lat],
+      center: [clampedLng, clampedLat],
       zoom: Math.max(map.getZoom(), 13),
     });
   }, [flyTo]);
@@ -406,7 +413,7 @@ export default function MapView({
     map.setFilter("pins-selected", selectedFilter);
   }, [highlightId, styleReady, styleVersion]);
 
-  if (!MAPTILER_KEY) {
+  if (!TILES_URL) {
     return (
       <div className="relative h-full w-full overflow-hidden">
         <div className="flex h-full w-full items-center justify-center bg-zinc-100 p-6 dark:bg-zinc-900">
@@ -418,10 +425,10 @@ export default function MapView({
               Map unavailable
             </p>
             <p className="mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
-              The map can&apos;t load because the MapTiler API key isn&apos;t
+              The map can&apos;t load because the self-hosted tile server URL isn&apos;t
               configured for this environment. Set{" "}
               <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                NEXT_PUBLIC_MAPTILER_API_KEY
+                NEXT_PUBLIC_TILES_URL
               </code>{" "}
               in .env and restart the dev server.
             </p>

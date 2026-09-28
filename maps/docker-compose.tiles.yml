@@ -19,10 +19,11 @@ services:
     image: maptiler/tileserver-gl:latest
     container_name: goodspot247-tiles
     restart: unless-stopped
-    command: ["--config", "/data/config.json", "--port", "8080", "--bind", "0.0.0.0"]
+    command: >
+      sh -c "if [ ! -f /data/philippines.mbtiles ]; then echo 'ERROR: /data/philippines.mbtiles not found. Did you set TILES_DIR correctly?' >&2; exit 1; fi; exec node /usr/src/app/ --config /data/config.json --port 8080 --bind 0.0.0.0"
     volumes:
       - ${TILES_DIR:-.}/philippines.mbtiles:/data/philippines.mbtiles:ro
-      - ./style/goodspot:/data/styles/goodspot:ro
+      - ${TILES_DIR:-.}/style/goodspot:/data/styles/goodspot:ro
       - ${TILES_DIR:-.}/sprites:/data/sprites:ro
       - ${TILES_DIR:-.}/tileserver-config.json:/data/config.json:ro
     ports:

@@ -1,4 +1,4 @@
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY!;
+const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
 
 export interface PlaceResult {
   id: string;
@@ -16,13 +16,27 @@ interface Feature {
   bbox?: [number, number, number, number];
 }
 
+/**
+ * Check if geocoding is available (has valid MapTiler key).
+ * In self-hosted mode, this returns false to gracefully disable search.
+ */
+export function isGeocodingAvailable(): boolean {
+  return Boolean(MAPTILER_KEY && MAPTILER_KEY !== "test-key" && MAPTILER_KEY.length > 10);
+}
+
 export async function searchPlaces(
   query: string,
   proximity?: { lat: number; lng: number },
   signal?: AbortSignal
 ): Promise<PlaceResult[]> {
+  // Graceful degradation: if no valid MapTiler key, return empty results
+  // instead of throwing or making external calls
+  if (!isGeocodingAvailable()) {
+    return [];
+  }
+
   const params = new URLSearchParams({
-    key: MAPTILER_KEY,
+    key: MAPTILER_KEY!,
     language: "en",
     limit: "6",
     types: "place,municipality,municipal_district,locality,neighbourhood,address,road,county,region,country",
@@ -54,8 +68,13 @@ export async function reverseGeocode(
   coord: { lat: number; lng: number },
   signal?: AbortSignal
 ): Promise<string | null> {
+  // Graceful degradation: if no valid MapTiler key, return null
+  if (!isGeocodingAvailable()) {
+    return null;
+  }
+
   const params = new URLSearchParams({
-    key: MAPTILER_KEY,
+    key: MAPTILER_KEY!,
     language: "en",
     limit: "1",
     types: "address,road,neighbourhood,locality,municipality,place,region,country",

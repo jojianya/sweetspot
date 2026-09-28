@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { searchPlaces, type PlaceResult } from "@/lib/api/geocoding";
+import { searchPlaces, type PlaceResult, isGeocodingAvailable } from "@/lib/api/geocoding";
 import { searchPins } from "@/lib/api/pins";
 import type { PinListEntry } from "@/lib/types";
 
@@ -34,6 +34,7 @@ export default function SearchBar({
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
+  const geocodingAvailable = isGeocodingAvailable();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -74,6 +75,34 @@ export default function SearchBar({
     if (selectedRef.current) return;
     abortRef.current?.abort();
     if (query.trim().length < 2) return;
+    // If geocoding is not available, only search pins (local)
+    if (!geocodingAvailable) {
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const q = query.trim();
+      const timer = setTimeout(() => {
+        searchPins(q, 5, controller.signal)
+          .then((pins) => {
+            if (!controller.signal.aborted) {
+              const items: ResultItem[] = pins.map((p) => ({ kind: "pin" as const, pin: p }));
+              setResults(items);
+              setIsOpen(items.length > 0);
+              setLoading(false);
+            }
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setResults([]);
+              setIsOpen(false);
+              setLoading(false);
+            }
+          });
+      }, 300);
+      return () => {
+        clearTimeout(timer);
+        controller.abort();
+      };
+    }
     const controller = new AbortController();
     abortRef.current = controller;
     const timer = setTimeout(() => doSearch(query.trim(), controller.signal), 300);
@@ -81,7 +110,7 @@ export default function SearchBar({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, doSearch]);
+  }, [query, doSearch, geocodingAvailable]);
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
@@ -161,7 +190,7 @@ export default function SearchBar({
           }}
           onFocus={() => { if (results.length > 0) setIsOpen(true); }}
           onKeyDown={handleKey}
-          placeholder={placeholder}
+          placeholder={geocodingAvailable ? placeholder : "Search pins only (place search unavailable)"}
           className="flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100"
           role="combobox"
           aria-expanded={isOpen}
@@ -187,8 +216,15 @@ export default function SearchBar({
           {loading && (
             <li className="px-4 py-3 text-sm text-zinc-400">Searching…</li>
           )}
-          {!loading && results.length === 0 && (
-            <li className="px-4 py-3 text-sm text-zinc-400">No results found</li>
+          {!loading && results.length === 0 && query.trim().length >= 2 && (
+            <li className="px-4 py-3 text-sm text-zinc-400">
+              {geocodingAvailable ? "No results found" : "Place search unavailable — showing pins only"}
+            </li>
+          )}
+          {!loading && !geocodingAvailable && query.trim().length < 2 && (
+            <li className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+              Type to search your pins (place search unavailable in self-hosted mode)
+            </li>
           )}
           {!loading && results.some((r) => r.kind === "place") && (
             <>

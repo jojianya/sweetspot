@@ -16,10 +16,32 @@ maps/
 │   └── philippines-latest.osm.pbf   # raw OSM extract (579 MB) — gitignored
 ├── planetiler.jar                   # fetched on demand by build-tiles.sh — gitignored
 ├── build-tiles.sh                   # .pbf → philippines.mbtiles (Planetiler / OpenMapTiles)
+├── build-tiles-native.sh            # native build alternative
 ├── philippines.mbtiles              # generated tile archive — gitignored
 ├── style/
-│   ├── style.json                   # light MapLibre style (committed)
-│   └── style-dark.json              # dark MapLibre style (committed)
+│   └── goodspot/
+│       ├── style.json               # light MapLibre style (committed)
+│       └── style-dark.json          # dark MapLibre style (committed)
+├── legacy/                          # unused legacy styles (not served)
+│   ├── style.json                   # old AWS Location Service style
+│   ├── style-dark.json              # old custom dark style
+│   ├── osm-bright-style.json        # old OSM Bright style
+│   └── positron-style.json          # old Positron style
+├── sprites/
+│   ├── sprite.json                  # base sprite metadata (from OSM Bright)
+│   ├── sprite.png                   # base sprite sheet
+│   ├── sprite@2x.json               # @2x sprite metadata
+│   ├── sprite@2x.png                # @2x sprite sheet
+│   ├── goodspot/                    # style-specific copies (tileserver-gl expects these)
+│   │   ├── sprite.json
+│   │   ├── sprite.png
+│   │   ├── sprite@2x.json
+│   │   └── sprite@2x.png
+│   └── goodspot-dark/
+│       ├── sprite.json
+│       ├── sprite.png
+│       ├── sprite@2x.json
+│       └── sprite@2x.png
 ├── tileserver-config.json           # TileServer GL config (committed)
 ├── docker-compose.tiles.yml         # separate compose file (NOT merged into the app's)
 └── README.md
@@ -78,10 +100,22 @@ curl -L -o data/philippines-latest.osm.pbf \
 # JAVA_MEM=4g PLANETILER_VERSION=v0.10.2 ./build-tiles.sh
 ```
 
+**Docker memory requirement:** The Planetiler build needs **at least 8 GB of
+memory** allocated to Docker Desktop / the Docker daemon (`JAVA_MEM=8g`
+recommended for the 579 MB Philippines extract). If the build fails with OOM,
+increase the Docker memory limit and retry.
+
 `build-tiles.sh` is idempotent: it removes the previous output, verifies the
 pinned Planetiler jar against its published sha256, caches auxiliary sources
 under `.planetiler-cache/`, and writes `philippines.mbtiles` fresh. Running it
 twice produces a clean regeneration, not an append.
+
+> ⚠️ **Backup:** `philippines.mbtiles` is gitignored and not in the repo.
+> Keep a backup of the generated `.mbtiles` file (e.g. in an S3 bucket, NAS,
+> or `~/backups/maps/`) so you can restore it without re-running the 30–90
+> minute build. The pre-built Geofabrik Shortbread archive can always be
+> re-downloaded from `https://download.geofabrik.de/asia/philippines-shortbread-1.0.mbtiles`
+> if needed.
 
 ## Running it
 
@@ -143,13 +177,18 @@ ${NEXT_PUBLIC_TILES_URL}/styles/goodspot/style.json        # light
 ${NEXT_PUBLIC_TILES_URL}/styles/goodspot-dark/style.json   # dark
 ```
 
-The styles reference tiles and glyphs with **root-relative** URLs
-(`/data/philippines/...`, `/fonts/...`) so the same files work whether served
-from `localhost:8080`, a Cloudflare hostname, or a tunnel. MapLibre resolves
-root-relative URLs against the *page* origin (the app), not the style origin,
-so `MapView` passes a `transformRequest` that rewrites them onto
+The styles reference tiles, glyphs, and sprites with **root-relative** URLs
+(`/data/philippines/...`, `/fonts/...`, `sprite`) so the same files work whether
+served from `localhost:8080`, a Cloudflare hostname, or a tunnel. MapLibre
+resolves root-relative URLs against the *page* origin (the app), not the style
+origin, so `MapView` passes a `transformRequest` that rewrites them onto
 `NEXT_PUBLIC_TILES_URL`. If you open these styles in an external editor
 (e.g. Maputnik), serve the editor from the tile origin or tiles will 404.
+
+Sprites are served by TileServer GL from the `maps/sprites/` directory
+(`sprite.json`, `sprite.png`, `sprite@2x.json`, `sprite@2x.png`), sourced from
+the OpenMapTiles-compatible OSM Bright style. Glyphs come from the
+`tileserver-gl-styles` package bundled with the tile server image.
 
 Set it in `.env` (and `.env.local` for non-Docker dev):
 
@@ -161,8 +200,10 @@ In production, use the public HTTPS origin fronted by Cloudflare. Because
 `NEXT_PUBLIC_*` is inlined into the bundle, restart/rebuild the client after
 changing it.
 
-Address **geocoding** still uses MapTiler (`NEXT_PUBLIC_MAPTILER_API_KEY`) — that
-is a non-tile API and out of scope here. No **tile** request leaves the deployment.
+Address **geocoding** gracefully degrades in self-hosted mode — if
+`NEXT_PUBLIC_MAPTILER_API_KEY` is not set, place search returns no results
+and the UI shows "place search unavailable" while pin search continues to
+work. No **tile** request leaves the deployment.
 
 ## Cloudflare (edge caching) — required config step
 

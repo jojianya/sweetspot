@@ -1,3 +1,8 @@
 .env
 server/tmp/
 backups/
+# Map tiles and generated artifacts (never commit)
+*.mbtiles
+*.osm.pbf
+planetiler.jar
+.planetiler-cache/

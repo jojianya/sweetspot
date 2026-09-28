@@ -13,3 +13,6 @@ planetiler.jar
 
 # Ad-hoc logs
 *.log
+
+# Dev test pages
+dev/

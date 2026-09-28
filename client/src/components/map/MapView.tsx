@@ -33,6 +33,10 @@ const TILES_URL = process.env.NEXT_PUBLIC_TILES_URL ?? "";
 // Covers the main Philippine archipelago
 const PHILIPPINES_BOUNDS: [number, number, number, number] = [116.5, 4.5, 127, 21.5];
 
+// Metro Manila default center. Without an explicit center, MapLibre defaults to
+// [0, 0] and maxBounds clamps it to the southwest corner of the Philippines.
+const MANILA_CENTER: [number, number] = [120.98, 14.6];
+
 const LIGHT_STYLE = `${TILES_URL}/styles/goodspot/style.json`;
 const DARK_STYLE = `${TILES_URL}/styles/goodspot-dark/style.json`;
 
@@ -193,6 +197,7 @@ export default function MapView({
     const map = new MapLibreMap({
       container: containerRef.current!,
       style: theme === "dark" ? DARK_STYLE : LIGHT_STYLE,
+      center: MANILA_CENTER,
       zoom: 10,
       minZoom: 5,
       maxZoom: 21,

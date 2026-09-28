@@ -57,36 +57,31 @@ docker compose -f docker-compose.tiles.yml up -d
 
 Then point the client at it with `NEXT_PUBLIC_TILES_URL=http://localhost:8080`.
 
-## Tile source: Geofabrik's pre-built Shortbread archive
+## Tile source: OpenMapTiles-schema MBTiles (Planetiler-built)
 
-This module ships with **Geofabrik's pre-generated tiles** rather than a local
-Planetiler build:
+This module ships with a **Planetiler-built OpenMapTiles-schema tileset**:
 
-- URL: <https://download.geofabrik.de/asia/philippines-shortbread-1.0.mbtiles>
-- Local file: `philippines.mbtiles` — **491 MB (515,297,280 bytes)**
-- 730,059 tiles, z0–14, schema **Shortbread 1.0** (not OpenMapTiles)
-- © OpenStreetMap contributors, ODbL 1.0
+- Local file: `philippines.mbtiles` — **533 MB (533,446,656 bytes)**
+- Tiles: z0–14, **OpenMapTiles schema** (layer names: `transportation`, `waterway`, `poi`, `landuse`, `building`, etc.)
+- Metadata: `name: "OpenMapTiles"`, `planetiler:version: "0.10.2"`, `maxzoom: 14`
+- © OpenStreetMap contributors, ODbL 1.0 (attribution embedded in metadata)
 
-**Why this instead of Planetiler:** it is a ready-to-serve `.mbtiles`, so TileServer
-GL can serve it directly. Building OpenMapTiles tiles locally for a 579 MB
-extract needs several GB of RAM and 30–90+ minutes; this box doesn't have the
-headroom. The tradeoff is schema: Geofabrik's package is **Shortbread**, so the
-styles here are written for Shortbread layer names (`water_polygons`, `streets`,
-`place_labels`, `boundaries`, …), not OpenMapTiles/OSM Bright.
+The styles target **OpenMapTiles layer names** (`transportation`, `waterway`, `poi`, etc.), not Shortbread names (`streets`, `water_polygons`). The bundled MBTiles uses OpenMapTiles schema — provenance of this specific file is unverified, but its layer names and metadata match OpenMapTiles.
 
-`build-tiles.sh` is still provided for when you *do* want a self-generated,
-OpenMapTiles-compatible tileset. Note that running it **replaces**
-`philippines.mbtiles` with an OpenMapTiles build — you must then swap
-`style/style.json` for an OpenMapTiles style (e.g. OSM Bright).
+`build-tiles.sh` (Planetiler) also produces OpenMapTiles-schema tiles, so its output is **compatible** with these styles. Do not mix these styles with Shortbread-schema tiles (which use `streets`, `water_polygons`, `place_labels`, etc.).
 
 > ⚠️ `philippines.mbtiles` is gitignored. It is **not** in the repo; provision it
-> with the download command below or `build-tiles.sh`.
+> with `build-tiles.sh` (see below).
 
-### Provision the pre-built archive (Shortbread)
+### Provision via Planetiler build
 
 ```bash
-curl -L -o philippines.mbtiles \
-  https://download.geofabrik.de/asia/philippines-shortbread-1.0.mbtiles
+# raw extract first (gitignored)
+curl -L -o data/philippines-latest.osm.pbf \
+  https://download.geofabrik.de/asia/philippines-latest.osm.pbf
+
+./build-tiles.sh          # Docker, pinned Planetiler, verified jar, idempotent
+# JAVA_MEM=4g PLANETILER_VERSION=v0.10.2 ./build-tiles.sh
 ```
 
 ### Or build it yourself (Planetiler / OpenMapTiles)
@@ -113,9 +108,7 @@ twice produces a clean regeneration, not an append.
 > ⚠️ **Backup:** `philippines.mbtiles` is gitignored and not in the repo.
 > Keep a backup of the generated `.mbtiles` file (e.g. in an S3 bucket, NAS,
 > or `~/backups/maps/`) so you can restore it without re-running the 30–90
-> minute build. The pre-built Geofabrik Shortbread archive can always be
-> re-downloaded from `https://download.geofabrik.de/asia/philippines-shortbread-1.0.mbtiles`
-> if needed.
+> minute build.
 
 ## Running it
 
@@ -253,11 +246,7 @@ This is **manual** — there is no scheduled refresh (see tradeoffs).
 curl -L -o data/philippines-latest.osm.pbf \
   https://download.geofabrik.de/asia/philippines-latest.osm.pbf
 
-# 2a. cheapest: re-fetch Geofabrik's pre-built Shortbread archive
-curl -L -o philippines.mbtiles \
-  https://download.geofabrik.de/asia/philippines-shortbread-1.0.mbtiles
-
-# 2b. or rebuild from raw with Planetiler (OpenMapTiles — remember to swap styles)
+# 2. rebuild from raw with Planetiler (OpenMapTiles schema)
 ./build-tiles.sh
 ```
 
@@ -292,12 +281,11 @@ and confirm **all** tile traffic goes to the tile host — zero requests to
 - **No global CDN by default.** Self-hosted tiles serve from one region until a
   CDN (Cloudflare) is configured. Clients far from the origin see higher
   latency. This is the main reason step "Cloudflare" exists.
-- **Data freshness is manual.** Geofabrik's Shortbread packages are described as
-  "experimental, non-updated"; freshness is whatever is on the download server
-  when you fetch it. Nothing auto-regenerates — re-run the commands above
-  periodically.
-- **Schema lock-in.** The bundled styles target Shortbread. Switching to a
-  Planetiler/OpenMapTiles build means writing/replacing the style.
+- **Data freshness is manual.** The OSM extract freshness is whatever is on the
+  download server when you fetch it. Nothing auto-regenerates — re-run the
+  commands above periodically.
+- **Schema lock-in.** The bundled styles target OpenMapTiles layer names.
+  Switching to a Shortbread-schema tileset means writing/replacing the style.
 - **Single-region origin = SPOF.** Add health checks, restart policy
   (`restart: unless-stopped` is set) and CDN caching for resilience.
 

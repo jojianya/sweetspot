@@ -14,9 +14,10 @@ import (
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
+	"github.com/redis/go-redis/v9"
 )
 
-// validateBbox checks that a parsed bbox [minLat, minLng, maxLat, maxLat] has
+// validateBbox checks that a parsed bbox [minLat, minLng, maxLat, maxLng] has
 // valid coordinate ranges and non-zero area. Returns nil if valid.
 func validateBbox(b [4]float64) error {
 	if b[0] < -90 || b[0] > 90 || b[2] < -90 || b[2] > 90 {
@@ -76,11 +77,10 @@ func CloseAllSSE() int {
 const sseWriteTimeout = 10 * time.Second
 
 // sseHeartbeatInterval is the interval between SSE heartbeat comments.
-// Exported for tests to override.
 const sseHeartbeatInterval = 20 * time.Second
 
 // ConnectionLimiter limits concurrent SSE connections with a global cap.
-// The zero value is ready to use (no limit).
+// A nil limiter allows unlimited connections.
 type ConnectionLimiter struct {
 	mu     sync.Mutex
 	max    int
@@ -122,9 +122,9 @@ func (l *ConnectionLimiter) Release() {
 }
 
 type Handler struct {
-	broker          *Broker
-	limiter         *ConnectionLimiter
-	heartbeatTicker *time.Ticker
+	broker            *Broker
+	limiter           *ConnectionLimiter
+	heartbeatInterval time.Duration
 }
 
 // setWriteDeadline arms a per-write deadline on the underlying
@@ -138,14 +138,11 @@ func setWriteDeadline(w http.ResponseWriter, timeout time.Duration) {
 }
 
 func NewHandler(broker *Broker, maxConns int) *Handler {
-	return &Handler{broker: broker, limiter: NewConnectionLimiter(maxConns)}
-}
-
-// NewHandlerWithHeartbeat creates a Handler with a custom heartbeat interval for testing.
-func NewHandlerWithHeartbeat(broker *Broker, maxConns int, interval time.Duration) *Handler {
-	h := NewHandler(broker, maxConns)
-	h.heartbeatTicker = time.NewTicker(interval)
-	return h
+	return &Handler{
+		broker:            broker,
+		limiter:           NewConnectionLimiter(maxConns),
+		heartbeatInterval: sseHeartbeatInterval,
+	}
 }
 
 // Stream is a Server-Sent Events endpoint streaming newly created pins.
@@ -212,15 +209,12 @@ func (h *Handler) Stream(c *gin.Context) {
 	c.Writer.Flush()
 
 	ch := sub.Channel()
-	// Heartbeat ticker: send a comment line every sseHeartbeatInterval to keep
-	// idle connections alive through proxies/LBs. Comment lines (starting with
-	// :) are ignored by EventSource.
-	var heartbeat *time.Ticker
-	if h.heartbeatTicker != nil {
-		heartbeat = h.heartbeatTicker
-	} else {
-		heartbeat = time.NewTicker(sseHeartbeatInterval)
-	}
+	runStreamLoop(ctx, c.Writer, ch, h.heartbeatInterval, bbox, category)
+}
+
+// runStreamLoop runs the SSE event/heartbeat loop. Extracted for testing.
+func runStreamLoop(ctx context.Context, w http.ResponseWriter, ch <-chan *redis.Message, interval time.Duration, bbox *[4]float64, category *int) {
+	heartbeat := time.NewTicker(interval)
 	defer heartbeat.Stop()
 
 	for {
@@ -236,20 +230,21 @@ func (h *Handler) Stream(c *gin.Context) {
 			if !matches(ev, bbox, category) {
 				continue
 			}
-			// Re-arm per write: the previous deadline has likely already
-			// passed, and each event gets a fresh window.
-			setWriteDeadline(c.Writer, sseWriteTimeout)
-			if _, err := fmt.Fprintf(c.Writer, "event: pin\ndata: %s\n\n", msg.Payload); err != nil {
+			setWriteDeadline(w, sseWriteTimeout)
+			if _, err := fmt.Fprintf(w, "event: pin\ndata: %s\n\n", msg.Payload); err != nil {
 				return
 			}
-			c.Writer.Flush()
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
 		case <-heartbeat.C:
-			// Send SSE comment as heartbeat. Set write deadline before each write.
-			setWriteDeadline(c.Writer, sseWriteTimeout)
-			if _, err := fmt.Fprint(c.Writer, ": heartbeat\n\n"); err != nil {
+			setWriteDeadline(w, sseWriteTimeout)
+			if _, err := fmt.Fprint(w, ": heartbeat\n\n"); err != nil {
 				return
 			}
-			c.Writer.Flush()
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
 		case <-ctx.Done():
 			return
 		}

@@ -1,14 +1,16 @@
 package realtime
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
+	"github.com/redis/go-redis/v9"
 )
 
 // TestValidateBbox tests the pure bbox validation function.
@@ -97,55 +99,6 @@ func TestConnectionLimiterZeroCap(t *testing.T) {
 	}
 }
 
-// TestSSEBboxValidation tests bbox coordinate range validation via ParseBbox.
-func TestSSEBboxValidation(t *testing.T) {
-	tests := []struct {
-		name  string
-		bbox  string
-		valid bool
-	}{
-		{"valid Manila", "14.4,120.9,14.8,121.1", true},
-		{"valid negative", "-10,-20,10,20", true},
-		{"lat too high", "91,0,92,1", false},
-		{"lat too low", "-91,0,-90,1", false},
-		{"lng too high", "0,181,1,182", false},
-		{"lng too low", "0,-181,1,-180", false},
-		{"minLat >= maxLat", "10,0,10,1", false},
-		{"minLng >= maxLng", "0,10,1,5", false},
-		{"empty", "", false},
-		{"malformed", "a,b,c,d", false},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(rec)
-			url := "/events"
-			if tc.bbox != "" {
-				url += "?bbox=" + tc.bbox
-			}
-			c.Request = httptest.NewRequest(http.MethodGet, url, nil)
-
-			bbox, ok := httpx.ParseBbox(c)
-			if tc.valid {
-				if !ok {
-					t.Errorf("ParseBbox(%q): expected ok=true, got false", tc.bbox)
-				}
-				if err := validateBbox(bbox); err != nil {
-					t.Errorf("validateBbox(%v): unexpected error: %v", bbox, err)
-				}
-			} else {
-				if ok {
-					// If ParseBbox succeeded, validateBbox should fail
-					if err := validateBbox(bbox); err == nil {
-						t.Errorf("validateBbox(%v): expected error, got nil", bbox)
-					}
-				}
-			}
-		})
-	}
-}
-
 // TestSSEHeartbeatTiming guards the heartbeat interval constant.
 func TestSSEHeartbeatTiming(t *testing.T) {
 	if sseHeartbeatInterval <= 0 {
@@ -231,5 +184,37 @@ func TestSSEWriteDeadlineFiresOnBlockedPeer(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("write deadline never fired; a blocked peer would pin the goroutine")
+	}
+}
+
+// TestRunStreamLoop tests the extracted stream loop function.
+// It sends one message, waits past the heartbeat interval, cancels the context,
+// and verifies both the event and heartbeat are written.
+func TestRunStreamLoop(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Create a channel that will receive one message, then wait for heartbeat,
+	// then close
+	msgCh := make(chan *redis.Message, 1)
+	msgCh <- &redis.Message{Payload: `{"id":"1","user_id":"u1","location":"POINT(0 0)","caption":null,"category_id":1,"cover_url":"","created_at":"2024-01-01T00:00:00Z"}`}
+
+	rec := httptest.NewRecorder()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	// Run the stream loop with a very short heartbeat interval
+	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, nil, nil)
+
+	// Read body after goroutine exits
+	body := rec.Body.String()
+
+	// Should contain the event
+	if !strings.Contains(body, "event: pin") {
+		t.Errorf("expected 'event: pin' in body, got: %s", body)
+	}
+	// Should contain heartbeat comment
+	if !strings.Contains(body, ": heartbeat") {
+		t.Errorf("expected ': heartbeat' in body, got: %s", body)
 	}
 }

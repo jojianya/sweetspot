@@ -74,6 +74,9 @@ func Load() *Config {
 	if cfg.JWTSecret == "" {
 		log.Fatal("JWT_SECRET is required: set it in .env or the environment (generate with: openssl rand -hex 32)")
 	}
+	if len(cfg.JWTSecret) < 32 {
+		log.Fatal("JWT_SECRET must be at least 32 characters (256 bits)")
+	}
 	if err := validateAppEnv(cfg.AppEnv); err != nil {
 		log.Fatal(err)
 	}

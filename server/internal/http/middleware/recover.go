@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,12 +26,16 @@ func Recover(rep ErrorReporter) gin.HandlerFunc {
 				if !ok {
 					err = fmt.Errorf("panic: %v", rcv)
 				}
+				// Capture stack trace for non-error panics and for errors
+				// that don't already carry one (most stdlib errors don't).
+				stack := debug.Stack()
 				if rep != nil {
 					rep.Report(c.Request.Context(), err,
 						"request_id", c.GetHeader("X-Request-ID"),
 						"method", c.Request.Method,
 						"path", c.Request.URL.Path,
 						"recovered", true,
+						"stack", string(stack),
 					)
 				}
 				c.AbortWithStatus(http.StatusInternalServerError)

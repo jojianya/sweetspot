@@ -68,6 +68,7 @@ services:
       STORAGE_BACKEND: local
       STORAGE_BASE_URL: ${STORAGE_BASE_URL:-http://localhost:8081}
       LOG_LEVEL: debug
+      MAX_SSE_CONNECTIONS: ${MAX_SSE_CONNECTIONS:-1000}
       # This box is RAM-constrained; cap the Go toolchain so builds don't OOM.
       GOGC: "50"
       GOMEMLIMIT: 2GiB

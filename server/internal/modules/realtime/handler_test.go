@@ -218,3 +218,80 @@ func TestRunStreamLoop(t *testing.T) {
 		t.Errorf("expected ': heartbeat' in body, got: %s", body)
 	}
 }
+
+// TestRunStreamLoopWithFilters tests that bbox and category filters work.
+// Only matching events are written; non-matching are silently dropped.
+func TestRunStreamLoopWithFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Bbox: minLat=10, minLng=20, maxLat=30, maxLng=40
+	// Category: 5
+	bbox := [4]float64{10, 20, 30, 40}
+	category := 5
+
+	// Two events: one matching (inside bbox, category 5), one non-matching (outside bbox, category 99)
+	// Channel is NOT closed; context timeout will stop the loop
+	msgCh := make(chan *redis.Message, 2)
+	msgCh <- &redis.Message{Payload: `{"id":"match","user_id":"u1","location":"POINT(25 15)","caption":null,"category_id":5,"cover_url":"","created_at":"2024-01-01T00:00:00Z"}`}
+	msgCh <- &redis.Message{Payload: `{"id":"nomatch","user_id":"u1","location":"POINT(100 100)","caption":null,"category_id":99,"cover_url":"","created_at":"2024-01-01T00:00:00Z"}`}
+
+	rec := httptest.NewRecorder()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, &bbox, &category)
+
+	body := rec.Body.String()
+
+	// Should contain the matching event
+	if !strings.Contains(body, `"id":"match"`) {
+		t.Errorf("expected matching event in body, got: %s", body)
+	}
+	// Should NOT contain the non-matching event
+	if strings.Contains(body, `"id":"nomatch"`) {
+		t.Errorf("expected non-matching event to be filtered out, got: %s", body)
+	}
+	// Should contain heartbeat (context timeout > heartbeat interval)
+	if !strings.Contains(body, ": heartbeat") {
+		t.Errorf("expected heartbeat in body, got: %s", body)
+	}
+}
+
+// TestStreamReturns503WhenLimiterFull tests that Stream returns 503 with Retry-After
+// when the connection limiter is at capacity. The limiter is pre-acquired so the
+// 503 path runs before the broker is touched.
+func TestStreamReturns503WhenLimiterFull(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Create a handler with cap=1 limiter
+	h := NewHandler(nil, 1)
+
+	// Pre-acquire the single slot so the next request will hit the cap
+	if !h.limiter.TryAcquire() {
+		t.Fatal("failed to pre-acquire limiter slot")
+	}
+	defer h.limiter.Release()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/events", nil)
+
+	// Call Stream directly
+	h.Stream(c)
+
+	// Should return 503
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", rec.Code)
+	}
+	// Should have Retry-After header
+	retryAfter := rec.Header().Get("Retry-After")
+	if retryAfter == "" {
+		t.Error("expected Retry-After header on 503")
+	}
+	// Body should contain the error message
+	body := rec.Body.String()
+	if !strings.Contains(body, "too many SSE connections") {
+		t.Errorf("expected error message in body, got: %s", body)
+	}
+}

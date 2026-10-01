@@ -78,7 +78,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	// window errors) through the same reporter as server errors. Public and
 	// best-effort: malformed or oversized payloads are dropped quietly (204) so
 	// a broken client can never turn reporting itself into a failure.
-	jsonRoutes.POST("/errors", ClientErrorIngest(rep))
+	jsonRoutes.POST("/errors", middleware.BodyLimit(1<<20), ClientErrorIngest(rep))
 
 	uploadRoutes := r.Group("")
 	uploadRoutes.Use(middleware.BodyLimit(64 << 20))

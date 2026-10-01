@@ -1,6 +1,3 @@
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { IoPinSharp } from "react-icons/io5";
 import {
   type ExpressionSpecification,
   type GeoJSONSource,
@@ -35,216 +32,87 @@ export const EMPTY_GEOJSON: GeoJSONLike = {
 // Set to false to disable clustering without changing the source or layer setup.
 export const CLUSTERING_ENABLED = true;
 
-const PIN_ICON_SIZE = 54; //64
-const PIN_VIEWBOX_SIZE = 256;
+// Pin post artwork, from the agreed spec:
+//
+//   pin            28 x 40        (viewBox 0 0 28 40)
+//   top circle     28 x 28, centre (14, 14)   -> r=14, widest at y=14
+//   white centre   d=8, centre (14, 13)        -> r=4
+//   point          tapers from y=20, tip at (14, 40)
+//   anchor         (14, 40)
+//
+// The texture is sized to the pin's own bounding box (tip included) so
+// `icon-anchor: "bottom"` puts the geographic point on the very tip rather
+// than on transparent padding. Rendered height on the map is therefore
+// PIN_IMAGE_HEIGHT * icon-size.
+const PIN_IMAGE_WIDTH = 28;
+const PIN_IMAGE_HEIGHT = 40;
 
-// These are the same category colors used by CategoryDropdown. The map
-// creates color variants, but every variant uses the exact same pin shape.
-const DOT_COLORS = [
-  "#e11d48", // 0 - rose/red
-  "#f97316", // 1 - orange
-  "#eab308", // 2 - yellow/amber
-  "#22c55e", // 3 - green
-  "#0ea5e9", // 4 - blue
-  "#8b5cf6", // 5 - purple
-];
+// Google Maps-style teardrop. 0.85 * 40 = 34px tall on the map; the selected
+// variant is 1.0 * 40 = 40px, so both stay in the 32-40px band.
+const PIN_BASE_ICON_SIZE = 0.85;
+const PIN_SELECTED_ICON_SIZE = 1;
 
-// Darker variants keep the selected marker legible over the map.
-const DOT_COLORS_SELECTED = [
-  "#9f1239", // rose-800
-  "#c2410c", // orange-700
-  "#a16207", // yellow-700
-  "#15803d", // green-700
-  "#0369a1", // blue-700
-  "#6d28d9", // purple-700
-];
+const PIN_IMAGE = "pin-post";
+const PIN_IMAGE_SELECTED = "pin-post-selected";
 
-const CATEGORY_IDS = [1, 2, 3, 4, 5, 6, 7, 8];
+// Image ids from the per-category pin set this design replaced. Kept only so a
+// hot-reloaded map can release their textures; nothing references them now.
+const STALE_IMAGE_IDS = [
+  "pin-default",
+  "pin-selected",
+  ...[1, 2, 3, 4, 5, 6, 7, 8].flatMap((id) => [`pin-cat-${id}`, `pin-cat-${id}-selected`]),
+] as const;
 
-function colorForCategory(categoryId: number, selected: boolean): string {
-  const colors = selected ? DOT_COLORS_SELECTED : DOT_COLORS;
-  return colors[categoryId % colors.length];
-}
+// Google Maps red, plus a slightly darker fill for the selected variant.
+const PIN_FILL = "#EA4335";
+const PIN_FILL_SELECTED = "#C5221F";
 
-function drawCategoryGlyph(ctx: CanvasRenderingContext2D, categoryId: number): void {
-  ctx.save();
-  ctx.strokeStyle = "#ffffff";
-  ctx.fillStyle = "#ffffff";
-  ctx.lineWidth = 8;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  switch (categoryId) {
-    case 1: // Food
-      ctx.beginPath();
-      ctx.moveTo(96, 61);
-      ctx.lineTo(96, 77);
-      ctx.moveTo(86, 61);
-      ctx.lineTo(86, 74);
-      ctx.lineTo(106, 74);
-      ctx.lineTo(106, 61);
-      ctx.moveTo(96, 77);
-      ctx.lineTo(96, 115);
-      ctx.moveTo(148, 61);
-      ctx.bezierCurveTo(138, 73, 138, 84, 138, 88);
-      ctx.lineTo(150, 88);
-      ctx.lineTo(150, 115);
-      ctx.stroke();
-      break;
-    case 2: // Nature
-      ctx.beginPath();
-      ctx.moveTo(128, 113);
-      ctx.lineTo(128, 76);
-      ctx.moveTo(128, 96);
-      ctx.bezierCurveTo(111, 95, 106, 84, 108, 72);
-      ctx.bezierCurveTo(120, 72, 128, 79, 128, 91);
-      ctx.moveTo(128, 86);
-      ctx.bezierCurveTo(130, 70, 141, 64, 153, 66);
-      ctx.bezierCurveTo(153, 79, 144, 88, 128, 91);
-      ctx.stroke();
-      break;
-    case 3: // Event
-      ctx.strokeRect(98, 69, 60, 45);
-      ctx.beginPath();
-      ctx.moveTo(98, 83);
-      ctx.lineTo(158, 83);
-      ctx.moveTo(112, 62);
-      ctx.lineTo(112, 75);
-      ctx.moveTo(144, 62);
-      ctx.lineTo(144, 75);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(113, 97, 3, 0, Math.PI * 2);
-      ctx.arc(128, 97, 3, 0, Math.PI * 2);
-      ctx.arc(143, 97, 3, 0, Math.PI * 2);
-      ctx.fill();
-      break;
-    case 4: // Nightlife
-      ctx.beginPath();
-      ctx.moveTo(94, 63);
-      ctx.lineTo(162, 63);
-      ctx.lineTo(132, 91);
-      ctx.lineTo(132, 111);
-      ctx.moveTo(117, 114);
-      ctx.lineTo(147, 114);
-      ctx.stroke();
-      break;
-    case 5: // Art
-      ctx.strokeRect(98, 67, 60, 48);
-      ctx.beginPath();
-      ctx.arc(143, 80, 5, 0, Math.PI * 2);
-      ctx.moveTo(105, 105);
-      ctx.lineTo(119, 90);
-      ctx.lineTo(129, 100);
-      ctx.lineTo(138, 91);
-      ctx.lineTo(152, 106);
-      ctx.stroke();
-      break;
-    case 6: // Sports
-      ctx.beginPath();
-      ctx.arc(128, 88, 27, 0, Math.PI * 2);
-      ctx.moveTo(119, 73);
-      ctx.lineTo(137, 73);
-      ctx.lineTo(143, 89);
-      ctx.lineTo(128, 100);
-      ctx.lineTo(113, 89);
-      ctx.closePath();
-      ctx.moveTo(119, 73);
-      ctx.lineTo(111, 64);
-      ctx.moveTo(137, 73);
-      ctx.lineTo(145, 64);
-      ctx.moveTo(113, 89);
-      ctx.lineTo(101, 91);
-      ctx.moveTo(143, 89);
-      ctx.lineTo(155, 91);
-      ctx.moveTo(128, 100);
-      ctx.lineTo(128, 115);
-      ctx.stroke();
-      break;
-    case 7: // Travel
-      ctx.strokeRect(99, 73, 58, 41);
-      ctx.beginPath();
-      ctx.moveTo(114, 73);
-      ctx.lineTo(114, 64);
-      ctx.lineTo(142, 64);
-      ctx.lineTo(142, 73);
-      ctx.moveTo(99, 86);
-      ctx.lineTo(157, 86);
-      ctx.moveTo(128, 86);
-      ctx.lineTo(128, 98);
-      ctx.stroke();
-      break;
-    default: // Other
-      ctx.beginPath();
-      ctx.moveTo(104, 65);
-      ctx.lineTo(148, 65);
-      ctx.lineTo(158, 75);
-      ctx.lineTo(158, 105);
-      ctx.lineTo(104, 105);
-      ctx.closePath();
-      ctx.moveTo(148, 65);
-      ctx.lineTo(148, 76);
-      ctx.lineTo(158, 76);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(119, 85, 4, 0, Math.PI * 2);
-      ctx.fill();
-  }
-
-  ctx.restore();
+/**
+ * Three shapes, unioned by overdraw rather than stitched into one outline:
+ *
+ *   1. a soft elliptical shadow, centred low and wide enough that its darker
+ *      core falls *outside* the narrowing tail, which is what makes it read as
+ *      a drop shadow rather than a grey smudge hidden behind an opaque body;
+ *   2. the head as a literal <circle> r=14 at (14,14) — the spec's 28x28 top
+ *      circle, exact by construction instead of approximated by an arc;
+ *   3. the tail, a path running from the tip up each flank.
+ *
+ * The flanks are tangent-continuous with the circle where they meet it at
+ * y=20: radius (12.65, 6) gives tangent (0.429, -0.904), and the control point
+ * (24.68, 24.15) sits 4.59px up that line from (26.65, 20). The two flanks
+ * mirror about x=14 and meet at (14, 40) with opposing slopes, giving a clean
+ * downward point.
+ *
+ * The tail's own top is the buried chord (4,8)-(24,8). The circle is convex, so
+ * that whole segment lies strictly inside the head and is never visible.
+ * Nothing is stroked, so there is no seam or stray hairline where the two
+ * shapes meet: the flat red plus the shadow is what separates the pin from the
+ * basemap, which is also how the Google Maps marker reads at this size.
+ */
+export function pinSvg(fill: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 40" width="${PIN_IMAGE_WIDTH}" height="${PIN_IMAGE_HEIGHT}"><defs><radialGradient id="pin-shadow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#000" stop-opacity="0.34"/><stop offset="0.62" stop-color="#000" stop-opacity="0.24"/><stop offset="0.85" stop-color="#000" stop-opacity="0.09"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="14" cy="27" rx="13.4" ry="11.5" fill="url(#pin-shadow)"/><circle cx="14" cy="14" r="14" fill="${fill}"/><path d="M4 8L24 8L26.65 20C24.68 24.15 15.8 35.5 14 40C12.2 35.5 3.32 24.15 1.35 20Z" fill="${fill}"/><circle cx="14" cy="13" r="4" fill="#fff"/></svg>`;
 }
 
 /**
- * Module-scope cache for generated pin icons. The icon markup is a pure
- * function of (size, color, selected, categoryId) and never changes at
- * runtime, so we build each variant once and reuse it. Without this, every
- * style.load (map init and every light/dark toggle) re-renders 18 SVGs,
- * decodes 18 blobs, and re-uploads 18 textures.
+ * Module-scope cache for the generated pin textures. The artwork is a pure
+ * function of the fill colour and never changes at runtime, so each variant
+ * is rasterized once and reused. Without this, every style.load (map init and
+ * every light/dark toggle) re-decodes the SVG blobs and re-uploads textures.
  */
 const iconCache = new Map<string, Promise<ImageData>>();
 
-function getCacheKey(
-  size: number,
-  color: string,
-  selected: boolean,
-  categoryId: number
-): string {
-  return `${size}|${color}|${selected}|${categoryId}`;
-}
-
-function makePinIcon(
-  size: number,
-  color: string,
-  ringColor: string | null,
-  categoryId: number
-): Promise<ImageData> {
-  const selected = ringColor !== null;
-  const cacheKey = getCacheKey(size, color, selected, categoryId);
-  const cached = iconCache.get(cacheKey);
+function makePinIcon(fill: string): Promise<ImageData> {
+  const cached = iconCache.get(fill);
   if (cached) return cached;
 
-  const promise = buildPinIcon(size, color, ringColor, categoryId);
-  iconCache.set(cacheKey, promise);
+  const promise = buildPinIcon(fill);
+  iconCache.set(fill, promise);
   return promise;
 }
 
-function buildPinIcon(
-  size: number,
-  color: string,
-  ringColor: string | null,
-  categoryId: number
-): Promise<ImageData> {
-  const svg = renderToStaticMarkup(
-    createElement(IoPinSharp, {
-      color,
-      size: PIN_VIEWBOX_SIZE,
-      stroke: ringColor ?? color,
-      strokeWidth: ringColor ? 12 : 0,
-      strokeLinejoin: "round",
-    })
-  ).replaceAll("currentColor", color);
+function buildPinIcon(fill: string): Promise<ImageData> {
   const imageURL = URL.createObjectURL(
-    new Blob([svg], { type: "image/svg+xml;charset=utf-8" })
+    new Blob([pinSvg(fill)], { type: "image/svg+xml;charset=utf-8" })
   );
 
   return new Promise((resolve, reject) => {
@@ -252,25 +120,20 @@ function buildPinIcon(
     image.onload = () => {
       URL.revokeObjectURL(imageURL);
       const canvas = document.createElement("canvas");
-      canvas.width = size;
-      canvas.height = size;
+      canvas.width = PIN_IMAGE_WIDTH;
+      canvas.height = PIN_IMAGE_HEIGHT;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         reject(new Error("Unable to create a 2D canvas for map pin icons"));
         return;
       }
 
-      ctx.drawImage(image, 0, 0, size, size);
-      ctx.save();
-      ctx.scale(size / PIN_VIEWBOX_SIZE, size / PIN_VIEWBOX_SIZE);
-      ctx.translate(0, -42);
-      drawCategoryGlyph(ctx, categoryId);
-      ctx.restore();
-      resolve(ctx.getImageData(0, 0, size, size));
+      ctx.drawImage(image, 0, 0, PIN_IMAGE_WIDTH, PIN_IMAGE_HEIGHT);
+      resolve(ctx.getImageData(0, 0, PIN_IMAGE_WIDTH, PIN_IMAGE_HEIGHT));
     };
     image.onerror = () => {
       URL.revokeObjectURL(imageURL);
-      reject(new Error("Unable to render the IoPinSharp map icon"));
+      reject(new Error("Unable to render the map pin icon"));
     };
     image.src = imageURL;
   });
@@ -302,25 +165,11 @@ export async function ensurePinLayers(
   isActive: () => boolean = () => true
 ): Promise<void> {
   const images = await Promise.all([
-    ...CATEGORY_IDS.flatMap((categoryId) => [
-      makePinIcon(
-        PIN_ICON_SIZE,
-        colorForCategory(categoryId, false),
-        null,
-        categoryId
-      ).then((image) => [`pin-cat-${categoryId}`, image] as const),
-      makePinIcon(
-        PIN_ICON_SIZE,
-        colorForCategory(categoryId, true),
-        "#ffffff",
-        categoryId
-      ).then((image) => [`pin-cat-${categoryId}-selected`, image] as const),
-    ]),
-    makePinIcon(PIN_ICON_SIZE, DOT_COLORS[0], null, 8).then(
-      (image) => ["pin-default", image] as const
+    makePinIcon(PIN_FILL).then(
+      (image) => [PIN_IMAGE, image] as const
     ),
-    makePinIcon(PIN_ICON_SIZE, DOT_COLORS_SELECTED[0], "#ffffff", 8).then(
-      (image) => ["pin-selected", image] as const
+    makePinIcon(PIN_FILL_SELECTED).then(
+      (image) => [PIN_IMAGE_SELECTED, image] as const
     ),
   ]);
   if (!isActive()) return;
@@ -385,51 +234,6 @@ export async function ensurePinLayers(
     });
   }
 
-  // The match expression selects a color tint, not a different icon shape.
-  const categoryTintMatch: ExpressionSpecification = [
-    "match",
-    ["get", "category_id"],
-    1,
-    "pin-cat-1",
-    2,
-    "pin-cat-2",
-    3,
-    "pin-cat-3",
-    4,
-    "pin-cat-4",
-    5,
-    "pin-cat-5",
-    6,
-    "pin-cat-6",
-    7,
-    "pin-cat-7",
-    8,
-    "pin-cat-8",
-    "pin-default",
-  ];
-
-  const selectedCategoryTintMatch: ExpressionSpecification = [
-    "match",
-    ["get", "category_id"],
-    1,
-    "pin-cat-1-selected",
-    2,
-    "pin-cat-2-selected",
-    3,
-    "pin-cat-3-selected",
-    4,
-    "pin-cat-4-selected",
-    5,
-    "pin-cat-5-selected",
-    6,
-    "pin-cat-6-selected",
-    7,
-    "pin-cat-7-selected",
-    8,
-    "pin-cat-8-selected",
-    "pin-selected",
-  ];
-
   if (!map.getLayer("pins-base")) {
     map.addLayer({
       id: "pins-base",
@@ -437,16 +241,16 @@ export async function ensurePinLayers(
       source: "pins",
       filter: notCluster,
       layout: {
-        "icon-image": categoryTintMatch,
-        "icon-size": 0.75,
+        "icon-image": PIN_IMAGE,
+        "icon-size": PIN_BASE_ICON_SIZE,
         "icon-anchor": "bottom",
         "icon-allow-overlap": true,
       },
     });
   } else {
     // A hot reload/style diff can retain a layer while replacing its images.
-    map.setLayoutProperty("pins-base", "icon-image", categoryTintMatch);
-    map.setLayoutProperty("pins-base", "icon-size", 0.75);
+    map.setLayoutProperty("pins-base", "icon-image", PIN_IMAGE);
+    map.setLayoutProperty("pins-base", "icon-size", PIN_BASE_ICON_SIZE);
     map.setLayoutProperty("pins-base", "icon-anchor", "bottom");
     map.setLayoutProperty("pins-base", "icon-allow-overlap", true);
   }
@@ -458,8 +262,8 @@ export async function ensurePinLayers(
       source: "pins",
       filter: notCluster,
       layout: {
-        "icon-image": selectedCategoryTintMatch,
-        "icon-size": 1.05,
+        "icon-image": PIN_IMAGE_SELECTED,
+        "icon-size": PIN_SELECTED_ICON_SIZE,
         "icon-anchor": "bottom",
         "icon-allow-overlap": true,
       },
@@ -468,10 +272,18 @@ export async function ensurePinLayers(
     map.setLayoutProperty(
       "pins-selected",
       "icon-image",
-      selectedCategoryTintMatch
+      PIN_IMAGE_SELECTED
     );
-    map.setLayoutProperty("pins-selected", "icon-size", 1.05);
+    map.setLayoutProperty("pins-selected", "icon-size", PIN_SELECTED_ICON_SIZE);
     map.setLayoutProperty("pins-selected", "icon-anchor", "bottom");
     map.setLayoutProperty("pins-selected", "icon-allow-overlap", true);
+  }
+
+  // The per-category icons this design replaced are still registered on a map
+  // that hot-reloaded (or kept its images through a setStyle diff). Drop them
+  // only after both symbol layers point at the new images, since MapLibre
+  // refuses to remove an image a layer still references.
+  for (const id of STALE_IMAGE_IDS) {
+    if (map.hasImage(id)) map.removeImage(id);
   }
 }

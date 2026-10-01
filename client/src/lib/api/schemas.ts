@@ -12,6 +12,19 @@ export const pinBaseSchema = z.object({
   created_at: z.string(),
 });
 
+/** Payload emitted by the SSE /events endpoint. Subset of the full pin object. */
+export const pinEventSchema = z.object({
+  id: z.string().uuid(),
+  user_id: z.string().uuid().nullable(),
+  location: z.string(),
+  caption: z.string().nullable(),
+  category_id: z.number().int(),
+  cover_url: z.string().nullable(),
+  created_at: z.string().datetime(),
+});
+
+export type PinEvent = z.infer<typeof pinEventSchema>;
+
 export const pinListEntrySchema = pinBaseSchema.extend({
   cover_url: z.string(),
   username: z.string().nullable(),

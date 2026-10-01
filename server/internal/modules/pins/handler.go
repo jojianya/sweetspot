@@ -532,7 +532,8 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		return
 	}
 
-	// Only non-owners reach the role lookup, keeping it off the common path.
+	// Authorization before any body parsing: prevents unauthorized uploads
+	// from consuming disk/CPU/memory.
 	if existing.UserID.String() != userID && !users.IsModerator(h.roles, c) {
 		response.Forbidden(c, "you can only edit your own pins")
 		return

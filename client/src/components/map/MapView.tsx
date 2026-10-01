@@ -202,6 +202,14 @@ export default function MapView({
     let initialized = false;
     let active = true;
 
+    // Remove the map placeholder when the style finishes loading or fails.
+    const removePlaceholder = () => {
+      const placeholder = containerRef.current?.querySelector("[data-map-placeholder]");
+      if (placeholder) placeholder.remove();
+    };
+    map.once("load", removePlaceholder);
+    map.once("error", removePlaceholder);
+
     map.on("style.load", () => {
       void ensurePinLayers(map, () => active)
         .then(() => {
@@ -444,6 +452,12 @@ export default function MapView({
 
   return (
     <div className="relative h-full w-full">
+      {/* Static placeholder behind the map, removed on "load" or "error". */}
+      <div
+        data-map-placeholder
+        className="absolute inset-0 bg-zinc-100 dark:bg-zinc-900"
+        aria-hidden="true"
+      />
       <div ref={containerRef} className="h-full w-full" />
       <PinList pins={pins} onSelectPin={onSelectPin} />
       {hover && hover.pin.cover_url && (

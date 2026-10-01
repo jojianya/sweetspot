@@ -34,7 +34,7 @@ const nextConfig: NextConfig = {
   // Next 16 blocks the HMR WebSocket (/_next/hmr) as a cross-origin dev
   // resource, which shows up as failed ws://127.0.0.1:3000/_next/hmr
   // connections in the browser console.
-  allowedDevOrigins: ["127.0.0.1", "localhost"],
+  allowedDevOrigins: ["127.0.0.1", "localhost", "192.168.68.112"],
   async rewrites() {
     return [
       {
@@ -43,6 +43,12 @@ const nextConfig: NextConfig = {
         // sees a normal same-origin request and a normal same-origin Set-Cookie.
         source: "/api/:path*",
         destination: `${apiProxyTarget()}/:path*`,
+      },
+      {
+        // SSE /events endpoint for realtime pin updates.
+        // Must be proxied so the browser sends the httpOnly session cookie.
+        source: "/events",
+        destination: `${apiProxyTarget()}/events`,
       },
     ];
   },

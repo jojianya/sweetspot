@@ -7,6 +7,19 @@ function isLoopbackHostname(hostname: string): boolean {
   return /^127(?:\.\d{1,3}){3}$/.test(normalized);
 }
 
+function isPrivateHostname(hostname: string): boolean {
+  const ip = hostname.replace(/^\[|\]$/g, ""); // strip IPv6 brackets
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((p) => isNaN(p))) return false;
+  // 10.0.0.0/8
+  if (parts[0] === 10) return true;
+  // 172.16.0.0/12
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  // 192.168.0.0/16
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  return false;
+}
+
 function parseOrigin(raw: string, variableName: string): URL {
   let url: URL;
   try {
@@ -24,8 +37,8 @@ function parseOrigin(raw: string, variableName: string): URL {
   if (url.pathname !== "/") {
     throw new Error(`${variableName} must not include a path`);
   }
-  if (url.protocol !== "https:" && !isLoopbackHostname(url.hostname)) {
-    throw new Error(`${variableName} must use https unless it is a local address`);
+  if (url.protocol !== "https:" && !isLoopbackHostname(url.hostname) && !isPrivateHostname(url.hostname)) {
+    throw new Error(`${variableName} must use https unless it is a local or private address`);
   }
 
   return new URL(url.origin);
@@ -52,8 +65,8 @@ export function resolveSiteUrl(
     } catch {
       throw new Error("NEXT_PUBLIC_API_URL must be an absolute URL when SITE_URL is omitted");
     }
-    if (!isLoopbackHostname(parsedApiUrl.hostname)) {
-      throw new Error("SITE_URL is required when NEXT_PUBLIC_API_URL is not a local address");
+    if (!isLoopbackHostname(parsedApiUrl.hostname) && !isPrivateHostname(parsedApiUrl.hostname)) {
+      throw new Error("SITE_URL is required when NEXT_PUBLIC_API_URL is not a local or private address");
     }
   }
 

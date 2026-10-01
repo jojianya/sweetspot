@@ -116,10 +116,11 @@ func validateStorageBase(raw, appEnv string) error {
 	}
 
 	loopback := isLoopbackHost(parsed.Hostname())
-	if parsed.Scheme != "https" && !loopback {
-		return fmt.Errorf("STORAGE_BASE_URL must use https unless it is a local address")
+	private := isPrivateIP(parsed.Hostname())
+	if parsed.Scheme != "https" && !loopback && !private {
+		return fmt.Errorf("STORAGE_BASE_URL must use https unless it is a local or private address")
 	}
-	if strings.EqualFold(appEnv, "production") && loopback {
+	if strings.EqualFold(appEnv, "production") && (loopback || private) {
 		return fmt.Errorf("STORAGE_BASE_URL must be publicly reachable in production")
 	}
 	return nil
@@ -144,6 +145,33 @@ func isLoopbackHost(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+}
+
+// isPrivateIP reports whether the host is a private (RFC 1918) IP address.
+// Allows HTTP for LAN development without requiring TLS certificates.
+func isPrivateIP(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	// Convert to 4-byte IPv4 representation if it's an IPv4-mapped IPv6 address.
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return false // not an IPv4 address
+	}
+	// 10.0.0.0/8
+	if ip4[0] == 10 {
+		return true
+	}
+	// 172.16.0.0/12
+	if ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31 {
+		return true
+	}
+	// 192.168.0.0/16
+	if ip4[0] == 192 && ip4[1] == 168 {
+		return true
+	}
+	return false
 }
 
 func getOrigins(raw string) []string {

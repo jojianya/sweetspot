@@ -163,6 +163,7 @@ export default function MapView({
   const [styleReady, setStyleReady] = useState(false);
   const [styleVersion, setStyleVersion] = useState(0);
   const themeRef = useRef(theme);
+  const styleUrlRef = useRef(theme === "dark" ? DARK_STYLE : LIGHT_STYLE);
   const [hover, setHover] = useState<{ pin: PinHover; x: number; y: number } | null>(
     null
   );
@@ -212,6 +213,17 @@ export default function MapView({
         .catch((error: unknown) => {
           console.error("Failed to load map pin icons", error);
         });
+    });
+
+    // Suppress missing-image warnings from hosted MapTiler style (empty-string/" " fallbacks).
+    // Our pin images are prefixed "pin-" and managed by ensurePinLayers; ignore them.
+    map.on("styleimagemissing", (e) => {
+      if (e.id.startsWith("pin-")) return;
+      if (map.hasImage(e.id)) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) }, { pixelRatio: 1 });
     });
 
     map.on("load", () => {
@@ -320,9 +332,14 @@ export default function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (themeRef.current === theme) return;
+    const nextStyle = theme === "dark" ? DARK_STYLE : LIGHT_STYLE;
+    if (styleUrlRef.current === nextStyle) return;
+    styleUrlRef.current = nextStyle;
     themeRef.current = theme;
-    map.setStyle(theme === "dark" ? DARK_STYLE : LIGHT_STYLE);
+    // diff: false avoids the "Style is not done loading" warning by forcing a full
+    // style replacement rather than a diff. The hosted style sprite/tiles are
+    // absolute URLs, so diff offers no benefit and races with ongoing loads.
+    map.setStyle(nextStyle, { diff: false });
   }, [theme]);
 
   useEffect(() => {

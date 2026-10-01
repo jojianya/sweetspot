@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,6 +69,92 @@ func migrationsPath(t *testing.T) string {
 			t.Fatalf("could not find module root above %s", dir)
 		}
 		dir = parent
+	}
+}
+
+// appliedMigrations returns the set of filenames currently recorded in
+// schema_migrations.
+//
+// The test reads this instead of asking RollbackLastMigration what it did,
+// because RollbackLastMigration returns only an error and reports the migration
+// it undid on stdout. Diffing the table around the call is both quieter and
+// more accurate: RollbackLastMigration skips migrations that have no down file
+// and keeps walking, so the migration it removes is not always simply the
+// highest one applied beforehand.
+func appliedMigrations(t *testing.T, pool *pgxpool.Pool) map[string]bool {
+	t.Helper()
+
+	rows, err := pool.Query(context.Background(), "SELECT filename FROM schema_migrations")
+	if err != nil {
+		t.Fatalf("read schema_migrations: %v", err)
+	}
+	defer rows.Close()
+
+	applied := make(map[string]bool)
+	for rows.Next() {
+		var filename string
+		if err := rows.Scan(&filename); err != nil {
+			t.Fatalf("scan schema_migrations: %v", err)
+		}
+		applied[filename] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate schema_migrations: %v", err)
+	}
+	return applied
+}
+
+// removedFrom returns the single entry present in before but absent from
+// after, which is the migration the rollback undid.
+func removedFrom(t *testing.T, before, after map[string]bool) (string, bool) {
+	t.Helper()
+
+	var removed []string
+	for filename := range before {
+		if !after[filename] {
+			removed = append(removed, filename)
+		}
+	}
+	if len(removed) != 1 {
+		sort.Strings(removed)
+		t.Fatalf("expected the rollback to remove exactly 1 migration, it removed %d: %v", len(removed), removed)
+	}
+	return removed[0], true
+}
+
+// migrationFilesOnDisk lists the runnable migrations: the top level of
+// migrations/, excluding the down/ subdirectory. RunMigrations reads them the
+// same way.
+func migrationFilesOnDisk(t *testing.T, dir string) []string {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read migrations dir: %v", err)
+	}
+
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
+			continue
+		}
+		files = append(files, e.Name())
+	}
+	sort.Strings(files)
+	return files
+}
+
+// assertAllApplied checks that every migration on disk has a row, so the end of
+// the cycle is verified against the files rather than against a hard-coded
+// count or the last few numbers. Adding 0018 needs no change here.
+func assertAllApplied(t *testing.T, pool *pgxpool.Pool, dir string) {
+	t.Helper()
+
+	applied := appliedMigrations(t, pool)
+	for _, name := range migrationFilesOnDisk(t, dir) {
+		if !applied[name] {
+			t.Errorf("after up: %s is on disk but absent from schema_migrations", name)
+		}
 	}
 }
 
@@ -155,36 +243,99 @@ func TestMigrationUpDownUp(t *testing.T) {
 		if !pinsUpdatedAtTriggerExists(t, pool) {
 			t.Error("after up: pins_updated_at trigger should exist")
 		}
+		assertAllApplied(t, pool, dir)
 	})
 
-	t.Run("DownTrigger", func(t *testing.T) {
-		// Rollback is one-at-a-time from the highest applied migration, so
-		// reaching 0015 means rolling 0016 back and leaving it that way.
-		if err := RollbackLastMigration(pool, dir); err != nil {
-			t.Fatalf("RollbackLastMigration: %v", err)
-		}
-		if pinsUpdatedAtTriggerExists(t, pool) {
-			t.Error("after down: pins_updated_at trigger should be gone")
-		}
-		if thumbnailNullable(t, pool) {
-			t.Error("after down: rolling back 0016 must not drop 0015's NOT NULL constraint")
-		}
-	})
+	// rollbackUntil rolls back one migration at a time until undoMigration has
+	// been undone, checking the schema after every step.
+	//
+	// The loop is driven by name, not by how many migrations happen to sit at
+	// the top of the table. The previous version called RollbackLastMigration
+	// twice and assumed the two highest were 0016 and 0015, which was true when
+	// 0016 was the last file written and stopped being true the moment 0017
+	// landed: the first rollback undid 0017 instead, so the trigger was still
+	// present and both subtests failed. 0018 would have broken it the same way.
+	//
+	// Each iteration asserts the state that belongs to the migration just
+	// removed, and additionally asserts that migrations still applied are intact,
+	// which is what catches a down script reaching further than it should.
+	rollbackUntil := func(t *testing.T, undoMigration string) {
+		t.Helper()
 
-	t.Run("DownThumbnail", func(t *testing.T) {
-		if err := RollbackLastMigration(pool, dir); err != nil {
-			t.Fatalf("RollbackLastMigration: %v", err)
+		for {
+			before := appliedMigrations(t, pool)
+			if !before[undoMigration] {
+				// Already undone. Checked before rolling back so the loop
+				// terminates on the target rather than on a count.
+				return
+			}
+
+			if err := RollbackLastMigration(pool, dir); err != nil {
+				t.Fatalf("RollbackLastMigration (targeting %s): %v", undoMigration, err)
+			}
+			after := appliedMigrations(t, pool)
+			undone, _ := removedFrom(t, before, after)
+
+			// A newer migration that stays applied across this step is not a
+			// bug: RollbackLastMigration walks the applied list newest-first
+			// and skips any migration with no down script, so a data-only
+			// migration with no authored rollback is stepped over rather than
+			// blocking the ones below it. So the invariant is that nothing was
+			// lost, not that only the newest was removed.
+			for name := range before {
+				if after[name] {
+					continue
+				}
+				if name == undone {
+					continue
+				}
+				t.Errorf("after rolling back %s: %s also disappeared from schema_migrations", undone, name)
+			}
+
+			switch undone {
+			case "0016_pins_updated_at_trigger.sql":
+				if pinsUpdatedAtTriggerExists(t, pool) {
+					t.Error("after rolling back 0016: pins_updated_at trigger should be gone")
+				}
+				if thumbnailNullable(t, pool) {
+					t.Error("after rolling back 0016: 0015's NOT NULL constraint must survive")
+				}
+
+			case "0015_pin_photo_thumbnail_not_null.sql":
+				if !thumbnailNullable(t, pool) {
+					t.Error("after rolling back 0015: pin_photos.thumbnail_url should accept NULL again")
+				}
+				if pinsUpdatedAtTriggerExists(t, pool) {
+					t.Error("after rolling back 0015: 0016's trigger must not be resurrected")
+				}
+
+			default:
+				// Newer migrations are rolled back on the way to the target and
+				// have no schema assertion attached here, but the loop is what
+				// makes them reversible at all: each one must have a down script
+				// for RollbackLastMigration to reach 0015 at all.
+				t.Logf("rolled back %s on the way to %s", undone, undoMigration)
+			}
 		}
-		if !thumbnailNullable(t, pool) {
-			t.Error("after down: pin_photos.thumbnail_url should accept NULL again")
+	}
+
+	t.Run("DownToThumbnail", func(t *testing.T) {
+		rollbackUntil(t, "0015_pin_photo_thumbnail_not_null.sql")
+
+		if thumbnailNullable(t, pool) != true {
+			t.Error("0015 was rolled back, so pin_photos.thumbnail_url should accept NULL")
 		}
 		if pinsUpdatedAtTriggerExists(t, pool) {
-			t.Error("after down: 0015's rollback must not resurrect 0016's trigger")
+			t.Error("0016 is older than 0015, so its trigger must be gone too")
+		}
+		if err := RollbackLastMigration(pool, dir); err == nil {
+			t.Error("expected no further rollback: 0014 and earlier have no down scripts")
 		}
 	})
 
 	t.Run("UpFinal", func(t *testing.T) {
-		// Both migrations are pending again, so this re-applies 0015 then 0016.
+		// Everything rolled back above is pending again, so this re-applies the
+		// tail of the sequence in filename order.
 		if err := RunMigrations(pool, dir); err != nil {
 			t.Fatalf("RunMigrations (final up): %v", err)
 		}
@@ -194,6 +345,7 @@ func TestMigrationUpDownUp(t *testing.T) {
 		if !pinsUpdatedAtTriggerExists(t, pool) {
 			t.Error("after final up: pins_updated_at trigger should exist")
 		}
+		assertAllApplied(t, pool, dir)
 	})
 
 	t.Run("ThumbnailConstraintRejectsNull", func(t *testing.T) {

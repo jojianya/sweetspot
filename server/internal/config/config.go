@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -24,23 +25,24 @@ const defaultCORSAllowedOrigins = "http://localhost:3000,http://localhost:3001,h
 	"http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002"
 
 type Config struct {
-	Port               string
-	AppEnv             string
-	DBHost             string
-	DBPort             string
-	DBUser             string
-	DBPass             string
-	DBName             string
-	LogLevel           string
-	LogFormat          string
-	JWTSecret          string
-	StorageBackend     string
-	StorageBase        string
-	RedisAddr          string
-	RedisPassword      string
-	CORSAllowedOrigins []string
-	SentryDSN          string
-	SentryEnv          string
+	Port                 string
+	AppEnv               string
+	DBHost               string
+	DBPort               string
+	DBUser               string
+	DBPass               string
+	DBName               string
+	LogLevel             string
+	LogFormat            string
+	JWTSecret            string
+	StorageBackend       string
+	StorageBase          string
+	RedisAddr            string
+	RedisPassword        string
+	CORSAllowedOrigins   []string
+	SentryDSN            string
+	SentryEnv            string
+	MaxSSEConnections    int
 }
 
 func Load() *Config {
@@ -66,6 +68,7 @@ func Load() *Config {
 		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
 		SentryDSN:          getEnv("SENTRY_DSN", ""),
 		SentryEnv:          getEnv("SENTRY_ENV", "development"),
+		MaxSSEConnections:  getEnvInt("MAX_SSE_CONNECTIONS", 1000),
 	}
 
 	// A missing JWT_SECRET would silently boot with an empty HMAC key, letting
@@ -155,6 +158,15 @@ func (c *Config) DSN() string {
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
 	}
 	return fallback
 }

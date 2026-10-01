@@ -61,7 +61,10 @@ func CloseAllSSE() int {
 const sseWriteTimeout = 10 * time.Second
 
 type Handler struct {
-	broker *Broker
+	broker       *Broker
+	maxConns     int
+	activeConns  int
+	connsMu      sync.Mutex
 }
 
 // setWriteDeadline arms a per-write deadline on the underlying
@@ -74,8 +77,8 @@ func setWriteDeadline(w http.ResponseWriter, timeout time.Duration) {
 	_ = rc.SetWriteDeadline(time.Now().Add(timeout))
 }
 
-func NewHandler(broker *Broker) *Handler {
-	return &Handler{broker: broker}
+func NewHandler(broker *Broker, maxConns int) *Handler {
+	return &Handler{broker: broker, maxConns: maxConns}
 }
 
 // Stream is a Server-Sent Events endpoint streaming newly created pins.
@@ -86,6 +89,16 @@ func NewHandler(broker *Broker) *Handler {
 // The connection lives until the client disconnects; EventSource clients
 // reconnect automatically.
 func (h *Handler) Stream(c *gin.Context) {
+	// Global connection cap.
+	h.connsMu.Lock()
+	if h.maxConns > 0 && h.activeConns >= h.maxConns {
+		h.connsMu.Unlock()
+		response.Error(c, http.StatusServiceUnavailable, "too many SSE connections, try again later")
+		return
+	}
+	h.activeConns++
+	h.connsMu.Unlock()
+
 	// Track this connection so graceful shutdown can cancel it instead of
 	// waiting for the full shutdown timeout.
 	ctx, cancel := context.WithCancel(c.Request.Context())
@@ -93,10 +106,24 @@ func (h *Handler) Stream(c *gin.Context) {
 	track(ctx, cancel)
 	defer untrack(ctx)
 
+	// Decrement active count on exit.
+	defer func() {
+		h.connsMu.Lock()
+		h.activeConns--
+		h.connsMu.Unlock()
+	}()
+
 	var bbox *[4]float64
 	if raw := strings.TrimSpace(c.Query("bbox")); raw != "" {
 		b, ok := httpx.ParseBbox(c)
 		if !ok {
+			return
+		}
+		// Validate bbox coordinate ranges.
+		if b[0] < -90 || b[0] > 90 || b[2] < -90 || b[2] > 90 ||
+			b[1] < -180 || b[1] > 180 || b[3] < -180 || b[3] > 180 ||
+			b[0] > b[2] || b[1] > b[3] {
+			response.BadRequest(c, "bbox coordinates out of range")
 			return
 		}
 		bbox = &b
@@ -127,6 +154,11 @@ func (h *Handler) Stream(c *gin.Context) {
 	c.Writer.Flush()
 
 	ch := sub.Channel()
+	// Heartbeat ticker: send a comment line every 20s to keep idle connections alive
+	// through proxies/LBs. Comment lines (starting with :) are ignored by EventSource.
+	heartbeat := time.NewTicker(20 * time.Second)
+	defer heartbeat.Stop()
+
 	for {
 		select {
 		case msg, ok := <-ch:
@@ -144,6 +176,13 @@ func (h *Handler) Stream(c *gin.Context) {
 			// passed, and each event gets a fresh window.
 			setWriteDeadline(c.Writer, sseWriteTimeout)
 			if _, err := fmt.Fprintf(c.Writer, "event: pin\ndata: %s\n\n", msg.Payload); err != nil {
+				return
+			}
+			c.Writer.Flush()
+		case <-heartbeat.C:
+			// Send SSE comment as heartbeat. Set write deadline before each write.
+			setWriteDeadline(c.Writer, sseWriteTimeout)
+			if _, err := fmt.Fprint(c.Writer, ": heartbeat\n\n"); err != nil {
 				return
 			}
 			c.Writer.Flush()

@@ -35,6 +35,21 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Must run before Type-check, and on a cold .next. The app declares
+      # `RootLayout({ children }: LayoutProps<"/">)` in src/app/layout.tsx;
+      # LayoutProps is a global that Next generates into .next/types/, which is
+      # gitignored (client/.gitignore: /.next/) and therefore absent on a fresh
+      # checkout. Type-checking first fails with
+      #   src/app/layout.tsx(25,50): error TS2304: Cannot find name 'LayoutProps'.
+      # which is why this job was red on every push while the same command
+      # passed locally: a warm local .next carries the generated types.
+      #
+      # `next typegen` emits exactly those definitions without a full build, so
+      # it is cheaper than promoting the Build step above this one and keeps the
+      # type error reporting a type error rather than a build failure.
+      - name: Generate route types
+        run: pnpm next typegen
+
       - name: Type-check
         run: pnpm tsc --noEmit
 
@@ -95,6 +110,24 @@ jobs:
 
       - name: Download dependencies
         run: go mod download
+
+      # github.com/h2non/bimg is a cgo binding, so `go build` shells out to
+      # pkg-config looking for vips.pc. The runner image has no libvips, so the
+      # build died with:
+      #   # [pkg-config --cflags -- vips vips vips]
+      #   Package vips was not found in the pkg-config search path.
+      # and the job never reached the tests. deployments/docker/server.Dockerfile.dev
+      # already installs the Alpine equivalent (`vips-dev`); this is the Debian
+      # package that provides the same vips.pc. build-essential is normally
+      # preinstalled on the runner, but naming it keeps the step self-contained
+      # if that ever changes.
+      - name: Install libvips
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libvips-dev \
+            pkg-config \
+            build-essential
 
       - name: Build
         run: go build ./...

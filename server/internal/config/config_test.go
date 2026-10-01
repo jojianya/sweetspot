@@ -54,6 +54,23 @@ func TestValidateStorageBackend(t *testing.T) {
 	}
 }
 
+func TestValidateCookieSameSite(t *testing.T) {
+	// Strict is the default and must stay valid without any opt-in, because
+	// it is the CSRF-safe mode. Lax is only ever reachable via the explicit
+	// COOKIE_SAMESITE=lax flag (needed for plain-HTTP LAN development).
+	for _, ok := range []string{"strict", "lax", "STRICT", " lax "} {
+		if err := validateCookieSameSite(strings.ToLower(strings.TrimSpace(ok))); err != nil {
+			t.Errorf("validateCookieSameSite(%q): unexpected error: %v", ok, err)
+		}
+	}
+
+	for _, bad := range []string{"", "none", "StrictMode", "laxx", "disabled"} {
+		if err := validateCookieSameSite(bad); err == nil {
+			t.Errorf("validateCookieSameSite(%q): expected rejection, got nil", bad)
+		}
+	}
+}
+
 func TestValidateStorageBase(t *testing.T) {
 	t.Run("LocalDevelopment", func(t *testing.T) {
 		if err := validateStorageBase("http://localhost:8081", "development"); err != nil {

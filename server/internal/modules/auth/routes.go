@@ -9,8 +9,9 @@ import (
 )
 
 type RouteOptions struct {
-	JWTSecret string
-	Blacklist *cache.Blacklist
+	JWTSecret      string
+	Blacklist      *cache.Blacklist
+	CookieSameSite SameSiteMode
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {

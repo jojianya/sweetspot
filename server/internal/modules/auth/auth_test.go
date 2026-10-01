@@ -239,7 +239,7 @@ func TestLogoutSucceedsWhenRedisIsDown(t *testing.T) {
 	// Simulate a Redis outage: use a real Blacklist pointing at a closed port.
 	// Revoke will fail with a connection error, which is what we're testing.
 	bl := cache.New("127.0.0.1:1", "")
-	h := NewHandler(newTestService(&stubUserService{}), bl, nil)
+	h := NewHandler(newTestService(&stubUserService{}), bl, nil, SameSiteStrict)
 
 	// Create a valid JWT so the handler can extract claims.
 	token, err := jwt.Generate("test-secret", "u1", time.Hour)

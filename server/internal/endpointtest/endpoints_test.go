@@ -309,7 +309,7 @@ func setRole(svc *mockUserService, userID, role string) {
 	svc.users[userID] = u
 }
 
-func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo favorites.Repository, bl *cache.Blacklist, store *storage.Local) *gin.Engine {
+func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo favorites.Repository, bl *cache.Blacklist, store *storage.Local, sameSite auth.SameSiteMode) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.Recover(nil), middleware.SecurityHeaders())
@@ -318,8 +318,8 @@ func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo 
 	jsonRoutes.Use(middleware.BodyLimit(1 << 20))
 
 	authSvc := auth.NewService(usersSvc, testSecret)
-	authH := auth.NewHandler(authSvc, bl, middleware.New(1000, time.Minute))
-	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
+	authH := auth.NewHandler(authSvc, bl, middleware.New(1000, time.Minute), sameSite)
+	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: bl, CookieSameSite: sameSite})
 
 	userH := users.NewHandler(usersSvc, store)
 	users.RegisterRoutes(jsonRoutes, userH, users.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
@@ -364,126 +364,133 @@ func decodeBody(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
 }
 
 func TestAuthEndpoints(t *testing.T) {
-	usersSvc := &mockUserService{
-		byEmail:    map[string]users.User{},
-		byUsername: map[string]users.User{},
-		users:      map[string]users.User{},
+	for _, mode := range []auth.SameSiteMode{auth.SameSiteStrict, auth.SameSiteLax} {
+		mode := mode
+		t.Run(string(mode), func(t *testing.T) {
+			usersSvc := &mockUserService{
+				byEmail:    map[string]users.User{},
+				byUsername: map[string]users.User{},
+				users:      map[string]users.User{},
+			}
+			r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"), mode)
+
+			t.Run("RegisterSuccess", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"new@example.com","password":"password123","username":"newbie"}`, nil)
+				if w.Code != http.StatusCreated {
+					t.Fatalf("expected 201, got %d (%s)", w.Code, w.Body.String())
+				}
+				body := decodeBody(t, w)
+				if _, ok := body["user"]; !ok {
+					t.Fatalf("expected user in response, got %v", body)
+				}
+				cookie := getSessionCookie(w)
+				if cookie == nil {
+					t.Fatal("expected session_token cookie in response")
+				}
+				if cookie.Value == "" {
+					t.Fatal("session cookie is empty")
+				}
+				expectedSameSite := http.SameSiteStrictMode
+				if mode == auth.SameSiteLax {
+					expectedSameSite = http.SameSiteLaxMode
+				}
+				if !cookie.HttpOnly || cookie.SameSite != expectedSameSite {
+					t.Fatalf("session cookie flags are not hardened: %+v (expected SameSite=%d)", cookie, expectedSameSite)
+				}
+				if cookie.Secure {
+					t.Fatalf("Secure flag should be false for HTTP requests, got %v", cookie.Secure)
+				}
+				if _, ok := body["token"]; ok {
+					t.Fatal("token must not be returned in the response body")
+				}
+			})
+
+			t.Run("RegisterDuplicateEmail", func(t *testing.T) {
+				usersSvc.byEmail["taken@example.com"] = users.User{ID: testUUID1, Email: "taken@example.com"}
+				w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"taken@example.com","password":"password123","username":"someone"}`, nil)
+				if w.Code != http.StatusConflict {
+					t.Fatalf("expected 409, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+
+			t.Run("RegisterInvalidBody", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"not-an-email","password":"123","username":"x"}`, nil)
+				if w.Code != http.StatusBadRequest {
+					t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+
+			t.Run("LoginSuccess", func(t *testing.T) {
+				hash, _ := passwordHash("password123")
+				usersSvc.byEmail["a@example.com"] = users.User{ID: testUUID1, Email: "a@example.com", PasswordHash: hash, Role: users.RoleUser}
+				w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com","password":"password123"}`, nil)
+				if w.Code != http.StatusOK {
+					t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+				}
+				cookie := getSessionCookie(w)
+				if cookie == nil || cookie.Value == "" {
+					t.Fatalf("expected session_token cookie, got %v", cookie)
+				}
+				body := decodeBody(t, w)
+				if _, ok := body["token"]; ok {
+					t.Fatal("token must not be returned in the response body")
+				}
+			})
+
+			t.Run("LoginByUsername", func(t *testing.T) {
+				hash, _ := passwordHash("password123")
+				usersSvc.byUsername["alice"] = users.User{ID: testUUID1, Email: "a@example.com", Username: "alice", PasswordHash: hash, Role: users.RoleUser}
+				w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"alice","password":"password123"}`, nil)
+				if w.Code != http.StatusOK {
+					t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+				}
+				cookie := getSessionCookie(w)
+				if cookie == nil || cookie.Value == "" {
+					t.Fatalf("expected session_token cookie, got %v", cookie)
+				}
+			})
+
+			t.Run("LoginWrongPassword", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com","password":"wrongpass"}`, nil)
+				if w.Code != http.StatusUnauthorized {
+					t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+
+			t.Run("LoginMalformedBody", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com"}`, nil)
+				if w.Code != http.StatusBadRequest {
+					t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+
+			t.Run("MeAuthenticated", func(t *testing.T) {
+				tok := newToken(t, testUUID1)
+				w := doJSON(t, r, http.MethodGet, "/me", "", map[string]string{"Authorization": "Bearer " + tok})
+				if w.Code != http.StatusOK {
+					t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+				}
+				body := decodeBody(t, w)
+				if body["user_id"] != testUUID1 {
+					t.Fatalf("expected user_id %s, got %v", testUUID1, body["user_id"])
+				}
+			})
+
+			t.Run("MeUnauthenticated", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodGet, "/me", "", nil)
+				if w.Code != http.StatusUnauthorized {
+					t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+
+			t.Run("MeInvalidToken", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodGet, "/me", "", map[string]string{"Authorization": "Bearer garbage.token.here"})
+				if w.Code != http.StatusUnauthorized {
+					t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+		})
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
-
-	t.Run("RegisterSuccess", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"new@example.com","password":"password123","username":"newbie"}`, nil)
-		if w.Code != http.StatusCreated {
-			t.Fatalf("expected 201, got %d (%s)", w.Code, w.Body.String())
-		}
-		body := decodeBody(t, w)
-		if _, ok := body["user"]; !ok {
-			t.Fatalf("expected user in response, got %v", body)
-		}
-		cookie := getSessionCookie(w)
-		if cookie == nil {
-			t.Fatal("expected session_token cookie in response")
-		}
-		if cookie.Value == "" {
-			t.Fatal("session cookie is empty")
-		}
-		if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
-			t.Fatalf("session cookie flags are not hardened: %+v", cookie)
-		}
-		// Secure must be true for HTTPS requests and false for HTTP.
-		// The test server uses HTTP, so Secure should be false.
-		if cookie.Secure {
-			t.Fatalf("Secure flag should be false for HTTP requests, got %v", cookie.Secure)
-		}
-		if _, ok := body["token"]; ok {
-			t.Fatal("token must not be returned in the response body")
-		}
-	})
-
-	t.Run("RegisterDuplicateEmail", func(t *testing.T) {
-		usersSvc.byEmail["taken@example.com"] = users.User{ID: testUUID1, Email: "taken@example.com"}
-		w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"taken@example.com","password":"password123","username":"someone"}`, nil)
-		if w.Code != http.StatusConflict {
-			t.Fatalf("expected 409, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("RegisterInvalidBody", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"not-an-email","password":"123","username":"x"}`, nil)
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("LoginSuccess", func(t *testing.T) {
-		hash, _ := passwordHash("password123")
-		usersSvc.byEmail["a@example.com"] = users.User{ID: testUUID1, Email: "a@example.com", PasswordHash: hash, Role: users.RoleUser}
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com","password":"password123"}`, nil)
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
-		}
-		cookie := getSessionCookie(w)
-		if cookie == nil || cookie.Value == "" {
-			t.Fatalf("expected session_token cookie, got %v", cookie)
-		}
-		body := decodeBody(t, w)
-		if _, ok := body["token"]; ok {
-			t.Fatal("token must not be returned in the response body")
-		}
-	})
-
-	t.Run("LoginByUsername", func(t *testing.T) {
-		hash, _ := passwordHash("password123")
-		usersSvc.byUsername["alice"] = users.User{ID: testUUID1, Email: "a@example.com", Username: "alice", PasswordHash: hash, Role: users.RoleUser}
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"alice","password":"password123"}`, nil)
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
-		}
-		cookie := getSessionCookie(w)
-		if cookie == nil || cookie.Value == "" {
-			t.Fatalf("expected session_token cookie, got %v", cookie)
-		}
-	})
-
-	t.Run("LoginWrongPassword", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com","password":"wrongpass"}`, nil)
-		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("LoginMalformedBody", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com"}`, nil)
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("MeAuthenticated", func(t *testing.T) {
-		tok := newToken(t, testUUID1)
-		w := doJSON(t, r, http.MethodGet, "/me", "", map[string]string{"Authorization": "Bearer " + tok})
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
-		}
-		body := decodeBody(t, w)
-		if body["user_id"] != testUUID1 {
-			t.Fatalf("expected user_id %s, got %v", testUUID1, body["user_id"])
-		}
-	})
-
-	t.Run("MeUnauthenticated", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodGet, "/me", "", nil)
-		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("MeInvalidToken", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodGet, "/me", "", map[string]string{"Authorization": "Bearer garbage.token.here"})
-		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
 }
 
 func TestUserEndpoints(t *testing.T) {
@@ -499,7 +506,7 @@ func TestUserEndpoints(t *testing.T) {
 			},
 		},
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
+	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"), auth.SameSiteStrict)
 
 	t.Run("GetUserByID", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodGet, "/users/"+testUUID2, "", nil)
@@ -604,7 +611,7 @@ func TestReportEndpoints(t *testing.T) {
 		list:     []reports.ReportListEntry{{PinCaption: strPtr("spam pin")}},
 		reviewed: reports.Report{Reason: "spam"},
 	}
-	r := setupRouter(usersSvc, reportRepo, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
+	r := setupRouter(usersSvc, reportRepo, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"), auth.SameSiteStrict)
 
 	t.Run("CreateReport", func(t *testing.T) {
 		tok := newToken(t, testUUID2)
@@ -704,7 +711,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 		},
 	}
 	favRepo := &mockFavoriteRepo{exists: true}
-	r := setupRouter(usersSvc, &mockReportRepo{}, favRepo, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
+	r := setupRouter(usersSvc, &mockReportRepo{}, favRepo, nil, storage.NewLocal(t.TempDir(), "http://test.local"), auth.SameSiteStrict)
 
 	t.Run("SaveFavorite", func(t *testing.T) {
 		tok := newToken(t, testUUID1)
@@ -830,7 +837,7 @@ func TestSecurityHeadersPresent(t *testing.T) {
 		byEmail:    map[string]users.User{},
 		byUsername: map[string]users.User{},
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
+	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"), auth.SameSiteStrict)
 
 	w := doJSON(t, r, http.MethodGet, "/me", "", nil)
 	for _, h := range []string{"X-Content-Type-Options", "X-Frame-Options", "Content-Security-Policy", "Referrer-Policy", "Strict-Transport-Security"} {
@@ -879,7 +886,7 @@ func TestLoginLockoutAfterFailures(t *testing.T) {
 	}
 	authSvc := auth.NewService(usersSvc, testSecret)
 	emailLim := middleware.New(5, time.Minute)
-	authH := auth.NewHandler(authSvc, nil, emailLim)
+	authH := auth.NewHandler(authSvc, nil, emailLim, auth.SameSiteStrict)
 	auth.RegisterRoutes(r.Group(""), authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
 	for i := 0; i < 5; i++ {

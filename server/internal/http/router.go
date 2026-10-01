@@ -87,8 +87,9 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		auth.NewService(c.UserService, cfg.JWTSecret),
 		c.Blacklist,
 		middleware.New(5, time.Minute),
+		auth.SameSiteMode(cfg.CookieSameSite),
 	)
-	auth.RegisterRoutes(jsonRoutes, authHandler, auth.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+	auth.RegisterRoutes(jsonRoutes, authHandler, auth.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, CookieSameSite: auth.SameSiteMode(cfg.CookieSameSite)})
 
 	userHandler := users.NewHandler(c.UserService, c.Store)
 	// Registered on uploadRoutes: PATCH /users/me is multipart (avatar upload).

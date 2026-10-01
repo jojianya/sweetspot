@@ -43,6 +43,7 @@ type Config struct {
 	SentryDSN          string
 	SentryEnv          string
 	MaxSSEConnections  int
+	CookieSameSite     string // "strict" or "lax"
 }
 
 func Load() *Config {
@@ -69,6 +70,7 @@ func Load() *Config {
 		SentryDSN:          getEnv("SENTRY_DSN", ""),
 		SentryEnv:          getEnv("SENTRY_ENV", "development"),
 		MaxSSEConnections:  getEnvInt("MAX_SSE_CONNECTIONS", 1000),
+		CookieSameSite:     strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", "strict"))),
 	}
 
 	if err := validateJWTSecret(cfg.JWTSecret); err != nil {
@@ -83,6 +85,9 @@ func Load() *Config {
 	if err := validateStorageBase(cfg.StorageBase, cfg.AppEnv); err != nil {
 		log.Fatal(err)
 	}
+	if err := validateCookieSameSite(cfg.CookieSameSite); err != nil {
+		log.Fatal(err)
+	}
 
 	return cfg
 }
@@ -90,6 +95,13 @@ func Load() *Config {
 func validateAppEnv(value string) error {
 	if value != "development" && value != "production" {
 		return fmt.Errorf("APP_ENV must be development or production, got %q", value)
+	}
+	return nil
+}
+
+func validateCookieSameSite(value string) error {
+	if value != "strict" && value != "lax" {
+		return fmt.Errorf("COOKIE_SAMESITE must be 'strict' or 'lax', got %q", value)
 	}
 	return nil
 }

@@ -70,6 +70,11 @@ services:
       LOG_LEVEL: debug
       MAX_SSE_CONNECTIONS: ${MAX_SSE_CONNECTIONS:-1000}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      # strict (default) is CSRF-safe but is NOT sent when the browser reaches
+      # the app over plain HTTP on a LAN origin, so the session cookie is
+      # dropped and the phone appears logged out. Set COOKIE_SAMESITE=lax in .env
+      # when testing from another device; leave it strict for HTTPS deployments.
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-strict}
       # This box is RAM-constrained; cap the Go toolchain so builds don't OOM.
       GOGC: "50"
       GOMEMLIMIT: 2GiB

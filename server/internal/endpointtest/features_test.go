@@ -234,7 +234,7 @@ func setupFeaturesRouter(
 	uploadRoutes.Use(middleware.BodyLimit(64 << 20))
 
 	authSvc := auth.NewService(usersSvc, testSecret)
-	authH := auth.NewHandler(authSvc, nil, middleware.New(1000, time.Minute))
+	authH := auth.NewHandler(authSvc, nil, middleware.New(1000, time.Minute), auth.SameSiteStrict)
 	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
 	jsonRoutes.POST("/errors", apphttp.ClientErrorIngest(nil))

@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -13,6 +14,34 @@ func TestValidateAppEnv(t *testing.T) {
 	}
 	if err := validateAppEnv("prod"); err == nil {
 		t.Fatal("expected an unknown environment to be rejected")
+	}
+}
+
+func TestValidateJWTSecret(t *testing.T) {
+	tests := []struct {
+		name    string
+		secret  string
+		wantErr bool
+	}{
+		{"valid 32 chars", strings.Repeat("a", 32), false},
+		{"valid 64 chars", strings.Repeat("b", 64), false},
+		{"empty", "", true},
+		{"too short 31", strings.Repeat("c", 31), true},
+		{"too short 16", strings.Repeat("d", 16), true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateJWTSecret(tc.secret)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("validateJWTSecret(%q): expected error, got nil", tc.secret)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("validateJWTSecret(%q): unexpected error: %v", tc.secret, err)
+				}
+			}
+		})
 	}
 }
 

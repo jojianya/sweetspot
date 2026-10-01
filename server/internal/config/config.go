@@ -25,24 +25,24 @@ const defaultCORSAllowedOrigins = "http://localhost:3000,http://localhost:3001,h
 	"http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002"
 
 type Config struct {
-	Port                 string
-	AppEnv               string
-	DBHost               string
-	DBPort               string
-	DBUser               string
-	DBPass               string
-	DBName               string
-	LogLevel             string
-	LogFormat            string
-	JWTSecret            string
-	StorageBackend       string
-	StorageBase          string
-	RedisAddr            string
-	RedisPassword        string
-	CORSAllowedOrigins   []string
-	SentryDSN            string
-	SentryEnv            string
-	MaxSSEConnections    int
+	Port               string
+	AppEnv             string
+	DBHost             string
+	DBPort             string
+	DBUser             string
+	DBPass             string
+	DBName             string
+	LogLevel           string
+	LogFormat          string
+	JWTSecret          string
+	StorageBackend     string
+	StorageBase        string
+	RedisAddr          string
+	RedisPassword      string
+	CORSAllowedOrigins []string
+	SentryDSN          string
+	SentryEnv          string
+	MaxSSEConnections  int
 }
 
 func Load() *Config {
@@ -71,14 +71,8 @@ func Load() *Config {
 		MaxSSEConnections:  getEnvInt("MAX_SSE_CONNECTIONS", 1000),
 	}
 
-	// A missing JWT_SECRET would silently boot with an empty HMAC key, letting
-	// anyone mint tokens for any user/role. Fail fast instead of running
-	// insecure. (docker-compose also fail-fasts via `:?` on this variable.)
-	if cfg.JWTSecret == "" {
-		log.Fatal("JWT_SECRET is required: set it in .env or the environment (generate with: openssl rand -hex 32)")
-	}
-	if len(cfg.JWTSecret) < 32 {
-		log.Fatal("JWT_SECRET must be at least 32 characters (256 bits)")
+	if err := validateJWTSecret(cfg.JWTSecret); err != nil {
+		log.Fatal(err)
 	}
 	if err := validateAppEnv(cfg.AppEnv); err != nil {
 		log.Fatal(err)
@@ -127,6 +121,18 @@ func validateStorageBase(raw, appEnv string) error {
 	}
 	if strings.EqualFold(appEnv, "production") && loopback {
 		return fmt.Errorf("STORAGE_BASE_URL must be publicly reachable in production")
+	}
+	return nil
+}
+
+// validateJWTSecret checks that the JWT secret is non-empty and at least 32
+// characters (256 bits) for sufficient entropy against brute force.
+func validateJWTSecret(secret string) error {
+	if secret == "" {
+		return fmt.Errorf("JWT_SECRET is required: set it in .env or the environment (generate with: openssl rand -hex 32)")
+	}
+	if len(secret) < 32 {
+		return fmt.Errorf("JWT_SECRET must be at least 32 characters (256 bits)")
 	}
 	return nil
 }

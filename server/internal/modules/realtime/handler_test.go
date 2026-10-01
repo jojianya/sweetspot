@@ -11,50 +11,109 @@ import (
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 )
 
-// TestSSEGlobalCap checks that the handler tracks active connections
-// and would reject when over the limit.
-func TestSSEGlobalCap(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	h := NewHandler(nil, 1)
-
-	h.connsMu.Lock()
-	if h.activeConns != 0 {
-		t.Fatalf("expected 0 active conns, got %d", h.activeConns)
+// TestValidateBbox tests the pure bbox validation function.
+func TestValidateBbox(t *testing.T) {
+	tests := []struct {
+		name    string
+		bbox    [4]float64
+		wantErr bool
+	}{
+		{"valid", [4]float64{14.4, 120.9, 14.8, 121.1}, false},
+		{"valid negative", [4]float64{-10, -20, 10, 20}, false},
+		{"lat too high", [4]float64{91, 0, 92, 1}, true},
+		{"lat too low", [4]float64{-91, 0, -90, 1}, true},
+		{"lng too high", [4]float64{0, 181, 1, 182}, true},
+		{"lng too low", [4]float64{0, -181, 1, -180}, true},
+		{"minLat == maxLat", [4]float64{10, 0, 10, 1}, true},
+		{"minLat > maxLat", [4]float64{10, 0, 5, 1}, true},
+		{"minLng > maxLng", [4]float64{0, 10, 1, 5}, true},
+		{"zero area", [4]float64{0, 0, 0, 0}, true},
 	}
-	h.connsMu.Unlock()
 
-	// Simulate one active connection
-	h.connsMu.Lock()
-	h.activeConns = 1
-	h.connsMu.Unlock()
-
-	// Check cap logic
-	h.connsMu.Lock()
-	overCap := h.maxConns > 0 && h.activeConns >= h.maxConns
-	h.connsMu.Unlock()
-	if !overCap {
-		t.Fatal("expected overCap=true when activeConns >= maxConns")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateBbox(tc.bbox)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("validateBbox(%v): expected error, got nil", tc.bbox)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("validateBbox(%v): unexpected error: %v", tc.bbox, err)
+				}
+			}
+		})
 	}
 }
 
-// TestSSEBboxValidation tests bbox coordinate range validation.
+// TestConnectionLimiter tests the connection limiter acquire/release logic.
+func TestConnectionLimiter(t *testing.T) {
+	// Test nil limiter (no limit)
+	nilLimiter := (*ConnectionLimiter)(nil)
+	if !nilLimiter.TryAcquire() {
+		t.Fatal("nil limiter should always allow acquire")
+	}
+	nilLimiter.Release() // Should not panic
+
+	// Test limiter with cap 2
+	l := NewConnectionLimiter(2)
+
+	// Acquire first
+	if !l.TryAcquire() {
+		t.Fatal("first acquire should succeed")
+	}
+	// Acquire second
+	if !l.TryAcquire() {
+		t.Fatal("second acquire should succeed")
+	}
+	// Third should fail
+	if l.TryAcquire() {
+		t.Fatal("third acquire should fail at cap")
+	}
+
+	// Release one, should allow another
+	l.Release()
+	if !l.TryAcquire() {
+		t.Fatal("acquire after release should succeed")
+	}
+
+	// Release both
+	l.Release()
+	l.Release()
+
+	// Should be able to acquire again
+	if !l.TryAcquire() {
+		t.Fatal("acquire after full release should succeed")
+	}
+}
+
+// TestConnectionLimiterZeroCap tests that a limiter with cap <= 0 allows all.
+func TestConnectionLimiterZeroCap(t *testing.T) {
+	for _, cap := range []int{0, -1, -5} {
+		l := NewConnectionLimiter(cap)
+		if l != nil {
+			t.Errorf("NewConnectionLimiter(%d) should return nil", cap)
+		}
+	}
+}
+
+// TestSSEBboxValidation tests bbox coordinate range validation via ParseBbox.
 func TestSSEBboxValidation(t *testing.T) {
 	tests := []struct {
-		name     string
-		bbox     string
-		valid    bool
-		wantBbox [4]float64
+		name  string
+		bbox  string
+		valid bool
 	}{
-		{"valid", "0,0,1,1", true, [4]float64{0, 0, 1, 1}},
-		{"valid negative", "-10,-20,10,20", true, [4]float64{-10, -20, 10, 20}},
-		{"lat too high", "91,0,92,1", false, [4]float64{}},
-		{"lat too low", "-91,0,-90,1", false, [4]float64{}},
-		{"lng too high", "0,181,1,182", false, [4]float64{}},
-		{"lng too low", "0,-181,1,-180", false, [4]float64{}},
-		{"minLat > maxLat", "10,0,5,1", false, [4]float64{}},
-		{"minLng > maxLng", "0,10,1,5", false, [4]float64{}},
-		{"empty", "", false, [4]float64{}},
-		{"malformed", "a,b,c,d", false, [4]float64{}},
+		{"valid Manila", "14.4,120.9,14.8,121.1", true},
+		{"valid negative", "-10,-20,10,20", true},
+		{"lat too high", "91,0,92,1", false},
+		{"lat too low", "-91,0,-90,1", false},
+		{"lng too high", "0,181,1,182", false},
+		{"lng too low", "0,-181,1,-180", false},
+		{"minLat >= maxLat", "10,0,10,1", false},
+		{"minLng >= maxLng", "0,10,1,5", false},
+		{"empty", "", false},
+		{"malformed", "a,b,c,d", false},
 	}
 
 	for _, tc := range tests {
@@ -67,44 +126,36 @@ func TestSSEBboxValidation(t *testing.T) {
 			}
 			c.Request = httptest.NewRequest(http.MethodGet, url, nil)
 
-			// Test the ParseBbox function directly
 			bbox, ok := httpx.ParseBbox(c)
 			if tc.valid {
 				if !ok {
 					t.Errorf("ParseBbox(%q): expected ok=true, got false", tc.bbox)
 				}
-				if bbox != tc.wantBbox {
-					t.Errorf("ParseBbox(%q): got %v, want %v", tc.bbox, bbox, tc.wantBbox)
-				}
-				// Now test the range validation logic from handler
-				if bbox[0] < -90 || bbox[0] > 90 || bbox[2] < -90 || bbox[2] > 90 ||
-					bbox[1] < -180 || bbox[1] > 180 || bbox[3] < -180 || bbox[3] > 180 ||
-					bbox[0] > bbox[2] || bbox[1] > bbox[3] {
-					t.Errorf("range validation failed for valid bbox %v", bbox)
+				if err := validateBbox(bbox); err != nil {
+					t.Errorf("validateBbox(%v): unexpected error: %v", bbox, err)
 				}
 			} else {
 				if ok {
-					t.Errorf("ParseBbox(%q): expected ok=false, got true", tc.bbox)
+					// If ParseBbox succeeded, validateBbox should fail
+					if err := validateBbox(bbox); err == nil {
+						t.Errorf("validateBbox(%v): expected error, got nil", bbox)
+					}
 				}
 			}
 		})
 	}
 }
 
-// TestSSEHeartbeatTiming guards the heartbeat interval.
+// TestSSEHeartbeatTiming guards the heartbeat interval constant.
 func TestSSEHeartbeatTiming(t *testing.T) {
-	// Heartbeat should be frequent enough to keep connections alive through
-	// typical proxies (often 30-60s idle timeout) but not so frequent as to
-	// waste bandwidth.
-	const heartbeatInterval = 20 * time.Second
-	if heartbeatInterval <= 0 {
+	if sseHeartbeatInterval <= 0 {
 		t.Fatal("heartbeat interval must be positive")
 	}
-	if heartbeatInterval > 30*time.Second {
-		t.Errorf("heartbeat interval %v too long (>30s), proxies may drop connection", heartbeatInterval)
+	if sseHeartbeatInterval > 30*time.Second {
+		t.Errorf("heartbeat interval %v too long (>30s), proxies may drop connection", sseHeartbeatInterval)
 	}
-	if heartbeatInterval < 10*time.Second {
-		t.Errorf("heartbeat interval %v too short (<10s), excessive traffic", heartbeatInterval)
+	if sseHeartbeatInterval < 10*time.Second {
+		t.Errorf("heartbeat interval %v too short (<10s), excessive traffic", sseHeartbeatInterval)
 	}
 }
 

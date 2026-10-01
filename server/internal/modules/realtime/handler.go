@@ -16,6 +16,21 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
 
+// validateBbox checks that a parsed bbox [minLat, minLng, maxLat, maxLat] has
+// valid coordinate ranges and non-zero area. Returns nil if valid.
+func validateBbox(b [4]float64) error {
+	if b[0] < -90 || b[0] > 90 || b[2] < -90 || b[2] > 90 {
+		return fmt.Errorf("latitudes must be between -90 and 90")
+	}
+	if b[1] < -180 || b[1] > 180 || b[3] < -180 || b[3] > 180 {
+		return fmt.Errorf("longitudes must be between -180 and 180")
+	}
+	if b[0] >= b[2] || b[1] >= b[3] {
+		return fmt.Errorf("bbox min must be less than max (minLat < maxLat and minLng < maxLng)")
+	}
+	return nil
+}
+
 // sseTracker tracks active SSE connections so graceful shutdown can notify
 // them to close rather than waiting for the full shutdown timeout.
 type sseTracker struct {
@@ -60,11 +75,56 @@ func CloseAllSSE() int {
 // while an active-but-quiet stream is never cut off.
 const sseWriteTimeout = 10 * time.Second
 
+// sseHeartbeatInterval is the interval between SSE heartbeat comments.
+// Exported for tests to override.
+const sseHeartbeatInterval = 20 * time.Second
+
+// ConnectionLimiter limits concurrent SSE connections with a global cap.
+// The zero value is ready to use (no limit).
+type ConnectionLimiter struct {
+	mu     sync.Mutex
+	max    int
+	active int
+}
+
+func NewConnectionLimiter(max int) *ConnectionLimiter {
+	if max <= 0 {
+		return nil
+	}
+	return &ConnectionLimiter{max: max}
+}
+
+// TryAcquire attempts to acquire a connection slot. Returns true if acquired,
+// false if at capacity. Must be followed by Release() on success.
+func (l *ConnectionLimiter) TryAcquire() bool {
+	if l == nil {
+		return true
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.active >= l.max {
+		return false
+	}
+	l.active++
+	return true
+}
+
+// Release releases a previously acquired connection slot.
+func (l *ConnectionLimiter) Release() {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.active > 0 {
+		l.active--
+	}
+}
+
 type Handler struct {
-	broker       *Broker
-	maxConns     int
-	activeConns  int
-	connsMu      sync.Mutex
+	broker          *Broker
+	limiter         *ConnectionLimiter
+	heartbeatTicker *time.Ticker
 }
 
 // setWriteDeadline arms a per-write deadline on the underlying
@@ -78,7 +138,14 @@ func setWriteDeadline(w http.ResponseWriter, timeout time.Duration) {
 }
 
 func NewHandler(broker *Broker, maxConns int) *Handler {
-	return &Handler{broker: broker, maxConns: maxConns}
+	return &Handler{broker: broker, limiter: NewConnectionLimiter(maxConns)}
+}
+
+// NewHandlerWithHeartbeat creates a Handler with a custom heartbeat interval for testing.
+func NewHandlerWithHeartbeat(broker *Broker, maxConns int, interval time.Duration) *Handler {
+	h := NewHandler(broker, maxConns)
+	h.heartbeatTicker = time.NewTicker(interval)
+	return h
 }
 
 // Stream is a Server-Sent Events endpoint streaming newly created pins.
@@ -90,14 +157,11 @@ func NewHandler(broker *Broker, maxConns int) *Handler {
 // reconnect automatically.
 func (h *Handler) Stream(c *gin.Context) {
 	// Global connection cap.
-	h.connsMu.Lock()
-	if h.maxConns > 0 && h.activeConns >= h.maxConns {
-		h.connsMu.Unlock()
+	if !h.limiter.TryAcquire() {
+		c.Header("Retry-After", "5")
 		response.Error(c, http.StatusServiceUnavailable, "too many SSE connections, try again later")
 		return
 	}
-	h.activeConns++
-	h.connsMu.Unlock()
 
 	// Track this connection so graceful shutdown can cancel it instead of
 	// waiting for the full shutdown timeout.
@@ -106,12 +170,8 @@ func (h *Handler) Stream(c *gin.Context) {
 	track(ctx, cancel)
 	defer untrack(ctx)
 
-	// Decrement active count on exit.
-	defer func() {
-		h.connsMu.Lock()
-		h.activeConns--
-		h.connsMu.Unlock()
-	}()
+	// Release connection slot on exit.
+	defer h.limiter.Release()
 
 	var bbox *[4]float64
 	if raw := strings.TrimSpace(c.Query("bbox")); raw != "" {
@@ -120,10 +180,8 @@ func (h *Handler) Stream(c *gin.Context) {
 			return
 		}
 		// Validate bbox coordinate ranges.
-		if b[0] < -90 || b[0] > 90 || b[2] < -90 || b[2] > 90 ||
-			b[1] < -180 || b[1] > 180 || b[3] < -180 || b[3] > 180 ||
-			b[0] > b[2] || b[1] > b[3] {
-			response.BadRequest(c, "bbox coordinates out of range")
+		if err := validateBbox(b); err != nil {
+			response.BadRequest(c, err.Error())
 			return
 		}
 		bbox = &b
@@ -154,9 +212,15 @@ func (h *Handler) Stream(c *gin.Context) {
 	c.Writer.Flush()
 
 	ch := sub.Channel()
-	// Heartbeat ticker: send a comment line every 20s to keep idle connections alive
-	// through proxies/LBs. Comment lines (starting with :) are ignored by EventSource.
-	heartbeat := time.NewTicker(20 * time.Second)
+	// Heartbeat ticker: send a comment line every sseHeartbeatInterval to keep
+	// idle connections alive through proxies/LBs. Comment lines (starting with
+	// :) are ignored by EventSource.
+	var heartbeat *time.Ticker
+	if h.heartbeatTicker != nil {
+		heartbeat = h.heartbeatTicker
+	} else {
+		heartbeat = time.NewTicker(sseHeartbeatInterval)
+	}
 	defer heartbeat.Stop()
 
 	for {

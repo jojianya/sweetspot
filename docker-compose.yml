@@ -75,11 +75,6 @@ services:
       # dropped and the phone appears logged out. Set COOKIE_SAMESITE=lax in .env
       # when testing from another device; leave it strict for HTTPS deployments.
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-strict}
-      # Placeholders for the upcoming streams module. Nothing reads these yet;
-      # left unset the server starts normally.
-      LIVEKIT_URL: ${LIVEKIT_URL:-}
-      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
-      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
       # This box is RAM-constrained; cap the Go toolchain so builds don't OOM.
       GOGC: "50"
       GOMEMLIMIT: 2GiB

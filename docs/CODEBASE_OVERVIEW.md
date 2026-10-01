@@ -543,6 +543,9 @@ From `server/internal/platform/database/migrations/`, in order:
 | `0012_pin_views.sql` | `pins.views` |
 | `0013_category_slug.sql` | `categories.slug` (derived from name, then NOT NULL + UNIQUE) |
 | `0014_pins_indexes.sql` | `pins_created_at_idx`, and a partial `pins_visible_created_idx ... WHERE is_hidden = false`, both `CONCURRENTLY` |
+| `0015_pin_photo_thumbnail_not_null.sql` | backfills `pin_photos.thumbnail_url` from its own `photo_url`, then `NOT NULL` |
+| `0016_pins_updated_at_trigger.sql` | `set_pins_updated_at()` + `BEFORE UPDATE` trigger on `pins`, exempting `views` |
+| `0017_streams_drop_room_name.sql` | drops the vendor-specific identifier column 0005 added to `streams`, plus its UNIQUE constraint |
 
 ### 5.1 Entities and relationships
 

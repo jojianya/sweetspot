@@ -1,0 +1,41 @@
+-- Drop the vendor-specific room-name column from `streams`.
+--
+-- 0005 created `livekit_room_name TEXT NOT NULL UNIQUE`. It was never used: no
+-- Go code reads or writes the `streams` table, `internal/modules/streams/` holds
+-- nothing but `package streams`, and no stream routes are registered. The column
+-- named a specific third-party media vendor in the schema of a project that does
+-- not use one, so it goes.
+--
+-- NOT editing 0005 to remove it. That migration is applied on every existing
+-- database and schema_migrations keys on filename, so rewriting its contents
+-- would leave already-migrated databases permanently out of sync with the repo.
+--
+-- Only the column goes. `streams.status`, `peak_viewer_count`, `started_at` /
+-- `ended_at`, the `streams_status_idx` partial index and the `pin_id` /
+-- `broadcaster_id` foreign keys are all vendor-neutral and stay, so the table is
+-- ready for whatever media layer gets chosen later.
+--
+-- The UNIQUE constraint is dropped explicitly before the column. Postgres would
+-- cascade it automatically, but a bare DROP COLUMN leaves the reader wondering
+-- whether a same-named index survives. It has to be the CONSTRAINT and not the
+-- INDEX: a UNIQUE constraint owns its index, so dropping the index directly
+-- fails with "cannot drop index ... because constraint ... requires it".
+--
+-- Both statements run in one Exec, which the simple query protocol wraps in a
+-- single implicit transaction, so they either both land or neither does. IF
+-- EXISTS keeps the migration re-runnable against a database where the column is
+-- already gone.
+--
+-- Rollback: migrations/down/0017_streams_drop_room_name.down.sql
+--
+-- Numbering: this was originally committed as 0015_streams_drop_livekit_room_name.sql,
+-- which collided with 0015_pin_photo_thumbnail_not_null.sql on the branch it was
+-- written on. Renumbered to 0017 so the sequence is contiguous. The SQL is
+-- byte-for-byte unchanged, including the constraint name - that is the real name
+-- of the constraint in the database, so it cannot be renamed along with the file.
+-- Databases that applied the old filename need their schema_migrations row
+-- updated to match; see the note in the down migration.
+
+ALTER TABLE streams DROP CONSTRAINT IF EXISTS streams_livekit_room_name_key;
+
+ALTER TABLE streams DROP COLUMN IF EXISTS livekit_room_name;

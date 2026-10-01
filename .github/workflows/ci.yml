@@ -42,6 +42,9 @@ jobs:
         run: pnpm test
 
       - name: Build
+        # No SITE_URL, NEXT_PUBLIC_API_URL, API_INTERNAL_URL or
+        # NEXT_ALLOWED_DEV_ORIGINS: a build has to succeed with the optional
+        # configuration unset. The client defaults each of them.
         run: pnpm build
 
   server:
@@ -97,7 +100,22 @@ jobs:
         run: go build ./...
 
       - name: Test (with race detector)
+        # Deliberately no database credentials: the DB-backed tests skip rather
+        # than run against the service containers, which have no schema yet.
+        # TestMigrationUpDownUp covers the migrations against PostGIS below.
         run: go test ./... -race -count=1
+
+      - name: Test migrations (up/down/up against PostGIS)
+        env:
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_USER: postgres
+          DB_PASSWORD: testpass
+          # The service container's database. It is created fresh for this run
+          # and nothing else in this job uses it, which is what makes it safe to
+          # let the migration test apply and roll back the real schema in it.
+          MIGRATION_TEST_DB: goodspotdb
+        run: go test ./internal/platform/database/ -run TestMigrationUpDownUp -count=1 -v
 
       - name: Vet
         run: go vet ./...

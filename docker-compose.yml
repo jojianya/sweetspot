@@ -75,6 +75,11 @@ services:
       # dropped and the phone appears logged out. Set COOKIE_SAMESITE=lax in .env
       # when testing from another device; leave it strict for HTTPS deployments.
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-strict}
+      # Placeholders for the upcoming streams module. Nothing reads these yet;
+      # left unset the server starts normally.
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
       # This box is RAM-constrained; cap the Go toolchain so builds don't OOM.
       GOGC: "50"
       GOMEMLIMIT: 2GiB
@@ -113,6 +118,9 @@ services:
       # published loopback port, because inside this container localhost is the
       # container itself.
       API_INTERNAL_URL: http://server:8081
+      # Extra origins allowed to hit the dev server (HMR WebSocket) from a LAN
+      # address. Unset falls back to localhost,127.0.0.1.
+      NEXT_ALLOWED_DEV_ORIGINS: ${NEXT_ALLOWED_DEV_ORIGINS:-}
     volumes:
       - ./client:/app
       - /app/node_modules

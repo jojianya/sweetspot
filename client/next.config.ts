@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { resolveAllowedDevOrigins } from "./src/lib/devOrigins";
+
 /**
  * Server-side address of the Go API, used as the rewrite destination.
  *
@@ -30,11 +32,13 @@ function apiProxyTarget(): string {
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // The app is accessed at http://127.0.0.1:3000 in local dev; without this
-  // Next 16 blocks the HMR WebSocket (/_next/hmr) as a cross-origin dev
-  // resource, which shows up as failed ws://127.0.0.1:3000/_next/hmr
-  // connections in the browser console.
-  allowedDevOrigins: ["127.0.0.1", "localhost", "192.168.68.112"],
+  // Next blocks cross-origin requests to dev-only assets and endpoints, which
+  // shows up as a failed ws://<host>:3000/_next/hmr connection. The app is
+  // reached by hostname (localhost), by loopback IP (127.0.0.1) and by LAN IP
+  // when testing from another device, so the list comes from
+  // NEXT_ALLOWED_DEV_ORIGINS (comma-separated) and falls back to the two
+  // loopback names. See src/lib/devOrigins.ts.
+  allowedDevOrigins: resolveAllowedDevOrigins(),
   async rewrites() {
     return [
       {

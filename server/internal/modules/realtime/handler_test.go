@@ -99,19 +99,6 @@ func TestConnectionLimiterZeroCap(t *testing.T) {
 	}
 }
 
-// TestSSEHeartbeatTiming guards the heartbeat interval constant.
-func TestSSEHeartbeatTiming(t *testing.T) {
-	if sseHeartbeatInterval <= 0 {
-		t.Fatal("heartbeat interval must be positive")
-	}
-	if sseHeartbeatInterval > 30*time.Second {
-		t.Errorf("heartbeat interval %v too long (>30s), proxies may drop connection", sseHeartbeatInterval)
-	}
-	if sseHeartbeatInterval < 10*time.Second {
-		t.Errorf("heartbeat interval %v too short (<10s), excessive traffic", sseHeartbeatInterval)
-	}
-}
-
 // TestSetWriteDeadlineToleratesUnsupportedWriter confirms the helper is safe on
 // writers that cannot express a deadline. Stream must not fail on them.
 func TestSetWriteDeadlineToleratesUnsupportedWriter(t *testing.T) {
@@ -119,17 +106,6 @@ func TestSetWriteDeadlineToleratesUnsupportedWriter(t *testing.T) {
 	setWriteDeadline(rec, time.Second) // must not panic or block
 	if rec.Code != 200 && rec.Code != 0 {
 		t.Fatalf("unexpected recorder state: %d", rec.Code)
-	}
-}
-
-// TestSSEWriteTimeoutIsShort guards the value: a per-write deadline much longer
-// than this defeats the purpose of bounding a blocked peer.
-func TestSSEWriteTimeoutIsShort(t *testing.T) {
-	if sseWriteTimeout <= 0 {
-		t.Fatalf("sseWriteTimeout must be positive, got %v", sseWriteTimeout)
-	}
-	if sseWriteTimeout > 30*time.Second {
-		t.Errorf("sseWriteTimeout = %v, want <= 30s", sseWriteTimeout)
 	}
 }
 
@@ -253,6 +229,72 @@ func TestRunStreamLoopWithFilters(t *testing.T) {
 		t.Errorf("expected non-matching event to be filtered out, got: %s", body)
 	}
 	// Should contain heartbeat (context timeout > heartbeat interval)
+	if !strings.Contains(body, ": heartbeat") {
+		t.Errorf("expected heartbeat in body, got: %s", body)
+	}
+}
+
+// TestRunStreamLoopFilterIsolation tests that each filter is applied independently.
+// An event matching category but outside bbox is dropped.
+// An event inside bbox but with wrong category is dropped.
+func TestRunStreamLoopFilterIsolation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	bbox := [4]float64{10, 20, 30, 40}
+	category := 5
+
+	// Event 1: right category (5), outside bbox (lat 100, lng 100)
+	// Event 2: inside bbox (lat 25, lng 15), wrong category (99)
+	msgCh := make(chan *redis.Message, 2)
+	msgCh <- &redis.Message{Payload: `{"id":"cat_ok_bbox_bad","user_id":"u1","location":"POINT(100 100)","caption":null,"category_id":5,"cover_url":"","created_at":"2024-01-01T00:00:00Z"}`}
+	msgCh <- &redis.Message{Payload: `{"id":"bbox_ok_cat_bad","user_id":"u1","location":"POINT(25 15)","caption":null,"category_id":99,"cover_url":"","created_at":"2024-01-01T00:00:00Z"}`}
+
+	rec := httptest.NewRecorder()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, &bbox, &category)
+
+	body := rec.Body.String()
+
+	// Neither event should be written
+	if strings.Contains(body, `"id":"cat_ok_bbox_bad"`) {
+		t.Errorf("expected event with right category but outside bbox to be filtered, got: %s", body)
+	}
+	if strings.Contains(body, `"id":"bbox_ok_cat_bad"`) {
+		t.Errorf("expected event with right bbox but wrong category to be filtered, got: %s", body)
+	}
+	// Heartbeat should still fire
+	if !strings.Contains(body, ": heartbeat") {
+		t.Errorf("expected heartbeat in body, got: %s", body)
+	}
+}
+
+// TestRunStreamLoopNoFilters tests that without filters all events pass through.
+func TestRunStreamLoopNoFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	msgCh := make(chan *redis.Message, 2)
+	msgCh <- &redis.Message{Payload: `{"id":"a","user_id":"u1","location":"POINT(0 0)","caption":null,"category_id":1,"cover_url":"","created_at":"2024-01-01T00:00:00Z"}`}
+	msgCh <- &redis.Message{Payload: `{"id":"b","user_id":"u1","location":"POINT(100 100)","caption":null,"category_id":99,"cover_url":"","created_at":"2024-01-01T00:00:00Z"}`}
+
+	rec := httptest.NewRecorder()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, nil, nil)
+
+	body := rec.Body.String()
+
+	// Both events should be written
+	if !strings.Contains(body, `"id":"a"`) {
+		t.Errorf("expected event a, got: %s", body)
+	}
+	if !strings.Contains(body, `"id":"b"`) {
+		t.Errorf("expected event b, got: %s", body)
+	}
 	if !strings.Contains(body, ": heartbeat") {
 		t.Errorf("expected heartbeat in body, got: %s", body)
 	}

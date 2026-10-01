@@ -1,5 +1,7 @@
 "use client";
 
+"use client";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import MapView, { type MapLocation } from "./MapView";
@@ -18,6 +20,7 @@ import { parsePoint } from "@/lib/utils";
 import { categoryHref, resolveCategoryParam } from "@/lib/utils/category";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { CreatedPin, NewPinPhoto, PinListEntry, TrendingPin } from "@/lib/types";
 
 export default function MapApp({
@@ -249,6 +252,40 @@ export default function MapApp({
   const bannerError = categoriesError ?? pinsError ?? detailError;
   const activeCategory = categories.find((c) => c.id === effectiveCategory) ?? null;
 
+  // Render loading/error state for the pins notification
+  const renderPinsNotification = (): React.ReactNode => {
+    if (loading) {
+      return (
+        <div role="status" aria-busy="true" aria-label="Loading pins…">
+          <span className="sr-only">Loading pins…</span>
+          <div className="absolute left-3 top-36 z-10 rounded bg-zinc-100/90 px-3 py-2 text-xs font-medium text-zinc-500 shadow dark:bg-zinc-800/90 dark:text-zinc-400" aria-hidden="true">
+            <Skeleton className="h-3 w-32" style={{ height: "12px" }} />
+          </div>
+        </div>
+      );
+    }
+    if (bannerError) {
+      return (
+        <div
+          role="alert"
+          className="absolute left-3 top-40 z-10 rounded bg-rose-50 px-2 py-1 text-xs text-rose-600 shadow dark:bg-rose-950/60 dark:text-rose-300"
+        >
+          {bannerError}
+          {categoriesError && (
+            <button
+              type="button"
+              onClick={retryCategories}
+              className="ml-2 font-semibold underline"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="absolute inset-0">
       <MapView
@@ -281,31 +318,11 @@ export default function MapApp({
         onOpenSaved={handleOpenSaved}
       />
 
-      {loading && (
-        <div className="absolute left-3 top-36 z-10 rounded bg-white/90 px-2 py-1 text-xs text-zinc-500 shadow dark:bg-zinc-900/90 dark:text-zinc-400">
-          Loading pins…
-        </div>
-      )}
+      {renderPinsNotification()}
+
       <div className="absolute bottom-20 right-4 z-10">
         <LocateButton onLocate={handleLocate} />
       </div>
-      {bannerError && (
-        <div
-          role="alert"
-          className="absolute left-3 top-40 z-10 rounded bg-rose-50 px-2 py-1 text-xs text-rose-600 shadow dark:bg-rose-950/60 dark:text-rose-300"
-        >
-          {bannerError}
-          {categoriesError && (
-            <button
-              type="button"
-              onClick={retryCategories}
-              className="ml-2 font-semibold underline"
-            >
-              Retry
-            </button>
-          )}
-        </div>
-      )}
 
       {!loading && !bannerError && pins.length > 0 && (
         <div className="pointer-events-none absolute bottom-6 left-4 z-10 rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-500 shadow ring-1 ring-zinc-200/70 backdrop-blur dark:bg-zinc-900/90 dark:text-zinc-400 dark:ring-zinc-700/70">

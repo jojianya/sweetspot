@@ -1,82 +1,103 @@
-name: ci
+name: CI
 
 on:
   push:
-    # development is where work actually lands; without it a broken test can
-    # sit there for weeks and only surface on the next PR.
-    branches: [main, development]
+    branches: [development, main]
   pull_request:
+    branches: [development, main]
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.27"
-
-      - name: Install libvips
-        run: sudo apt-get update && sudo apt-get install -y libvips-dev
-
-      - name: Build
-        run: go build ./...
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Test
-        run: go test ./...
-
   client:
+    name: Client (Next.js)
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: client
+        working-directory: ./client
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up pnpm
+      - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.28.0
+          version: 10
 
-      - name: Set up Node
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: 22
           cache: pnpm
           cache-dependency-path: client/pnpm-lock.yaml
 
-      - name: Install
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Lint
         run: pnpm lint
 
-      - name: Typegen
-        run: pnpm exec next typegen
-
-      - name: Typecheck
-        run: pnpm exec tsc --noEmit
+      - name: Type-check
+        run: pnpm tsc --noEmit
 
       - name: Test
         run: pnpm test
-        env:
-          NEXT_PUBLIC_MAPTILER_API_KEY: ci-test-key
-          NEXT_PUBLIC_API_URL: http://localhost:8081
-          SITE_URL: http://localhost:3000
 
       - name: Build
         run: pnpm build
+
+  server:
+    name: Server (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./server
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
         env:
-          NEXT_PUBLIC_MAPTILER_API_KEY: ci-test-key
-          NEXT_PUBLIC_API_URL: http://localhost:8081
-          SITE_URL: http://localhost:3000
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: goodspotdb
+        ports: [5432:5432]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test (with race detector)
+        run: go test ./... -race -count=1
+
+      - name: Vet
+        run: go vet ./...

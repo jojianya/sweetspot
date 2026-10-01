@@ -89,25 +89,6 @@ func TestValidateStorageBase(t *testing.T) {
 	}
 }
 
-func TestJWTSecretMinLength(t *testing.T) {
-	// Save and restore env
-	oldSecret := os.Getenv("JWT_SECRET")
-	defer func() {
-		if oldSecret == "" {
-			os.Unsetenv("JWT_SECRET")
-		} else {
-			os.Setenv("JWT_SECRET", oldSecret)
-		}
-	}()
-
-	// Too short (31 chars)
-	os.Setenv("JWT_SECRET", "abcdefghijklmnopqrstuvwxyzabcde")
-	defer func() {
-		// We expect Load() to call log.Fatal, so we can't easily test it directly.
-		// Instead, test the validation logic that would be used.
-	}()
-}
-
 // TestGetEnvInt tests the getEnvInt helper.
 func TestGetEnvInt(t *testing.T) {
 	oldVal := os.Getenv("TEST_INT")

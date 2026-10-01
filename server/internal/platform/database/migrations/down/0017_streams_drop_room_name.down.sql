@@ -1,11 +1,18 @@
 -- Rollback for 0017_streams_drop_room_name.sql
 --
--- There is no rollback runner in this branch yet: RunMigrations reads only the
--- top level of migrations/ and skips subdirectories, so nothing will execute this
--- file on its own. It exists so the rollback is written down and reviewable
--- alongside the migration it reverses, and so a rollback runner has a
--- convention to follow (migrations/down/<name>.down.sql, applied manually for
--- now). See docs/CODE_REVIEW.md if a runner gets added.
+-- Rolled back by RollbackLastMigration (migrate.go), which reads this
+-- directory and applies the newest migration that has a down script. So this
+-- file does execute on its own: no manual psql needed.
+--
+-- An earlier version of this comment claimed there was no rollback runner in
+-- the branch. That was wrong, and it was wrong in a way that mattered, because
+-- it led a reader to believe 0017 could not be reverted at all. It could, and
+-- TestMigrationUpDownUp now rolls it back on the way to 0015, so the restore
+-- is covered.
+--
+-- One consequence worth knowing: RollbackLastMigration steps over any migration
+-- with no down file rather than stopping, so this being present is what lets a
+-- rollback reach 0016 and 0015 underneath it.
 --
 -- Restores the column as a plain nullable TEXT.
 --

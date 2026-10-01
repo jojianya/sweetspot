@@ -399,41 +399,6 @@ This app is photo-heavy and map-based — unprocessed multi-photo uploads at up 
 
 **Phase 7 done when:** GoodSpot247 is live at a real public URL and you (and a few trusted testers) can use it fully.
 
----
-
-## Phase 8 — Livestreaming (post-MVP, only after Phase 7 is validated)
-
-### 8.1 LiveKit setup
-
-- [ ] Create LiveKit Cloud account
-- [ ] `go get github.com/livekit/server-sdk-go`
-- [ ] Add LiveKit API key/secret to env config
-
-### 8.2 Streams table + endpoints
-
-- [ ] Write migration `0005_streams.sql`: `id`, `pin_id`, `broadcaster_id`, `livekit_room_name` (`NOT NULL UNIQUE`), `status` (`NOT NULL`, `CHECK IN ('live','ended')`, default `'live'`), `peak_viewer_count` (`INT NOT NULL DEFAULT 0`), `started_at`, `ended_at`
-- [ ] Partial index: `CREATE INDEX streams_status_idx ON streams (status) WHERE status = 'live';`
-- [ ] `internal/streams/handler.go` -> `POST /streams` — creates LiveKit room, returns broadcaster token
-- [ ] `internal/streams/handler.go` -> `GET /streams/:id` — returns stream info + viewer token
-- [ ] `internal/streams/handler.go` -> `POST /streams/:id/end` — closes room, updates status
-
-### 8.3 Frontend streaming
-
-- [ ] `npm install livekit-client`
-- [ ] "Go Live" button (auth required) -> connects as broadcaster
-- [ ] Live pins render distinctly on the map
-- [ ] Viewer screen connects to LiveKit room, renders video
-- [ ] Chat UI wired to existing WebSocket hub, keyed by `streamId`
-
-### 8.4 Viewer count
-
-- [ ] Configure LiveKit webhook endpoint on your backend
-- [ ] Handle participant join/leave webhooks -> update live count -> push via WebSocket -> update `streams.peak_viewer_count` whenever the live count exceeds the stored peak
-- [ ] (Known gap, not required for MVP) Webhooks can be dropped or delivered out of order, causing live counts to drift. Revisit with a periodic reconciliation job (poll LiveKit's actual room participant count and correct drift) before relying on viewer counts for anything user-facing beyond a rough indicator
-
-**Phase 8 done when:** A user can go live from a pin, another user can watch + chat in real time, viewer counts (including the peak) are tracked, and the stream ends cleanly.
-
----
 
 ## Quick Reference — Checklist Count by Phase
 

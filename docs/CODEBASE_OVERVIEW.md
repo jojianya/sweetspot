@@ -476,10 +476,9 @@ Notable per-module behaviour:
   only when the viewer *is* the subject.
 - **`realtime`** — see [§8](#8-real-time-sse). Note that `hub.go`, `pubsub.go`, `rooms.go`, `dto.go` and
   `broadcast.go` each contain exactly one line, `package realtime`. They are empty placeholders.
-- **`streams`** — **not wired into the router at all.** All seven files (`handler.go`, `service.go`,
-  `repository.go`, `model.go`, `dto.go`, `webhook.go`, `livekit_client.go`) contain only `package streams`.
-  Migration `0005_streams.sql` creates a `streams` table with `livekit_room_name`, but there is no code behind
-  it. Don't go looking for LiveKit code; there isn't any.
+- **`streams`** — **not wired into the router at all.** All six files (`handler.go`, `service.go`,
+  `repository.go`, `model.go`, `dto.go`, `webhook.go`) contain only `package streams`.
+  Migration `0005_streams.sql` creates a `streams` table, but there is no code behind it.
 
 ### 4.6 Platform layer (`internal/platform/`)
 

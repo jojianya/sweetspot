@@ -9,20 +9,20 @@
                                 └──────────┬───────────┘
                                            │
                         ┌───────────────────┼───────────────────┐
-                        │                   │                   │
-                  REST API (HTTPS)   WebSocket (real-time)  Media (WebRTC)
-                        │              [Phase 5, planned]  [Phase 8, planned]
-                        ▼                   ▼                   ▼
-             ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-             │   Go API Server  │  │  Go Realtime Hub  │  │  LiveKit SFU      │
-             │  (Gin)           │  │  [scaffolded,     │  │ [Phase 8,        │
-             │                  │  │   not yet built]  │  │  planned]        │
-             └────────┬─────────┘  └─────────┬─────────┘  └─────────┬────────┘
-                      │                      │                      │
-                      │              ┌───────┴────────┐             │
-                      │              │  Redis Pub/Sub  │◄────────────┘
-                      │              │ [Phase 5,       │  (stream events,
-                      │              │  planned]       │   viewer presence)
+                        │                   │
+                  REST API (HTTPS)   WebSocket (real-time)
+                        │              [Phase 5, planned]
+                        ▼                   ▼
+             ┌─────────────────┐  ┌──────────────────┐
+             │   Go API Server  │  │  Go Realtime Hub  │
+             │  (Gin)           │  │  [scaffolded,     │
+             │                  │  │   not yet built]  │
+             └────────┬─────────┘  └─────────┬─────────┘
+                      │                      │
+                      │              ┌───────┴────────┐
+                      │              │  Redis Pub/Sub  │
+                      │              │ [Phase 5,       │
+                      │              │  planned]       │
                       │              └────────────────┘
                       │
          ┌────────────┼─────────────────┐
@@ -52,7 +52,6 @@
 - **Web:** Next.js 16 (App Router) + MapLibre GL JS + React 19 + TypeScript
 - **Mobile:** React Native + MapLibre Native SDK — **future consideration, not yet started**
 - Client talks to the Go backend via REST + Zod schema validation on API responses
-- WebSocket (real-time) and WebRTC (LiveKit) planned for Phases 5 and 8
 
 ### 2.2 Go API Server (REST)
 
@@ -87,15 +86,7 @@ Used for:
 
 **Current status:** `internal/modules/realtime/` contains empty placeholder files (`package realtime` only). No WebSocket library is in `go.mod`. No `/ws` route is registered. Redis is currently used only as a JWT blacklist. The geohash encoding utility (`pkg/geohash/`) is implemented and ready for room assignment.
 
-### 2.4 Livestreaming (WebRTC + SFU) — **Phase 8, scaffolded, not yet implemented**
-
-- **LiveKit** (Go-based, open source) — managed via LiveKit Cloud to start, self-hostable later
-- Go API server creates "rooms" via LiveKit's API, issues join tokens
-- Actual video routing handled entirely by LiveKit — your backend never touches raw video
-
-**Current status:** `internal/modules/streams/` contains empty placeholder files (`package streams` only). DB migration `0005_streams.sql` exists with the schema. No LiveKit SDK is in `go.mod`. No stream routes are registered.
-
-### 2.5 Database — PostgreSQL + PostGIS
+### 2.4 Database — PostgreSQL + PostGIS
 
 - Single source of truth: users, pins, pin photos, categories, streams, reports, (later) likes/comments
 - Pins support multiple photos via a separate `pin_photos` table (one row per photo, ordered, with `thumbnail_url` for map/list views) rather than a single `photo_url` column
@@ -103,7 +94,7 @@ Used for:
 - Scales via read replicas later if needed
 - Migrations: `0001` PostGIS extension, `0002` users, `0003` categories+pins+pin_photos, `0004` reports, `0005` streams (scaffold), `0006` pin_photos.thumbnail_url
 
-### 2.6 Storage — Local Filesystem (dev) / Cloudflare R2 (planned for production)
+### 2.5 Storage — Local Filesystem (dev) / Cloudflare R2 (planned for production)
 
 - **Currently:** Local filesystem storage (`internal/platform/storage/local.go`) — saves processed photos to `./uploads/`, served via `GET /uploads/*`
 - **Planned (Phase 6):** Cloudflare R2 — chosen over AWS S3 specifically for zero egress fees — GoodSpot247's usage pattern (many views per photo upload) is egress-heavy, so this avoids costs scaling with popularity
@@ -111,7 +102,7 @@ Used for:
 - Cloudflare CDN delivery planned for production
 - **R2 config env vars are documented but not yet wired** (`STORAGE_BACKEND`, `R2_*` in `.env.example` are aspirational)
 
-### 2.7 Redis
+### 2.6 Redis
 
 **Currently:** JWT blacklist only — logout revokes the token's `jti` in Redis for the token's remaining TTL
 
@@ -137,16 +128,6 @@ Client → (must have valid JWT) → POST /pins (Go API) → validate → save p
                          → Realtime Hub picks up
                          → broadcasts to geohash room
                          → connected viewers see it live
-```
-
-### B) User goes live at a location — **Phase 8, not yet implemented**
-
-```
-Client → POST /streams (Go API) → create LiveKit room → return join token
-Broadcaster → connects to LiveKit via WebRTC (video/audio)
-Viewers → GET /streams/:id → get token → connect to LiveKit → watch
-Chat/reactions → WebSocket → Realtime Hub → geohash/room-based fan-out
-Viewer join/leave webhooks → update viewer_count and streams.peak_viewer_count
 ```
 
 ### C) User browses the map (no login required)
@@ -183,7 +164,6 @@ Owner client → (valid JWT, role = owner) → PATCH /users/:id/role { role: "ad
 1. **Single Go instance** — current state, fine for MVP and early growth
 2. **Horizontal scaling** — run multiple Go API/Realtime instances behind a load balancer, coordinated via Redis Pub/Sub (requires Phase 5)
 3. **Read replicas** for Postgres if read load grows
-4. **Self-host LiveKit** if managed pricing becomes a bottleneck at scale
 5. Only if a genuine, measured bottleneck appears in the WebSocket layer specifically (rare) — consider splitting Realtime Hub into its own dedicated service/cluster
 
 ---
@@ -268,7 +248,6 @@ sweetspot/
 │   │   │   └── streams/             # Phase 8 — scaffolded, not yet built
 │   │   │       ├── handler.go       # (empty)
 │   │   │       ├── service.go       # (empty)
-│   │   │       ├── livekit_client.go# (empty)
 │   │   │       ├── webhook.go       # (empty)
 │   │   │       ├── dto.go           # (empty)
 │   │   │       ├── model.go         # (empty)
@@ -376,4 +355,3 @@ sweetspot/
 7. ⬜ WebSocket layer: geohash rooms + batching for live pin updates (Phase 5)
 8. ⬜ Production storage swap: Cloudflare R2 (Phase 6)
 9. ⬜ Deploy MVP (Phase 7)
-10. ⬜ Livestreaming integration (LiveKit) (Phase 8)

@@ -107,7 +107,6 @@ A monorepo with two runtimes (Go + Node) and one docker-compose stack. Product n
 | **libvips / bimg** | server image pipeline | none (open source) | Image processing |
 
 ### Planned / stubbed (not live)
-- **LiveKit** — `streams` module stubs (`livekit_client.go`, migration `0005_streams.sql`) for live streaming.
 - **WebSocket + Redis pub/sub** — `realtime` module stubs for Phase 5 geohash-room fan-out.
 - **Cloudflare R2** — R2 env vars (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`) documented but never wired; storage is local-disk only.
 

@@ -59,7 +59,6 @@ This is the only mandatory gate for regular use of the app — everything before
 
 ## 6. Future workflow extensions (post-MVP, not built yet)
 
-- **Going live**: `POST /streams` → LiveKit room created → broadcaster connects via WebRTC; viewers hit `GET /streams/:id` for a join token; chat/reactions ride the existing WebSocket hub keyed by `streamId` instead of geohash.
 - **Likes & comments**: engagement layered onto individual pins.
 - **Sponsored pins**: paid placement, separate from the organic pin flow.
 

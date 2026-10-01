@@ -90,7 +90,6 @@
 - Backend: **Go** — chosen for real-time concurrency demands (live pins, livestreaming) over Node/Express; see [[goodspot247]] architecture notes for full reasoning
 - Database: PostgreSQL + PostGIS for geospatial queries
 - Real-time: WebSocket-based, geohash-partitioned rooms, batched broadcasts, Redis pub/sub for horizontal scaling — **planned (Phase 5), not yet implemented**
-- Livestreaming (future): WebRTC via LiveKit (Go-based SFU) — **planned (Phase 8), not yet implemented**
 - Frontend: Next.js (web) — React Native (mobile) is a future consideration
 
 ## 9. Open Questions

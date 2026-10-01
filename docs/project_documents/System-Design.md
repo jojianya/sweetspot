@@ -198,32 +198,6 @@ CREATE TABLE reports (
 
 ---
 
-## 5. Livestreaming Design — **Phase 8, planned, not yet implemented**
-
-```
-Broadcaster taps "Go Live"
-  → POST /streams { pinId }
-  → Go API creates a LiveKit room, returns broadcaster token
-  → Broadcaster's client connects to LiveKit via WebRTC, starts publishing
-
-Viewer opens the stream
-  → GET /streams/:id
-  → Go API returns a viewer token (scoped, read-only)
-  → Viewer's client connects to LiveKit, subscribes to broadcaster's tracks
-
-Chat/reactions
-  → Sent over existing WebSocket Realtime Hub (not through LiveKit)
-  → Same room/batching pattern as pin broadcasts, keyed by streamId instead of geohash
-
-Viewer count
-  → LiveKit emits webhooks on participant join/leave
-  → Go API updates count (and streams.peak_viewer_count if a new high), pushes via WebSocket to the stream's room
-```
-
-**Why chat goes through your own WebSocket hub, not LiveKit's data channel:** keeps chat, viewer count, and pin events all on one consistent real-time infrastructure you control and can evolve (e.g., persisting chat history to Postgres) rather than splitting logic across two systems.
-
----
-
 ## 6. Failure & Edge Case Handling
 
 | Scenario                                                           | Handling                                                                                                                                                        |
@@ -235,7 +209,6 @@ Viewer count
 | Non-admin attempts to review a report, or non-owner attempts a role change | ✅ Middleware rejects with 403 before handler logic runs                                                                                                     |
 | Viewport query on sparse data                                      | ✅ Standard bounding-box query, no special handling needed at this scale                                                                                           |
 | Viewport query on dense hotspot (thousands of pins in view)        | ✅ Paginate via `LIMIT` param (default 200, max 200); marker clustering planned for frontend                                                                    |
-| LiveKit room fails to start                                        | **Phase 8:** Return error to broadcaster before they think they're live; don't create a "phantom" stream row                                                                 |
 | Redis goes down                                                    | ✅ Real-time updates degrade to single-instance-only (if only one instance up) or pause; core REST API (pins, auth) keeps working since it doesn't depend on Redis (currently Redis is only used for JWT blacklist, so logout is temporarily affected) |
 
 ---
@@ -243,10 +216,8 @@ Viewer count
 ## 7. What's Deliberately Deferred (not yet implemented)
 
 - WebSocket real-time layer (Phase 5) — code scaffolded, not built
-- Livestreaming via LiveKit (Phase 8) — code scaffolded, not built
 - Cloudflare R2 storage (Phase 6) — env vars documented, not wired
 - Multi-region deployment
 - Dedicated microservice split (Realtime Hub as separate service from API) — start as one Go binary, split only if profiling shows a real need
 - Full Kafka-style event streaming — Redis Pub/Sub is sufficient at MVP/early-growth scale
-- Self-hosted LiveKit — start on LiveKit Cloud (managed)
 - Transactional outbox for pin broadcast events — noted as a known gap in §6, not yet implemented

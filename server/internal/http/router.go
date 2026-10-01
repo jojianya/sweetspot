@@ -96,7 +96,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 
 	// Real-time stream of newly created pins (SSE). Registered before the
 	// pin routes so /events never collides with a parameter route.
-	realtimeHandler := realtime.NewHandler(c.Events)
+	realtimeHandler := realtime.NewHandler(c.Events, cfg.MaxSSEConnections)
 	jsonRoutes.GET("/events", realtimeHandler.Stream)
 
 	pinHandler := pins.NewHandler(c.PinRepo, c.Store, c.Events, c.UserService)

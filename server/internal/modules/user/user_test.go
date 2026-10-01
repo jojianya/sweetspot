@@ -7,18 +7,18 @@ import (
 )
 
 type mockRepository struct {
-	users             map[string]User
-	owners            int
-	created           User
-	createErr         error
-	byEmailErr        error
-	updateErr         error
-	updateProfile     User
-	updateProfileErr  error
-	search            []User
-	searchErr         error
-	list              []User
-	count             int
+	users            map[string]User
+	owners           int
+	created          User
+	createErr        error
+	byEmailErr       error
+	updateErr        error
+	updateProfile    User
+	updateProfileErr error
+	search           []User
+	searchErr        error
+	list             []User
+	count            int
 }
 
 func (m *mockRepository) Create(ctx context.Context, email, passwordHash, username string) (User, error) {

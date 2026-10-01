@@ -6,6 +6,7 @@ import Avatar from "@/components/Avatar";
 import { useComments } from "@/hooks/useComments";
 import { errorMessage, relativeTime } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
+import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
 import type { Comment } from "@/lib/types";
 
 interface CommentsSectionProps {
@@ -71,13 +72,25 @@ export default function CommentsSection({ pinId, compact = false }: CommentsSect
         )}
       </div>
 
-      {loading && (
-        <p className="py-3 text-center text-sm text-zinc-400 dark:text-zinc-500">
-          Loading comments…
-        </p>
-      )}
-
-      {!loading && error && (
+      {loading ? (
+        <SkeletonRegion label="Loading comments…">
+          <ul className={`space-y-3 ${compact ? "max-h-52 overflow-y-auto pr-1" : ""}`} role="list" aria-busy="true">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <li key={`skeleton-${i}`} className="flex items-start gap-2.5">
+                <Skeleton className="h-8 w-8 rounded-full shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <Skeleton className="h-4 w-24 shrink-0" style={{ height: "16px" }} />
+                    <Skeleton className="h-3 w-16 shrink-0" style={{ height: "12px" }} />
+                  </div>
+                  <Skeleton className="mt-1 h-3 w-3/4" style={{ height: "12px" }} />
+                  <Skeleton className="h-3 w-1/2" style={{ height: "12px" }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </SkeletonRegion>
+      ) : error ? (
         <div className="flex items-center gap-2 py-3 text-sm text-rose-600 dark:text-rose-400">
           <span>{error}</span>
           <button
@@ -88,7 +101,7 @@ export default function CommentsSection({ pinId, compact = false }: CommentsSect
             Retry
           </button>
         </div>
-      )}
+      ) : null}
 
       {!loading && !error && comments.length === 0 && (
         <p className="py-3 text-sm text-zinc-400 dark:text-zinc-500">

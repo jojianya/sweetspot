@@ -7,6 +7,7 @@ import { fetchFeed } from "@/lib/api";
 import { relativeTime } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
 import type { PinListEntry } from "@/lib/types";
 
 export default function FeedPage() {
@@ -58,9 +59,26 @@ export default function FeedPage() {
         </h1>
 
         {loading && (
-          <p className="py-10 text-center text-sm text-zinc-400 dark:text-zinc-500">
-            Loading pins…
-          </p>
+          <SkeletonRegion label="Loading feed…">
+            <ul className="space-y-2.5" role="list" aria-busy="true">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <li key={`skeleton-${i}`}>
+                  <Link
+                    href="#"
+                    className="flex items-center gap-3 rounded-xl border border-zinc-200/70 p-2.5"
+                    aria-hidden="true"
+                  >
+                    <Skeleton className="h-16 w-16 shrink-0 rounded-lg" />
+                    <span className="min-w-0 flex-1">
+                      <Skeleton className="h-4 w-5/6" style={{ height: "16px" }} />
+                      <Skeleton className="h-3 w-1/3" style={{ height: "12px" }} />
+                    </span>
+                    <Skeleton className="h-4 w-4 shrink-0" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </SkeletonRegion>
         )}
 
         {!loading && error && (

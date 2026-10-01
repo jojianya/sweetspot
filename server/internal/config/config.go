@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -41,6 +42,7 @@ type Config struct {
 	CORSAllowedOrigins []string
 	SentryDSN          string
 	SentryEnv          string
+	MaxSSEConnections  int
 }
 
 func Load() *Config {
@@ -66,13 +68,11 @@ func Load() *Config {
 		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
 		SentryDSN:          getEnv("SENTRY_DSN", ""),
 		SentryEnv:          getEnv("SENTRY_ENV", "development"),
+		MaxSSEConnections:  getEnvInt("MAX_SSE_CONNECTIONS", 1000),
 	}
 
-	// A missing JWT_SECRET would silently boot with an empty HMAC key, letting
-	// anyone mint tokens for any user/role. Fail fast instead of running
-	// insecure. (docker-compose also fail-fasts via `:?` on this variable.)
-	if cfg.JWTSecret == "" {
-		log.Fatal("JWT_SECRET is required: set it in .env or the environment (generate with: openssl rand -hex 32)")
+	if err := validateJWTSecret(cfg.JWTSecret); err != nil {
+		log.Fatal(err)
 	}
 	if err := validateAppEnv(cfg.AppEnv); err != nil {
 		log.Fatal(err)
@@ -116,11 +116,24 @@ func validateStorageBase(raw, appEnv string) error {
 	}
 
 	loopback := isLoopbackHost(parsed.Hostname())
-	if parsed.Scheme != "https" && !loopback {
-		return fmt.Errorf("STORAGE_BASE_URL must use https unless it is a local address")
+	private := isPrivateIP(parsed.Hostname())
+	if parsed.Scheme != "https" && !loopback && !private {
+		return fmt.Errorf("STORAGE_BASE_URL must use https unless it is a local or private address")
 	}
-	if strings.EqualFold(appEnv, "production") && loopback {
+	if strings.EqualFold(appEnv, "production") && (loopback || private) {
 		return fmt.Errorf("STORAGE_BASE_URL must be publicly reachable in production")
+	}
+	return nil
+}
+
+// validateJWTSecret checks that the JWT secret is non-empty and at least 32
+// characters (256 bits) for sufficient entropy against brute force.
+func validateJWTSecret(secret string) error {
+	if secret == "" {
+		return fmt.Errorf("JWT_SECRET is required: set it in .env or the environment (generate with: openssl rand -hex 32)")
+	}
+	if len(secret) < 32 {
+		return fmt.Errorf("JWT_SECRET must be at least 32 characters (256 bits)")
 	}
 	return nil
 }
@@ -132,6 +145,33 @@ func isLoopbackHost(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+}
+
+// isPrivateIP reports whether the host is a private (RFC 1918) IP address.
+// Allows HTTP for LAN development without requiring TLS certificates.
+func isPrivateIP(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	// Convert to 4-byte IPv4 representation if it's an IPv4-mapped IPv6 address.
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return false // not an IPv4 address
+	}
+	// 10.0.0.0/8
+	if ip4[0] == 10 {
+		return true
+	}
+	// 172.16.0.0/12
+	if ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31 {
+		return true
+	}
+	// 192.168.0.0/16
+	if ip4[0] == 192 && ip4[1] == 168 {
+		return true
+	}
+	return false
 }
 
 func getOrigins(raw string) []string {
@@ -152,6 +192,15 @@ func (c *Config) DSN() string {
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
 	}
 	return fallback
 }

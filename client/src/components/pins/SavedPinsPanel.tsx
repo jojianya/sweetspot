@@ -7,6 +7,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useCollections } from "@/hooks/useCollections";
 import { fetchCollection, removePinFromCollection } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
+import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
 import type { CollectionDetail, PinListEntry } from "@/lib/types";
 
 interface SavedPinsPanelProps {
@@ -256,9 +257,19 @@ export default function SavedPinsPanel({
         ) : tab === "saved" ? (
           <>
             {loading && (
-              <p className="px-3 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                Loading saved pins…
-              </p>
+              <SkeletonRegion label="Loading saved pins…">
+                <ul className="space-y-1" role="list" aria-busy="true">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <li key={`skeleton-${i}`} className="flex items-center gap-3 rounded-xl px-2.5 py-2.5">
+                      <Skeleton className="h-14 w-14 shrink-0 rounded-xl" />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <Skeleton className="h-4 w-3/4" style={{ height: "16px" }} />
+                        <Skeleton className="h-3 w-1/2" style={{ height: "12px" }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </SkeletonRegion>
             )}
 
             {!loading && error && (
@@ -351,9 +362,19 @@ export default function SavedPinsPanel({
             )}
 
             {collectionsLoading && (
-              <p className="px-3 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                Loading collections…
-              </p>
+              <SkeletonRegion label="Loading collections…">
+                <ul className="space-y-1" role="list" aria-busy="true">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <li key={`skeleton-${i}`} className="flex items-center gap-3 rounded-xl px-2.5 py-2.5">
+                      <Skeleton className="h-14 w-14 shrink-0 rounded-xl" />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <Skeleton className="h-4 w-3/4" style={{ height: "16px" }} />
+                        <Skeleton className="h-3 w-1/2" style={{ height: "12px" }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </SkeletonRegion>
             )}
 
             {!collectionsLoading && collectionsError && (

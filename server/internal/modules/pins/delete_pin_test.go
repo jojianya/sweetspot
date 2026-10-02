@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 )
 
@@ -25,17 +26,27 @@ type stubRepo struct {
 	getErr error
 	delErr error
 
-	deletedID     string
-	deletedUserID string
+	deletedID          string
+	deletedUserID      string
+	deletedIsModerator bool
 }
 
 func (s *stubRepo) GetPin(context.Context, string) (PinDetail, error) {
 	return s.detail, s.getErr
 }
 
-func (s *stubRepo) DeletePin(_ context.Context, id, userID string) error {
-	s.deletedID, s.deletedUserID = id, userID
+func (s *stubRepo) DeletePin(_ context.Context, id, userID string, isModerator bool) error {
+	s.deletedID, s.deletedUserID, s.deletedIsModerator = id, userID, isModerator
 	return s.delErr
+}
+
+// stubRoles is a one-method RoleReader returning a fixed role for any caller.
+type stubRoles struct {
+	role string
+}
+
+func (s stubRoles) GetByID(context.Context, string) (users.User, error) {
+	return users.User{Role: s.role}, nil
 }
 
 // newDeleteHarness wires a handler with a stub repo and a real local storage in
@@ -145,10 +156,10 @@ func TestDeletePinForbiddenLeavesFilesOnDisk(t *testing.T) {
 	}
 }
 
-// TestDeletePinNotFoundReturns404 keeps the 404 path intact now that the handler
-// reads the pin first: a missing pin must still be 404, not 500.
+// TestDeletePinNotFoundReturns404 keeps the 404 path intact: a missing or
+// already-hidden pin must still be 404, not 500.
 func TestDeletePinNotFoundReturns404(t *testing.T) {
-	r := newDeleteHarness(t, &stubRepo{getErr: ErrNotFound}, t.TempDir())
+	r := newDeleteHarness(t, &stubRepo{delErr: ErrNotFound}, t.TempDir())
 
 	w := deletePin(r, "gone")
 	if w.Code != http.StatusNotFound {
@@ -170,5 +181,43 @@ func TestDeletePinHandlesPinWithNoPhotos(t *testing.T) {
 
 	if w := deletePin(r, "pin-1"); w.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+// TestDeletePinForwardsModeratorFlag proves the moderator bypass reaches the
+// repository as a flag (same IsModerator check as UpdatePin) instead of a
+// handler-side owner comparison, so the SQL predicate decides atomically.
+func TestDeletePinForwardsModeratorFlag(t *testing.T) {
+	dir := t.TempDir()
+	repo := &stubRepo{detail: PinDetail{Photos: []PinPhoto{}}}
+	h := &Handler{repo: repo, store: storage.NewLocal(dir, "http://api.test"), roles: stubRoles{role: users.RoleAdmin}}
+	r := gin.New()
+	r.DELETE("/pins/:id", func(c *gin.Context) {
+		c.Set("user_id", "moderator-1")
+		h.DeletePin(c)
+	})
+
+	if w := deletePin(r, "pin-9"); w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if !repo.deletedIsModerator {
+		t.Error("expected isModerator=true to reach the repository for an admin caller")
+	}
+	if repo.deletedUserID != "moderator-1" {
+		t.Errorf("DeletePin got userID %q, want \"moderator-1\"", repo.deletedUserID)
+	}
+}
+
+// TestDeletePinNonModeratorFlagIsFalse guards the common path: a plain owner
+// delete must not claim moderation rights.
+func TestDeletePinNonModeratorFlagIsFalse(t *testing.T) {
+	repo := &stubRepo{detail: PinDetail{Photos: []PinPhoto{}}}
+	r := newDeleteHarness(t, repo, t.TempDir())
+
+	if w := deletePin(r, "pin-1"); w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if repo.deletedIsModerator {
+		t.Error("expected isModerator=false for a handler without roles")
 	}
 }

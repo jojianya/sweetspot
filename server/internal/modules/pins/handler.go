@@ -203,23 +203,18 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		return
 	}
 
-	// Read the pin before deleting it. pin_photos rows are removed with the pin
-	// (ON DELETE CASCADE), so afterwards there is no way to learn which files
-	// belonged to it and they would sit on disk forever, still publicly served
-	// under their original URL. GetPin reads the same data the public
-	// GET /pins/:id returns, so this is not a privileged read.
 	id := c.Param("id")
-	existing, err := h.repo.GetPin(c.Request.Context(), id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.NotFound(c, "pin not found")
-			return
-		}
-		response.Internal(c, "delete pin: load pin", err, "pin_id", id, "user_id", userID)
-		return
+
+	// Moderation check reuses the same live-DB IsModerator as UpdatePin, so a
+	// demotion takes effect immediately. It is computed unconditionally (not
+	// from a pre-loaded owner) because authorization lives in the repository
+	// UPDATE predicate below — the pre-delete read is only for photo cleanup.
+	isModerator := false
+	if h.roles != nil {
+		isModerator = users.IsModerator(h.roles, c)
 	}
 
-	if err := h.repo.DeletePin(c.Request.Context(), id, userID); err != nil {
+	if err := h.repo.DeletePin(c.Request.Context(), id, userID, isModerator); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
 			return
@@ -230,6 +225,21 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		}
 		response.Internal(c, "delete pin", err, "pin_id", id, "user_id", userID)
 		return
+	}
+
+	// Load the (now hidden) pin for photo cleanup and moderator audit logging.
+	// pin_photos rows survive the soft-hide, so this read sees the
+	// authoritative set. A read failure here must not fail the delete; files
+	// are unreferenced either way and the miss is logged for a sweep.
+	existing, err := h.repo.GetPin(c.Request.Context(), id)
+	if err != nil {
+		slog.Warn("delete pin: load for cleanup", "error", err.Error(), "pin_id", id, "user_id", userID)
+		response.NoContent(c)
+		return
+	}
+
+	if existing.UserID.String() != userID {
+		slog.Info("moderator deleted pin", "moderator_id", userID, "pin_id", id, "owner_id", existing.UserID.String())
 	}
 
 	// Best-effort cleanup, matching what UpdatePin does for replaced photos. The

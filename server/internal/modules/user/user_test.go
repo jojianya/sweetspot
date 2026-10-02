@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
+
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 )
 
 type mockRepository struct {
@@ -55,6 +58,18 @@ func (m *mockRepository) GetByID(_ context.Context, id string) (User, error) {
 		return User{}, ErrNotFound
 	}
 	return u, nil
+}
+
+func (m *mockRepository) GetSessionState(_ context.Context, id string) (middleware.SessionState, error) {
+	u, ok := m.users[id]
+	if !ok {
+		return middleware.SessionState{}, ErrNotFound
+	}
+	var floor time.Time
+	if u.SessionsValidAfter != nil {
+		floor = *u.SessionsValidAfter
+	}
+	return middleware.SessionState{ValidAfter: floor, Role: u.Role}, nil
 }
 
 func (m *mockRepository) CountOwners(_ context.Context) (int, error) {

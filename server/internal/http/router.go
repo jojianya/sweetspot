@@ -107,11 +107,16 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		auth.SameSiteMode(cfg.CookieSameSite),
 		cfg.TrustedProxies,
 	)
-	auth.RegisterRoutes(jsonRoutes, authHandler, auth.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, CookieSameSite: auth.SameSiteMode(cfg.CookieSameSite)})
+	auth.RegisterRoutes(jsonRoutes, authHandler, auth.RouteOptions{
+		JWTSecret:      cfg.JWTSecret,
+		Blacklist:      c.Blacklist,
+		CookieSameSite: auth.SameSiteMode(cfg.CookieSameSite),
+		Sessions:       c.UserService,
+	})
 
 	userHandler := users.NewHandler(c.UserService, c.Store)
 	// Registered on uploadRoutes: PATCH /users/me is multipart (avatar upload).
-	users.RegisterRoutes(uploadRoutes, userHandler, users.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+	users.RegisterRoutes(uploadRoutes, userHandler, users.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
 
 	// Real-time stream of newly created pins (SSE). Registered before the
 	// pin routes so /events never collides with a parameter route.
@@ -119,29 +124,31 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	jsonRoutes.GET("/events", realtimeHandler.Stream)
 
 	pinHandler := pins.NewHandler(c.PinRepo, c.Store, c.Events, c.UserService)
-	pins.RegisterRoutes(uploadRoutes, pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+	pins.RegisterRoutes(uploadRoutes, pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
 
 	reportHandler := reports.NewHandler(reports.NewService(c.ReportRepo))
 	reports.RegisterRoutes(jsonRoutes, reportHandler, reports.RouteOptions{
 		JWTSecret:   cfg.JWTSecret,
 		Blacklist:   c.Blacklist,
 		UserService: c.UserService,
+		Sessions:    c.UserService,
 	})
 
 	favoriteHandler := favorites.NewHandler(c.FavoriteRepo)
 	favorites.RegisterRoutes(jsonRoutes, favoriteHandler, favorites.RouteOptions{
 		JWTSecret: cfg.JWTSecret,
 		Blacklist: c.Blacklist,
+		Sessions:  c.UserService,
 	})
 
 	commentHandler := comments.NewHandler(c.CommentRepo, c.UserService)
-	comments.RegisterRoutes(jsonRoutes, commentHandler, comments.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+	comments.RegisterRoutes(jsonRoutes, commentHandler, comments.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
 
 	socialHandler := social.NewHandler(c.SocialRepo)
-	social.RegisterRoutes(jsonRoutes, socialHandler, social.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+	social.RegisterRoutes(jsonRoutes, socialHandler, social.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
 
 	collectionHandler := collections.NewHandler(c.CollectionRepo, c.UserService)
-	collections.RegisterRoutes(jsonRoutes, collectionHandler, collections.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist})
+	collections.RegisterRoutes(jsonRoutes, collectionHandler, collections.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
 
 	return r
 }

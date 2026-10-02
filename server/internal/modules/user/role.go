@@ -22,10 +22,16 @@ type RoleReader interface {
 // CurrentRole resolves the caller role from the request context using the user
 // service.
 //
-// The role is read live from the database rather than taken from the JWT. A
-// role claim baked in at login goes stale: demoting an admin would otherwise
-// leave them authorized until their token expired.
+// When the auth middleware already resolved the session it caches the live
+// role on the context, and that cached value wins: it came from the same
+// database read that enforced session revocation, so reusing it adds no query
+// and cannot disagree with the middleware. Otherwise this falls back to a
+// live lookup, preserving the stale-JWT-role fix for callers outside
+// middleware (tests, optional-auth paths without a checker).
 func CurrentRole(svc RoleReader, c *gin.Context) string {
+	if role := c.GetString(middleware.CtxRole); role != "" {
+		return role
+	}
 	userID := middleware.GetUserID(c)
 	if userID == "" {
 		return ""

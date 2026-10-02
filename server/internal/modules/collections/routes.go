@@ -10,10 +10,11 @@ import (
 type RouteOptions struct {
 	JWTSecret string
 	Blacklist *cache.Blacklist
+	Sessions  middleware.SessionChecker
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
-	authRequired := middleware.AuthRequired(opts.JWTSecret, opts.Blacklist)
+	authRequired := middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions)
 
 	rg.GET("/users/:id/collections", validid.Middleware(), h.ListByUser)
 

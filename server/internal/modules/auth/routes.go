@@ -12,6 +12,7 @@ type RouteOptions struct {
 	JWTSecret      string
 	Blacklist      *cache.Blacklist
 	CookieSameSite SameSiteMode
+	Sessions       middleware.SessionChecker
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
@@ -31,8 +32,8 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 		loginIP.Middleware(),
 		h.Login)
 
-	rg.POST("/auth/logout", middleware.AuthRequired(opts.JWTSecret, opts.Blacklist), h.Logout)
-	rg.GET("/me", middleware.AuthRequired(opts.JWTSecret, opts.Blacklist), h.Me)
+	rg.POST("/auth/logout", middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions), h.Logout)
+	rg.GET("/me", middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions), h.Me)
 }
 
 // globalKey is a constant-function key so the MiddlewareKeyed limiter applies a

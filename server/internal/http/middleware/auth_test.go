@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,7 +44,7 @@ func testContext() *gin.Context {
 // down. IsRevoked returns an error on outage; the request must be denied rather
 // than let through on the assumption that the token is still valid.
 func TestValidateTokenFailsClosedWhenBlacklistUnavailable(t *testing.T) {
-	_, reason, ok := validateToken(testContext(), testSecret, unreachableBlacklist(), signedToken(t))
+	_, reason, ok := validateToken(testContext(), testSecret, unreachableBlacklist(), nil, signedToken(t))
 
 	if ok {
 		t.Fatal("validateToken accepted a token while the blacklist was unreachable; " +
@@ -57,7 +59,7 @@ func TestValidateTokenFailsClosedWhenBlacklistUnavailable(t *testing.T) {
 // "always deny": with no revocation store configured the token is still
 // signature-checked and accepted.
 func TestValidateTokenAllowsWhenNoBlacklistConfigured(t *testing.T) {
-	claims, reason, ok := validateToken(testContext(), testSecret, nil, signedToken(t))
+	claims, reason, ok := validateToken(testContext(), testSecret, nil, nil, signedToken(t))
 	if !ok {
 		t.Fatalf("validateToken rejected a valid token with no blacklist configured (reason: %s)", reason)
 	}
@@ -69,7 +71,57 @@ func TestValidateTokenAllowsWhenNoBlacklistConfigured(t *testing.T) {
 // TestValidateTokenRejectsBadSignature confirms the deny path is specific to the
 // blacklist failure and is not masking signature validation.
 func TestValidateTokenRejectsBadSignature(t *testing.T) {
-	if _, _, ok := validateToken(testContext(), "a-different-secret", nil, signedToken(t)); ok {
+	if _, _, ok := validateToken(testContext(), "a-different-secret", nil, nil, signedToken(t)); ok {
 		t.Error("validateToken accepted a token signed with a different secret")
+	}
+}
+
+// stubChecker is a SessionChecker with a fixed floor, role, or error.
+type stubChecker struct {
+	state SessionState
+	err   error
+}
+
+func (s stubChecker) CheckSession(context.Context, string) (SessionState, error) {
+	return s.state, s.err
+}
+
+func TestValidateTokenRejectsSessionBeforeFloor(t *testing.T) {
+	checker := stubChecker{state: SessionState{
+		ValidAfter: time.Now().Add(time.Minute),
+		Role:       "user",
+	}}
+	_, reason, ok := validateToken(testContext(), testSecret, nil, checker, signedToken(t))
+	if ok {
+		t.Fatal("validateToken accepted a token issued before sessions_valid_after")
+	}
+	if reason == "" {
+		t.Error("expected a non-empty reason for the denial, got an empty string")
+	}
+}
+
+func TestValidateTokenAcceptsSessionAfterFloor(t *testing.T) {
+	c := testContext()
+	checker := stubChecker{state: SessionState{
+		ValidAfter: time.Now().Add(-time.Minute),
+		Role:       "admin",
+	}}
+	_, _, ok := validateToken(c, testSecret, nil, checker, signedToken(t))
+	if !ok {
+		t.Fatal("validateToken rejected a token issued after sessions_valid_after")
+	}
+	if got := c.GetString(CtxRole); got != "admin" {
+		t.Errorf("expected cached role %q, got %q", "admin", got)
+	}
+}
+
+func TestValidateTokenFailsClosedWhenCheckerErrors(t *testing.T) {
+	checker := stubChecker{err: errors.New("db down")}
+	_, reason, ok := validateToken(testContext(), testSecret, nil, checker, signedToken(t))
+	if ok {
+		t.Fatal("validateToken accepted a token while the session check errored")
+	}
+	if reason == "" {
+		t.Error("expected a non-empty reason for the denial, got an empty string")
 	}
 }

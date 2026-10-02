@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 )
 
 type Repository interface {
@@ -16,6 +18,9 @@ type Repository interface {
 	GetByUsername(ctx context.Context, username string) (User, error)
 	GetByLogin(ctx context.Context, identifier string) (User, error)
 	GetByID(ctx context.Context, id string) (User, error)
+	// GetSessionState loads the session posture (live role + revocation
+	// floor) in one indexed lookup for the auth middleware.
+	GetSessionState(ctx context.Context, id string) (middleware.SessionState, error)
 	CountUsers(ctx context.Context) (int, error)
 	CountOwners(ctx context.Context) (int, error)
 	// ListUsers returns a page of users plus the total count. The count comes
@@ -127,6 +132,26 @@ func (r *postgresRepository) GetByID(ctx context.Context, id string) (User, erro
 		return User{}, err
 	}
 	return u, nil
+}
+
+func (r *postgresRepository) GetSessionState(ctx context.Context, id string) (middleware.SessionState, error) {
+	var state middleware.SessionState
+	var validAfter *time.Time
+	var role string
+	err := r.pool.QueryRow(ctx, `
+		SELECT role, sessions_valid_after FROM users WHERE id = $1
+	`, id).Scan(&role, &validAfter)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return middleware.SessionState{}, ErrNotFound
+	}
+	if err != nil {
+		return middleware.SessionState{}, err
+	}
+	state.Role = role
+	if validAfter != nil {
+		state.ValidAfter = *validAfter
+	}
+	return state, nil
 }
 
 func (r *postgresRepository) CountOwners(ctx context.Context) (int, error) {

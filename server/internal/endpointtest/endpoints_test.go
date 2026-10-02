@@ -129,6 +129,17 @@ func (m *mockUserService) GetByID(ctx context.Context, id string) (users.User, e
 	return u, nil
 }
 
+// CheckSession mirrors GetByID for the auth middleware: mock users carry no
+// revocation floor (zero ValidAfter, so any issued token passes) and their
+// stored role. Unknown users fail closed, like a deleted account.
+func (m *mockUserService) CheckSession(_ context.Context, id string) (middleware.SessionState, error) {
+	u, ok := m.users[id]
+	if !ok {
+		return middleware.SessionState{}, users.ErrNotFound
+	}
+	return middleware.SessionState{Role: u.Role}, nil
+}
+
 func (m *mockUserService) UpdateRole(ctx context.Context, actorID, userID, role string) (users.User, error) {
 	if actorID == userID {
 		return users.User{}, users.ErrCannotChangeOwnRole

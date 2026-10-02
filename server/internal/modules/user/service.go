@@ -1,6 +1,10 @@
 package users
 
-import "context"
+import (
+	"context"
+
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+)
 
 type Service interface {
 	Create(ctx context.Context, email, passwordHash, username string) (User, error)
@@ -8,6 +12,10 @@ type Service interface {
 	GetByUsername(ctx context.Context, username string) (User, error)
 	GetByLogin(ctx context.Context, identifier string) (User, error)
 	GetByID(ctx context.Context, id string) (User, error)
+	// CheckSession loads the session posture for the auth middleware
+	// (middleware.SessionChecker). Kept on the interface so the router can
+	// wire the real service into every route group uniformly.
+	CheckSession(ctx context.Context, id string) (middleware.SessionState, error)
 	CountUsers(ctx context.Context) (int, error)
 	CountOwners(ctx context.Context) (int, error)
 	ListUsers(ctx context.Context, limit, offset int) ([]User, int, error)
@@ -42,6 +50,12 @@ func (s *service) GetByLogin(ctx context.Context, identifier string) (User, erro
 
 func (s *service) GetByID(ctx context.Context, id string) (User, error) {
 	return s.repo.GetByID(ctx, id)
+}
+
+// CheckSession loads the session posture (live role + revocation floor) for
+// the auth middleware in a single indexed lookup.
+func (s *service) CheckSession(ctx context.Context, id string) (middleware.SessionState, error) {
+	return s.repo.GetSessionState(ctx, id)
 }
 
 func (s *service) SearchUsers(ctx context.Context, query string, limit int) ([]User, error) {

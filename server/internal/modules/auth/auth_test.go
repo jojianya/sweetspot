@@ -69,6 +69,14 @@ func (s *stubUserService) GetByID(_ context.Context, id string) (users.User, err
 	return u, nil
 }
 
+func (s *stubUserService) CheckSession(_ context.Context, id string) (middleware.SessionState, error) {
+	u, ok := s.users[id]
+	if !ok {
+		return middleware.SessionState{}, users.ErrNotFound
+	}
+	return middleware.SessionState{Role: u.Role}, nil
+}
+
 func (s *stubUserService) UpdateRole(context.Context, string, string, string) (users.User, error) {
 	return users.User{}, nil
 }

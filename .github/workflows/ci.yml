@@ -150,7 +150,7 @@ jobs:
           MIGRATION_TEST_DB: goodspotdb
         run: go test ./internal/platform/database/ -run TestMigrationUpDownUp -count=1 -v
 
-      - name: Test DB-backed endpoint tests (DeletePin against PostGIS)
+      - name: Test DB-backed endpoint tests (PostGIS)
         env:
           DB_HOST: localhost
           DB_PORT: '5432'
@@ -163,7 +163,7 @@ jobs:
           PGPASSWORD: testpass
         run: |
           psql -h localhost -U postgres -d goodspotdb -tc "SELECT 1 FROM pg_database WHERE datname='endpoint_test'" | grep -q 1 || psql -h localhost -U postgres -d goodspotdb -c 'CREATE DATABASE endpoint_test'
-          go test ./internal/endpointtest/ -run 'TestDBDeletePin' -race -count=1 -v
+          go test ./internal/endpointtest/ -run 'TestDBDeletePin|TestDBPasswordReset|TestDBCollection' -race -count=1 -v
 
       - name: Vet
         run: go vet ./...

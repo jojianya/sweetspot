@@ -10,10 +10,13 @@ must be replaced during first deploy.
    uploads). Open ports 80/443 to the internet; nothing else.
 2. Install Docker + compose plugin. Clone the repo, check out the release tag.
 3. Create `.env` from `.env.example`. Required: `DOMAIN`, `SITE_URL`
-   (`https://[FILL IN]`), `STORAGE_BASE_URL` (`https://[FILL IN]`, serving
+   (`https://[FILL IN]`), `PUBLIC_BASE_URL` (same public origin; reset links
+   are built from it), `STORAGE_BASE_URL` (`https://[FILL IN]`, serving
    `/uploads`), `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `JWT_SECRET`
    (`openssl rand -hex 32`), `NEXT_PUBLIC_MAPTILER_API_KEY` (restricted in the
-   MapTiler dashboard). Optional: `SENTRY_DSN`, `SENTRY_ENV=production`.
+   MapTiler dashboard), `MAILER_WEBHOOK_URL` (production refuses to boot
+   without it; email provider [FILL IN]). Optional: `SENTRY_DSN`,
+   `SENTRY_ENV=production`.
 4. Generate Postgres TLS assets: `./scripts/generate-db-certs.sh` (writes
    gitignored `./secrets/db/`; never commit them).
 5. `docker compose -f docker-compose.prod.yml build`

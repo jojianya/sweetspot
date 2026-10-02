@@ -12,12 +12,16 @@ interface NavbarProps {
   /** When set, renders a pill link on the left (e.g. back to the map). */ 
   backHref?: string;
   backLabel?: string;
+  /** Hides the right-hand account navigation. Used by pages that provide
+   * their own contextual navigation (e.g. the reports console). */
+  hideAccountNav?: boolean;
 }
 
 export default function Navbar({
   children,
   backHref,
   backLabel = "Back to map",
+  hideAccountNav = false,
 }: NavbarProps) {
   const { user } = useAuth();
   const isLoggedIn = user !== null;
@@ -57,8 +61,9 @@ export default function Navbar({
           </div>
         )}
 
-        <nav className="pointer-events-auto ml-auto flex shrink-0 items-center gap-2.5">
-          {isLoggedIn && user ? (
+        {!hideAccountNav && (
+          <nav className="pointer-events-auto ml-auto flex shrink-0 items-center gap-2.5">
+            {isLoggedIn && user ? (
             <>
               {(user.role === "admin" || user.role === "owner") && (
                 <Link
@@ -108,8 +113,9 @@ export default function Navbar({
                 Join
               </Link>
             </>
-          )}
-        </nav>
+            )}
+          </nav>
+        )}
       </div>
     </header>
   );

@@ -44,12 +44,19 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	blacklist := c.Blacklist
 
 	r.GET("/health", func(c *gin.Context) {
-		// Ping both backing services. Redis is not optional: the auth
-		// middleware consults the session blacklist on every protected
-		// request, so a Redis outage is an authentication outage. Reporting
-		// "ok" while Redis is unreachable would let the container healthcheck
-		// and any load balancer keep routing to a server that cannot verify
-		// sessions.
+		// Liveness: the process is alive. Deliberately dependency-free so a
+		// Redis blip cannot mark a healthy process for restart.
+		response.JSON(c, stdhttp.StatusOK, gin.H{"status": "ok"})
+	})
+
+	r.GET("/ready", func(c *gin.Context) {
+		// Readiness: can this instance serve users right now? Pings both
+		// backing services. Redis is not optional: the auth middleware
+		// consults the session blacklist on every protected request, so a
+		// Redis outage is an authentication outage. Reporting "ok" while
+		// Redis is unreachable would keep routing users to a server that
+		// cannot verify sessions. Uptime monitors and load balancers should
+		// watch /ready; container restarts key off /health.
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
 

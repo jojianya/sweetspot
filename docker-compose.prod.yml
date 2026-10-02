@@ -89,7 +89,10 @@ services:
       GOGC: "50"
       GOMEMLIMIT: 2GiB
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/health || exit 1"]
+      # Readiness: wait for Postgres/Redis before dependents proceed. Restarts
+      # key off liveness (/health in the image HEALTHCHECK), so a Redis blip
+      # never restarts a healthy process.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/ready || exit 1"]
       interval: 30s
       timeout: 3s
       retries: 3

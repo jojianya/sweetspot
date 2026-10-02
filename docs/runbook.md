@@ -19,11 +19,13 @@ must be replaced during first deploy.
 5. `docker compose -f docker-compose.prod.yml build`
 6. `docker compose -f docker-compose.prod.yml up -d` (migrations run
    automatically on server boot).
-7. Verify: `curl -sSf https://[FILL IN]/health` (via Caddy → client? No:
-   `/health` is served by the API; check `curl -sSf http://127.0.0.1:8081/health`
-   on the VM and `https://[FILL IN]/` in a browser). Confirm the session cookie
-   carries `Secure`, HSTS is present, and `GET /events` streams
-   (`curl -N https://[FILL IN]/events?bbox=...` shows `: heartbeat` lines).
+7. Verify: `curl -sSf https://[FILL IN]/ready` reports `{status: ok}`
+   (via Caddy → client? No: `/ready` is served by the API; check
+   `http://127.0.0.1:8081/ready` on the VM if the API port is reachable, else
+   through the proxy path) and `https://[FILL IN]/` loads in a browser.
+   Confirm the session cookie carries `Secure`, HSTS is present, and
+   `GET /events` streams (`curl -N https://[FILL IN]/events?bbox=...` shows
+   `: heartbeat` lines).
 8. Register the uptime monitor (see §5).
 
 ## 1. Deploy a new release
@@ -101,13 +103,18 @@ that is the trigger to move to managed Postgres + R2 object storage
 
 Monitor: `[PROVIDER, FILL IN, or documentation only]`.
 
-* Liveness: `GET /health` must return 200 (process alive; currently also
-  reflects dependencies — see note below).
-* Recommended: alert on `GET /health != 200` for 2 consecutive minutes, and on
-  Caddy 5xx rate from its access logs.
-* Server Sentry: set `SENTRY_DSN`/`SENTRY_ENV=production` in `.env`; without a
-  DSN the server logs errors only. No client Sentry SDK in Tier 1: browser
-  crashes arrive via throttled `POST /errors` into the same pipeline.
+* Readiness: `GET /ready` must return 200 with `{status: ok}` (fails 503
+  `degraded` with `db`/`redis` fields when a dependency is down). Alert on
+  non-200 for 2 consecutive minutes, and on Caddy 5xx rate from its access
+  logs. This is the user-facing signal.
+* Liveness: `GET /health` returns 200 whenever the process is alive
+  (dependency-free by design). Container healthchecks and any restart policy
+  key off liveness, never readiness.
+* Server Sentry: set `SENTRY_DSN`/`SENTRY_ENV=production` in `.env` (already
+  wired through `docker-compose.prod.yml`; empty default keeps log-only
+  behavior). Without a DSN the server logs errors only. No client Sentry SDK
+  in Tier 1: browser crashes arrive via throttled `POST /errors` into the
+  same pipeline.
 
 ## 6. Branch and deploy policy
 
@@ -119,7 +126,7 @@ high/critical), migration test. `development` remains the integration branch.
 ## 7. Incident steps
 
 1. Triage via `docker compose -f docker-compose.prod.yml logs --tail=200
-   server client proxy` and `/health` output (`db`/`redis` fields name the
+   server client proxy` and `/ready` output (`db`/`redis` fields name the
    dependency).
 2. Redis down: auth fails closed (401 `session verification unavailable`) —
    users cannot log in until Redis recovers; logged-out tokens stay revoked

@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
+import LegalFooter from "@/components/LegalFooter";
 import { errorMessage } from "@/lib/utils";
 import { login } from "@/lib/api";
 import { useAuth } from "@/store/auth";
@@ -114,6 +115,7 @@ export default function LoginPage() {
             Sign up
           </Link>
         </p>
+        <LegalFooter />
       </div>
       </div>
     </>

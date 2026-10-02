@@ -12,10 +12,12 @@ import (
 )
 
 // CreateCollectionRequest / UpdateCollectionRequest share the same shape:
-// name is required, description is optional.
+// name is required, description is optional, and is_private is optional
+// (absent means public on create and unchanged on update).
 type CollectionRequest struct {
 	Name        string  `json:"name" binding:"required"`
 	Description *string `json:"description"`
+	IsPrivate   *bool   `json:"is_private"`
 }
 
 type Handler struct {
@@ -50,9 +52,18 @@ func (h *Handler) ListByUser(c *gin.Context) {
 		return
 	}
 
-	collections, err := h.repo.ListByUser(c.Request.Context(), userID)
-	if err != nil {
-		response.Internal(c, "collections: list by user", err, "user_id", userID)
+	// Private collections are visible only to their owner; everyone else,
+	// logged in or not, sees the public subset.
+	callerID := middleware.GetUserID(c)
+	var collections []Collection
+	var listErr error
+	if callerID != "" && callerID == userID {
+		collections, listErr = h.repo.ListByUser(c.Request.Context(), userID)
+	} else {
+		collections, listErr = h.repo.ListPublicByUser(c.Request.Context(), userID)
+	}
+	if listErr != nil {
+		response.Internal(c, "collections: list by user", listErr, "user_id", userID)
 		return
 	}
 	response.OK(c, gin.H{"collections": collections})
@@ -92,7 +103,8 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	collection, err := h.repo.Create(c.Request.Context(), middleware.GetUserID(c), name, description)
+	isPrivate := req.IsPrivate != nil && *req.IsPrivate
+	collection, err := h.repo.Create(c.Request.Context(), middleware.GetUserID(c), name, description, isPrivate)
 	if err != nil {
 		response.Internal(c, "collections: create", err, "user_id", middleware.GetUserID(c))
 		return
@@ -113,6 +125,13 @@ func (h *Handler) Get(c *gin.Context) {
 		return
 	}
 
+	// Private collections exist only for their owner: anyone else gets 404,
+	// the same convention as hidden pins, so privacy is not enumerable.
+	if collection.IsPrivate && collection.UserID.String() != middleware.GetUserID(c) {
+		response.NotFound(c, "collection not found")
+		return
+	}
+
 	pins, err := h.repo.ListPins(c.Request.Context(), id)
 	if err != nil {
 		response.Internal(c, "collections: get pins", err, "collection_id", id)
@@ -122,16 +141,17 @@ func (h *Handler) Get(c *gin.Context) {
 	response.OK(c, gin.H{"collection": CollectionDetail{Collection: collection, Pins: pins}})
 }
 
-// requireOwner aborts unless the caller owns the collection (or moderates).
-func (h *Handler) requireOwner(c *gin.Context) bool {
+// requireOwner aborts unless the caller owns the collection (or moderates),
+// returning the collection so callers can reuse the read.
+func (h *Handler) requireOwner(c *gin.Context) (Collection, bool) {
 	collection, err := h.repo.Get(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
-			return false
+			return Collection{}, false
 		}
 		response.Internal(c, "collections: get", err, "collection_id", c.Param("id"))
-		return false
+		return Collection{}, false
 	}
 
 	userID := middleware.GetUserID(c)
@@ -139,14 +159,15 @@ func (h *Handler) requireOwner(c *gin.Context) bool {
 		// Only non-owners reach the role lookup, keeping it off the common path.
 		if !users.IsModerator(h.roles, c) {
 			response.Forbidden(c, "you can only modify your own collections")
-			return false
+			return Collection{}, false
 		}
 	}
-	return true
+	return collection, true
 }
 
 func (h *Handler) Update(c *gin.Context) {
-	if !h.requireOwner(c) {
+	existing, ok := h.requireOwner(c)
+	if !ok {
 		return
 	}
 
@@ -161,7 +182,16 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.Update(c.Request.Context(), c.Param("id"), name, description); err != nil {
+	// Absent means unchanged, so partial updates cannot flip visibility by
+	// accident; only the owner can change it (requireOwner already enforced
+	// ownership or moderation, and moderators editing a private collection
+	// they can already see keep its flag unless they set it).
+	isPrivate := existing.IsPrivate
+	if req.IsPrivate != nil {
+		isPrivate = *req.IsPrivate
+	}
+
+	if err := h.repo.Update(c.Request.Context(), c.Param("id"), name, description, isPrivate); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return
@@ -174,7 +204,7 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	if !h.requireOwner(c) {
+	if _, ok := h.requireOwner(c); !ok {
 		return
 	}
 
@@ -191,7 +221,7 @@ func (h *Handler) Delete(c *gin.Context) {
 }
 
 func (h *Handler) AddPin(c *gin.Context) {
-	if !h.requireOwner(c) {
+	if _, ok := h.requireOwner(c); !ok {
 		return
 	}
 
@@ -215,7 +245,7 @@ func (h *Handler) AddPin(c *gin.Context) {
 }
 
 func (h *Handler) RemovePin(c *gin.Context) {
-	if !h.requireOwner(c) {
+	if _, ok := h.requireOwner(c); !ok {
 		return
 	}
 

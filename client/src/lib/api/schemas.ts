@@ -75,6 +75,7 @@ export const collectionEntrySchema = z.object({
   user_id: z.string(),
   name: z.string(),
   description: z.string().nullable(),
+  is_private: z.boolean(),
   created_at: z.string(),
   pin_count: z.number(),
   cover_url: z.string(),

@@ -634,6 +634,11 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {c.name}
+                        {c.is_private && (
+                          <span className="ml-1.5 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                            Private
+                          </span>
+                        )}
                       </span>
                       <span className="block text-xs text-zinc-500 dark:text-zinc-400">
                         {c.pin_count} pin{c.pin_count === 1 ? "" : "s"}

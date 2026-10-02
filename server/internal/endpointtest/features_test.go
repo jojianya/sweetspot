@@ -178,7 +178,7 @@ func (m *mockCollectionRepo) UserExists(context.Context, string) (bool, error) {
 	return m.userExists, nil
 }
 
-func (m *mockCollectionRepo) Create(context.Context, string, string, *string) (collections.Collection, error) {
+func (m *mockCollectionRepo) Create(context.Context, string, string, *string, bool) (collections.Collection, error) {
 	return m.created, m.createErr
 }
 
@@ -190,7 +190,17 @@ func (m *mockCollectionRepo) ListByUser(context.Context, string) ([]collections.
 	return m.collections, nil
 }
 
-func (m *mockCollectionRepo) Update(context.Context, string, string, *string) error {
+func (m *mockCollectionRepo) ListPublicByUser(context.Context, string) ([]collections.Collection, error) {
+	public := m.collections[:0:0]
+	for _, c := range m.collections {
+		if !c.IsPrivate {
+			public = append(public, c)
+		}
+	}
+	return public, nil
+}
+
+func (m *mockCollectionRepo) Update(context.Context, string, string, *string, bool) error {
 	return m.updateErr
 }
 
@@ -879,6 +889,47 @@ func TestCollectionEndpoints(t *testing.T) {
 		w := doJSON(t, r, http.MethodGet, "/collections/"+testUUID1, "", nil)
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("GetPrivateAsOwnerIs200", func(t *testing.T) {
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), IsPrivate: true}}, newUsersSvc())
+		w := doJSON(t, r2, http.MethodGet, "/collections/"+testUUID1, "", authHeaders(token))
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("GetPrivateAsOtherIs404", func(t *testing.T) {
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), IsPrivate: true}}, newUsersSvc())
+		w := doJSON(t, r2, http.MethodGet, "/collections/"+testUUID1, "", authHeaders(otherToken))
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("GetPrivateLoggedOutIs404", func(t *testing.T) {
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), IsPrivate: true}}, newUsersSvc())
+		w := doJSON(t, r2, http.MethodGet, "/collections/"+testUUID1, "", nil)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("ListOmitsPrivateForOthers", func(t *testing.T) {
+		pub := collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), Name: "pub"}
+		priv := collections.Collection{ID: uuidOf(testUUID2), UserID: uuidOf(testUUID1), Name: "priv", IsPrivate: true}
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{userExists: true, collections: []collections.Collection{pub, priv}}, newUsersSvc())
+		w := doJSON(t, r2, http.MethodGet, "/users/"+testUUID1+"/collections", "", authHeaders(otherToken))
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+		body := w.Body.String()
+		if !strings.Contains(body, testUUID1) {
+			t.Fatalf("expected public collection in list: %s", body)
+		}
+		if strings.Contains(body, testUUID2) {
+			t.Fatalf("private collection leaked into list: %s", body)
 		}
 	})
 

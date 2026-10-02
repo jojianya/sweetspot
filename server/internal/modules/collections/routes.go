@@ -15,12 +15,13 @@ type RouteOptions struct {
 
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 	authRequired := middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions)
+	optionalAuth := middleware.OptionalAuth(opts.JWTSecret, opts.Blacklist, opts.Sessions)
 
-	rg.GET("/users/:id/collections", validid.Middleware(), h.ListByUser)
+	rg.GET("/users/:id/collections", validid.Middleware(), optionalAuth, h.ListByUser)
 
 	rg.GET("/collections", authRequired, h.ListMine)
 	rg.POST("/collections", authRequired, h.Create)
-	rg.GET("/collections/:id", validid.Middleware(), h.Get)
+	rg.GET("/collections/:id", validid.Middleware(), optionalAuth, h.Get)
 	rg.PATCH("/collections/:id", validid.Middleware(), authRequired, h.Update)
 	rg.DELETE("/collections/:id", validid.Middleware(), authRequired, h.Delete)
 

@@ -3,7 +3,9 @@ package imaging
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/h2non/bimg"
 )
@@ -43,13 +45,24 @@ func Validate(data []byte) error {
 	return nil
 }
 
-func Process(data []byte) (Result, error) {
+// resizeFn is the bimg entry point used by Process and Avatar. It is a
+// package-level variable (not a parameter) so tests can substitute a
+// panicking stub without changing production call sites; production code
+// always uses bimg.Resize.
+var resizeFn = bimg.Resize
+
+func Process(data []byte) (result Result, err error) {
 	processSem <- struct{}{}
 	defer func() {
-		recover()
 		<-processSem
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			slog.Error("image processing panicked", "op", "process", "panic", fmt.Sprint(r), "stack", string(stack))
+			result = Result{}
+			err = fmt.Errorf("could not process image: internal processing failure")
+		}
 	}()
-	full, err := bimg.Resize(data, bimg.Options{
+	full, err := resizeFn(data, bimg.Options{
 		Width:   maxPhotoWidth,
 		Quality: webpQuality,
 		Type:    bimg.WEBP,
@@ -58,7 +71,7 @@ func Process(data []byte) (Result, error) {
 		return Result{}, fmt.Errorf("could not process image: %w", err)
 	}
 
-	thumb, err := bimg.Resize(full, bimg.Options{
+	thumb, err := resizeFn(full, bimg.Options{
 		Width:   thumbSize,
 		Height:  thumbSize,
 		Crop:    true,
@@ -74,13 +87,18 @@ func Process(data []byte) (Result, error) {
 
 // Avatar center-crops and re-encodes an uploaded image into a square webp at
 // avatarSize. Runs under the same semaphore as Process.
-func Avatar(data []byte) ([]byte, error) {
+func Avatar(data []byte) (img []byte, err error) {
 	processSem <- struct{}{}
 	defer func() {
-		recover()
 		<-processSem
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			slog.Error("image processing panicked", "op", "avatar", "panic", fmt.Sprint(r), "stack", string(stack))
+			img = nil
+			err = fmt.Errorf("could not process avatar: internal processing failure")
+		}
 	}()
-	img, err := bimg.Resize(data, bimg.Options{
+	img, err = resizeFn(data, bimg.Options{
 		Width:   avatarSize,
 		Height:  avatarSize,
 		Crop:    true,

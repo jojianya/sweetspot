@@ -54,7 +54,7 @@ export default function MapApp({
   const [createOpen, setCreateOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  const { pins, loading, error: pinsError, addPin } = usePins(bbox, effectiveCategory);
+  const { pins, loading, error: pinsError, addPin, removePin } = usePins(bbox, effectiveCategory);
   const { pins: trending, loading: trendingLoading, error: trendingError } = useTrending(
     trendingOpen ? bbox : null
   );
@@ -372,6 +372,10 @@ export default function MapApp({
           key={detail.id}
           pin={detail}
           onClose={() => setSelectedPinId(null)}
+          onDeleted={(id) => {
+            removePin(id);
+            setSelectedPinId(null);
+          }}
         />
       )}
 

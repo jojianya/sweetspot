@@ -322,6 +322,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
           }
           onClose={() => setEditOpen(false)}
           onUpdated={handleUpdated}
+          onDeleted={() => router.push("/")}
         />
       )}
 

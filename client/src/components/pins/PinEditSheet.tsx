@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
 import { CloseIcon } from "@/components/icons";
-import { fetchPin, updatePin } from "@/lib/api";
+import { fetchPin, deletePin, updatePin } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 import type { Category, PinDetail } from "@/lib/types";
 
@@ -15,6 +15,7 @@ interface PinEditSheetProps {
   categories: Category[];
   onClose: () => void;
   onUpdated: (pin: PinDetail) => void;
+  onDeleted: (id: string) => void;
 }
 
 /** Edit sheet for a pin the viewer owns: caption, category, photo swap. */
@@ -23,19 +24,29 @@ export default function PinEditSheet({
   categories,
   onClose,
   onUpdated,
+  onDeleted,
 }: PinEditSheetProps) {
   const [caption, setCaption] = useState(pin.caption ?? "");
   const [categoryId, setCategoryId] = useState(pin.category_id);
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const confirmDeleteRef = useRef<HTMLButtonElement>(null);
 
   const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
 
   useEffect(() => {
     return () => previews.forEach((u) => URL.revokeObjectURL(u));
   }, [previews]);
+
+  // Move focus to the destructive confirm action when it appears, so
+  // keyboard and screen-reader users land on the decision point.
+  useEffect(() => {
+    if (confirmingDelete) confirmDeleteRef.current?.focus();
+  }, [confirmingDelete]);
 
   const handleFiles = (list: FileList | null) => {
     if (!list) return;
@@ -73,6 +84,21 @@ export default function PinEditSheet({
       setError(errorMessage(e));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const destroy = async () => {
+    setDeleting(true);
+    setError(null);
+    try {
+      await deletePin(pin.id);
+      onDeleted(pin.id);
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+      setConfirmingDelete(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -190,11 +216,50 @@ export default function PinEditSheet({
           <button
             type="button"
             onClick={submit}
-            disabled={submitting}
+            disabled={submitting || deleting}
             className="w-full rounded-lg bg-rose-600 px-4 py-2.5 font-medium text-white hover:bg-rose-700 disabled:opacity-60"
           >
             {submitting ? "Saving…" : "Save changes"}
           </button>
+
+          {confirmingDelete ? (
+            <div
+              className="rounded-lg border border-rose-200 bg-rose-50 p-3 dark:border-rose-900 dark:bg-rose-950/40"
+              aria-label="Confirm pin deletion"
+            >
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                Delete this pin? This cannot be undone.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  ref={confirmDeleteRef}
+                  type="button"
+                  onClick={destroy}
+                  disabled={deleting}
+                  className="flex-1 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {deleting ? "Deleting…" : "Yes, delete pin"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                  className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Keep pin
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={submitting || deleting}
+              className="w-full rounded-lg px-4 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-60 dark:text-rose-400 dark:hover:bg-rose-950/40"
+            >
+              Delete pin
+            </button>
+          )}
         </div>
       </div>
     </PanelSheet>

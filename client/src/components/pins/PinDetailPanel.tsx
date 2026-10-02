@@ -32,9 +32,10 @@ import { useSavedStatus } from "@/hooks/useFavorites";
 interface PinDetailPanelProps {
   pin: PinDetail;
   onClose: () => void;
+  onDeleted: (id: string) => void;
 }
 
-export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPanelProps) {
+export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: PinDetailPanelProps) {
   const router = useRouter();
   const { user } = useAuth();
   const { categories } = useCategories();
@@ -355,6 +356,10 @@ export default function PinDetailPanel({ pin: initialPin, onClose }: PinDetailPa
           }
           onClose={() => setEditOpen(false)}
           onUpdated={handleUpdated}
+          onDeleted={(id) => {
+            setEditOpen(false);
+            onDeleted(id);
+          }}
         />
       )}
 

@@ -146,3 +146,34 @@ func TestStripImage(t *testing.T) {
 		t.Fatal("expected an error for non-image input, got nil")
 	}
 }
+
+// TestProcessAutorotatesOrientation proves stripping is safe for rotated
+// phone photos: the fixture is stored 64x32 with EXIF orientation 6 (rotate
+// 90 CW, i.e. portrait content), so an upright output must be taller than
+// wide with the orientation flag consumed.
+func TestProcessAutorotatesOrientation(t *testing.T) {
+	raw, err := os.ReadFile("testdata/orient-6.jpg")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	sanity, err := bimg.Metadata(raw)
+	if err != nil {
+		t.Fatalf("read fixture metadata: %v", err)
+	}
+	if sanity.EXIF.Orientation != 6 {
+		t.Fatalf("fixture orientation = %d, want 6; test would prove nothing", sanity.EXIF.Orientation)
+	}
+
+	result, err := Process(raw)
+	if err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	meta, err := bimg.Metadata(result.Full)
+	if err != nil {
+		t.Fatalf("read output metadata: %v", err)
+	}
+	if meta.Size.Width >= meta.Size.Height {
+		t.Errorf("output not upright: got %dx%d, want portrait (height > width)", meta.Size.Width, meta.Size.Height)
+	}
+	assertNoGPS(t, "rotated full", result.Full)
+}

@@ -23,7 +23,12 @@ func run() error {
 	rep := report.New(lg, cfg.SentryDSN, cfg.SentryEnv)
 	defer rep.Close()
 
-	pool, err := database.Connect(cfg.DSN())
+	pool, err := database.ConnectWithOptions(cfg.DSN(), database.PoolOptions{
+		MaxConns:          int32(cfg.DBPoolMaxConns),
+		MaxConnLifetime:   cfg.DBPoolMaxLifetime,
+		MaxConnIdleTime:   cfg.DBPoolMaxIdle,
+		HealthCheckPeriod: cfg.DBPoolHealthCheck,
+	})
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestValidateAppEnv(t *testing.T) {
@@ -126,6 +127,41 @@ func TestParseTrustedProxies(t *testing.T) {
 		if _, err := parseTrustedProxies(bad); err == nil {
 			t.Errorf("parseTrustedProxies(%q): expected rejection, got nil", bad)
 		}
+	}
+}
+
+func TestValidateDBSSLMode(t *testing.T) {
+	for _, mode := range []string{"disable", "allow", "prefer", "require", "verify-ca", "verify-full"} {
+		if err := validateDBSSLMode(mode, "development"); err != nil {
+			t.Errorf("dev %q: unexpected error: %v", mode, err)
+		}
+	}
+	for _, mode := range []string{"require", "verify-ca", "verify-full"} {
+		if err := validateDBSSLMode(mode, "production"); err != nil {
+			t.Errorf("prod %q: unexpected error: %v", mode, err)
+		}
+	}
+	for _, mode := range []string{"disable", "allow", "prefer"} {
+		if err := validateDBSSLMode(mode, "production"); err == nil {
+			t.Errorf("prod %q: expected rejection, got nil", mode)
+		}
+	}
+	if err := validateDBSSLMode("sometimes", "development"); err == nil {
+		t.Error("unknown mode: expected rejection, got nil")
+	}
+}
+
+func TestValidatePoolOptions(t *testing.T) {
+	if err := validatePoolOptions(10, time.Minute, time.Minute, time.Minute); err != nil {
+		t.Fatalf("sane options: unexpected error: %v", err)
+	}
+	for _, n := range []int{0, -1, 101} {
+		if err := validatePoolOptions(n, time.Minute, time.Minute, time.Minute); err == nil {
+			t.Errorf("maxConns=%d: expected rejection, got nil", n)
+		}
+	}
+	if err := validatePoolOptions(10, 0, time.Minute, time.Minute); err == nil {
+		t.Error("zero lifetime: expected rejection, got nil")
 	}
 }
 

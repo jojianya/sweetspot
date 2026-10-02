@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -32,6 +33,11 @@ type Config struct {
 	DBUser             string
 	DBPass             string
 	DBName             string
+	DBSSLMode          string
+	DBPoolMaxConns     int
+	DBPoolMaxLifetime  time.Duration
+	DBPoolMaxIdle      time.Duration
+	DBPoolHealthCheck  time.Duration
 	LogLevel           string
 	LogFormat          string
 	JWTSecret          string
@@ -64,6 +70,11 @@ func Load() *Config {
 		DBUser:             getEnv("DB_USER", "postgres"),
 		DBPass:             getEnv("DB_PASSWORD", ""),
 		DBName:             getEnv("DB_NAME", "goodspotdb"),
+		DBSSLMode:          strings.ToLower(strings.TrimSpace(getEnv("DATABASE_SSLMODE", "disable"))),
+		DBPoolMaxConns:     getEnvInt("DB_POOL_MAX_CONNS", 10),
+		DBPoolMaxLifetime:  getEnvDuration("DB_POOL_MAX_LIFETIME", 30*time.Minute),
+		DBPoolMaxIdle:      getEnvDuration("DB_POOL_MAX_IDLE", 5*time.Minute),
+		DBPoolHealthCheck:  getEnvDuration("DB_POOL_HEALTH_CHECK", time.Minute),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		LogFormat:          getEnv("LOG_FORMAT", "text"),
 		JWTSecret:          getEnv("JWT_SECRET", ""),
@@ -92,6 +103,12 @@ func Load() *Config {
 		log.Fatal(err)
 	}
 	if err := validateCookieSameSite(cfg.CookieSameSite); err != nil {
+		log.Fatal(err)
+	}
+	if err := validateDBSSLMode(cfg.DBSSLMode, cfg.AppEnv); err != nil {
+		log.Fatal(err)
+	}
+	if err := validatePoolOptions(cfg.DBPoolMaxConns, cfg.DBPoolMaxLifetime, cfg.DBPoolMaxIdle, cfg.DBPoolHealthCheck); err != nil {
 		log.Fatal(err)
 	}
 
@@ -140,6 +157,39 @@ func validateStorageBase(raw, appEnv string) error {
 	}
 	if strings.EqualFold(appEnv, "production") && (loopback || private) {
 		return fmt.Errorf("STORAGE_BASE_URL must be publicly reachable in production")
+	}
+	return nil
+}
+
+// validateDBSSLMode checks the Postgres sslmode. Unknown values always fail;
+// in production anything weaker than require fails too, so the DB password
+// and data never travel in cleartext off-host.
+func validateDBSSLMode(mode, appEnv string) error {
+	switch mode {
+	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+	default:
+		return fmt.Errorf("DATABASE_SSLMODE must be one of disable, allow, prefer, require, verify-ca, verify-full; got %q", mode)
+	}
+	if strings.EqualFold(appEnv, "production") {
+		switch mode {
+		case "require", "verify-ca", "verify-full":
+			return nil
+		default:
+			return fmt.Errorf("DATABASE_SSLMODE must be require or stronger in production, got %q", mode)
+		}
+	}
+	return nil
+}
+
+// validatePoolOptions bounds the connection pool so one deployment cannot
+// starve Postgres (too many) or serialize every request (too few), and so a
+// zero duration cannot disable lifetime/idle/health sweeps by accident.
+func validatePoolOptions(maxConns int, maxLifetime, maxIdle, healthCheck time.Duration) error {
+	if maxConns < 1 || maxConns > 100 {
+		return fmt.Errorf("DB_POOL_MAX_CONNS must be between 1 and 100, got %d", maxConns)
+	}
+	if maxLifetime <= 0 || maxIdle <= 0 || healthCheck <= 0 {
+		return fmt.Errorf("DB pool lifetimes must be positive durations")
 	}
 	return nil
 }
@@ -244,8 +294,8 @@ func mustParseTrustedProxies(raw string) []string {
 }
 
 func (c *Config) DSN() string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		c.DBHost, c.DBPort, c.DBUser, c.DBPass, c.DBName)
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		c.DBHost, c.DBPort, c.DBUser, c.DBPass, c.DBName, c.DBSSLMode)
 }
 
 func getEnv(key, fallback string) string {
@@ -259,6 +309,15 @@ func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
+		}
+	}
+	return fallback
+}
+
+func getEnvDuration(key string, fallback time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
 		}
 	}
 	return fallback

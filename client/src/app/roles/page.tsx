@@ -155,7 +155,7 @@ export default function RolesPage() {
 
   return (
     <>
-      <Navbar backHref="/" backLabel="Back to map" />
+      <Navbar backHref="/" backLabel="Back to map" hideAccountNav />
 
       <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-16 pt-20">
         <div className="flex flex-wrap items-center justify-between gap-3">

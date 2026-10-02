@@ -63,20 +63,22 @@ func Process(data []byte) (result Result, err error) {
 		}
 	}()
 	full, err := resizeFn(data, bimg.Options{
-		Width:   maxPhotoWidth,
-		Quality: webpQuality,
-		Type:    bimg.WEBP,
+		Width:         maxPhotoWidth,
+		Quality:       webpQuality,
+		Type:          bimg.WEBP,
+		StripMetadata: true,
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("could not process image: %w", err)
 	}
 
 	thumb, err := resizeFn(full, bimg.Options{
-		Width:   thumbSize,
-		Height:  thumbSize,
-		Crop:    true,
-		Quality: webpQuality,
-		Type:    bimg.WEBP,
+		Width:         thumbSize,
+		Height:        thumbSize,
+		Crop:          true,
+		Quality:       webpQuality,
+		Type:          bimg.WEBP,
+		StripMetadata: true,
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("could not create thumbnail: %w", err)
@@ -99,11 +101,12 @@ func Avatar(data []byte) (img []byte, err error) {
 		}
 	}()
 	img, err = resizeFn(data, bimg.Options{
-		Width:   avatarSize,
-		Height:  avatarSize,
-		Crop:    true,
-		Quality: webpQuality,
-		Type:    bimg.WEBP,
+		Width:         avatarSize,
+		Height:        avatarSize,
+		Crop:          true,
+		Quality:       webpQuality,
+		Type:          bimg.WEBP,
+		StripMetadata: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not process avatar: %w", err)

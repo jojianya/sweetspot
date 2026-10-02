@@ -1,7 +1,9 @@
 package imaging
 
 import (
+	"bytes"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -69,4 +71,53 @@ func TestProcessResizeErrorIsReturned(t *testing.T) {
 	if _, err := Avatar([]byte("data")); err == nil {
 		t.Fatal("expected avatar resize error to be returned, got nil")
 	}
+}
+
+func assertNoGPS(t *testing.T, name string, buf []byte) {
+	t.Helper()
+	if bytes.Contains(buf, []byte("Exif\x00\x00")) || bytes.Contains(buf, []byte("EXIF")) {
+		t.Errorf("%s: output still contains an EXIF marker", name)
+	}
+	if bytes.Contains(buf, []byte("GPSLatitude")) {
+		t.Errorf("%s: output still contains GPS metadata", name)
+	}
+	meta, err := bimg.Metadata(buf)
+	if err != nil {
+		t.Fatalf("%s: read output metadata: %v", name, err)
+	}
+	if meta.EXIF.GPSLatitude != "" || meta.EXIF.GPSLongitude != "" {
+		t.Errorf("%s: output GPS EXIF not stripped: lat=%q lng=%q", name, meta.EXIF.GPSLatitude, meta.EXIF.GPSLongitude)
+	}
+}
+
+// TestProcessStripsGPSMetadata proves uploaded photos cannot leak precise
+// locations through EXIF: the fixture carries real GPS tags (verified with
+// vipsheader), and every persisted output (full, thumbnail, avatar) must be
+// free of them. Only re-encoded bytes are ever stored (see savePhotos), so
+// stripping here covers the whole persistence path.
+func TestProcessStripsGPSMetadata(t *testing.T) {
+	raw, err := os.ReadFile("testdata/gps-exif.jpg")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	sanity, err := bimg.Metadata(raw)
+	if err != nil {
+		t.Fatalf("read fixture metadata: %v", err)
+	}
+	if sanity.EXIF.GPSLatitude == "" {
+		t.Fatal("fixture has no GPS EXIF; test would prove nothing")
+	}
+
+	result, err := Process(raw)
+	if err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	assertNoGPS(t, "full", result.Full)
+	assertNoGPS(t, "thumbnail", result.Thumb)
+
+	avatar, err := Avatar(raw)
+	if err != nil {
+		t.Fatalf("Avatar: %v", err)
+	}
+	assertNoGPS(t, "avatar", avatar)
 }

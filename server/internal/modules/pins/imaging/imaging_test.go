@@ -121,3 +121,28 @@ func TestProcessStripsGPSMetadata(t *testing.T) {
 	}
 	assertNoGPS(t, "avatar", avatar)
 }
+
+func TestStripImage(t *testing.T) {
+	raw, err := os.ReadFile("testdata/gps-exif.jpg")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	if !NeedsStrip(raw) {
+		t.Fatal("fixture should need stripping; test would prove nothing")
+	}
+
+	clean, err := StripImage(raw)
+	if err != nil {
+		t.Fatalf("StripImage: %v", err)
+	}
+	assertNoGPS(t, "stripped", clean)
+
+	// Idempotent: already-clean bytes need no further work.
+	if NeedsStrip(clean) {
+		t.Fatal("stripped output still needs stripping; not idempotent")
+	}
+
+	if _, err := StripImage([]byte("not an image")); err == nil {
+		t.Fatal("expected an error for non-image input, got nil")
+	}
+}

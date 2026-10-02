@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"log/slog"
+	"net"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,10 +18,11 @@ type Handler struct {
 	bl       *cache.Blacklist
 	emailLim *middleware.Limiter
 	sameSite SameSiteMode
+	trusted  []*net.IPNet
 }
 
-func NewHandler(service Service, bl *cache.Blacklist, emailLim *middleware.Limiter, sameSite SameSiteMode) *Handler {
-	return &Handler{service: service, bl: bl, emailLim: emailLim, sameSite: sameSite}
+func NewHandler(service Service, bl *cache.Blacklist, emailLim *middleware.Limiter, sameSite SameSiteMode, trustedProxies []string) *Handler {
+	return &Handler{service: service, bl: bl, emailLim: emailLim, sameSite: sameSite, trusted: parseTrustedProxies(trustedProxies)}
 }
 
 func (h *Handler) Register(c *gin.Context) {
@@ -46,7 +48,7 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	SetSessionCookie(c.Writer, c.Request, token, tokenExpiry, h.sameSite)
+	SetSessionCookie(c.Writer, c.Request, token, tokenExpiry, h.sameSite, h.trusted)
 	response.Created(c, gin.H{"user": u})
 }
 
@@ -79,7 +81,7 @@ func (h *Handler) Login(c *gin.Context) {
 		h.emailLim.Reset(req.Identifier)
 	}
 
-	SetSessionCookie(c.Writer, c.Request, token, tokenExpiry, h.sameSite)
+	SetSessionCookie(c.Writer, c.Request, token, tokenExpiry, h.sameSite, h.trusted)
 	response.OK(c, gin.H{"user": u})
 }
 
@@ -93,7 +95,7 @@ func (h *Handler) Logout(c *gin.Context) {
 	// Clear the cookie first so the client is logged out regardless of
 	// whether the revoke succeeds. The token will expire naturally if the
 	// revoke fails, but the client should not be told the logout failed.
-	ClearSessionCookie(c.Writer, c.Request, h.sameSite)
+	ClearSessionCookie(c.Writer, c.Request, h.sameSite, h.trusted)
 
 	jwtClaims := claims.(*jwt.Claims)
 	ttl := time.Until(jwtClaims.ExpiresAt.Time)

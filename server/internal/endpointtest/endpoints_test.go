@@ -318,7 +318,7 @@ func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo 
 	jsonRoutes.Use(middleware.BodyLimit(1 << 20))
 
 	authSvc := auth.NewService(usersSvc, testSecret)
-	authH := auth.NewHandler(authSvc, bl, middleware.New(1000, time.Minute), sameSite)
+	authH := auth.NewHandler(authSvc, bl, middleware.New(1000, time.Minute), sameSite, nil)
 	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: bl, CookieSameSite: sameSite})
 
 	userH := users.NewHandler(usersSvc, store)
@@ -948,7 +948,7 @@ func TestLoginLockoutAfterFailures(t *testing.T) {
 	}
 	authSvc := auth.NewService(usersSvc, testSecret)
 	emailLim := middleware.New(5, time.Minute)
-	authH := auth.NewHandler(authSvc, nil, emailLim, auth.SameSiteStrict)
+	authH := auth.NewHandler(authSvc, nil, emailLim, auth.SameSiteStrict, nil)
 	auth.RegisterRoutes(r.Group(""), authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
 	for i := 0; i < 5; i++ {

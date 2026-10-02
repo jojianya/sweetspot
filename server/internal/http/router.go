@@ -98,6 +98,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		c.Blacklist,
 		middleware.New(5, time.Minute),
 		auth.SameSiteMode(cfg.CookieSameSite),
+		cfg.TrustedProxies,
 	)
 	auth.RegisterRoutes(jsonRoutes, authHandler, auth.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, CookieSameSite: auth.SameSiteMode(cfg.CookieSameSite)})
 

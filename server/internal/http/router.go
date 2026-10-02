@@ -107,11 +107,17 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		auth.SameSiteMode(cfg.CookieSameSite),
 		cfg.TrustedProxies,
 	)
+	mailer := selectMailer(cfg)
 	auth.RegisterRoutes(jsonRoutes, authHandler, auth.RouteOptions{
 		JWTSecret:      cfg.JWTSecret,
 		Blacklist:      c.Blacklist,
 		CookieSameSite: auth.SameSiteMode(cfg.CookieSameSite),
 		Sessions:       c.UserService,
+		UserService:    c.UserService,
+		ResetStore:     auth.NewResetStore(pool),
+		Mailer:         mailer,
+		BaseURL:        cfg.PublicBaseURL,
+		TrustedProxies: cfg.TrustedProxies,
 	})
 
 	userHandler := users.NewHandler(c.UserService, c.Store)
@@ -151,6 +157,16 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	collections.RegisterRoutes(jsonRoutes, collectionHandler, collections.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
 
 	return r
+}
+
+// selectMailer chooses HTTP email delivery when a webhook is configured and
+// the log-only adapter otherwise. Log tokens are enabled outside production
+// only, so full reset tokens can never reach production logs through it.
+func selectMailer(cfg *config.Config) auth.Mailer {
+	if cfg.MailerWebhookURL != "" {
+		return auth.WebhookMailer{URL: cfg.MailerWebhookURL, Key: cfg.MailerWebhookKey}
+	}
+	return auth.LogMailer{LogTokens: cfg.AppEnv != "production"}
 }
 
 // ClientErrorIngest handles POST /errors: it forwards a client-side error

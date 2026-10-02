@@ -165,6 +165,38 @@ func TestValidatePoolOptions(t *testing.T) {
 	}
 }
 
+func TestValidatePublicBaseURL(t *testing.T) {
+	if err := validatePublicBaseURL("http://localhost:3000", "development"); err != nil {
+		t.Fatalf("dev loopback: unexpected error: %v", err)
+	}
+	if err := validatePublicBaseURL("https://example.com", "production"); err != nil {
+		t.Fatalf("prod public: unexpected error: %v", err)
+	}
+	for _, tc := range []struct{ url, env string }{
+		{"", "development"},
+		{"/relative", "development"},
+		{"https://example.com/?x=1", "development"},
+		{"http://localhost:3000", "production"},
+		{"http://192.168.1.50:3000", "production"},
+	} {
+		if err := validatePublicBaseURL(tc.url, tc.env); err == nil {
+			t.Errorf("(%q, %q): expected rejection, got nil", tc.url, tc.env)
+		}
+	}
+}
+
+func TestValidateMailer(t *testing.T) {
+	if err := validateMailer("", "development"); err != nil {
+		t.Fatalf("dev without webhook: unexpected error: %v", err)
+	}
+	if err := validateMailer("", "production"); err == nil {
+		t.Fatal("prod without webhook: expected rejection, got nil")
+	}
+	if err := validateMailer("https://mail.example/hook", "production"); err != nil {
+		t.Fatalf("prod with webhook: unexpected error: %v", err)
+	}
+}
+
 // TestGetEnvInt tests the getEnvInt helper.
 func TestGetEnvInt(t *testing.T) {
 	oldVal := os.Getenv("TEST_INT")

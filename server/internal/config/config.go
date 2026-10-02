@@ -55,6 +55,14 @@ type Config struct {
 	// X-Forwarded-For is ignored, so per-IP rate limits are shared per proxy
 	// behind the Next rewrite (which does not forward X-Forwarded-For).
 	TrustedProxies []string
+	// PublicBaseURL is the public site origin. Password reset links are built
+	// only from this value, never from request headers (which an attacker
+	// controls and could point at their own host).
+	PublicBaseURL string
+	// MailerWebhookURL/Key configure HTTP email delivery for password reset.
+	// Empty URL selects the log-only mailer (dev and tests).
+	MailerWebhookURL string
+	MailerWebhookKey string
 }
 
 func Load() *Config {
@@ -88,6 +96,9 @@ func Load() *Config {
 		MaxSSEConnections:  getEnvInt("MAX_SSE_CONNECTIONS", 1000),
 		CookieSameSite:     strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", "strict"))),
 		TrustedProxies:     mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
+		PublicBaseURL:      strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "http://localhost:3000")), "/"),
+		MailerWebhookURL:   strings.TrimSpace(getEnv("MAILER_WEBHOOK_URL", "")),
+		MailerWebhookKey:   os.Getenv("MAILER_WEBHOOK_KEY"),
 	}
 
 	if err := validateJWTSecret(cfg.JWTSecret); err != nil {
@@ -103,6 +114,12 @@ func Load() *Config {
 		log.Fatal(err)
 	}
 	if err := validateCookieSameSite(cfg.CookieSameSite); err != nil {
+		log.Fatal(err)
+	}
+	if err := validatePublicBaseURL(cfg.PublicBaseURL, cfg.AppEnv); err != nil {
+		log.Fatal(err)
+	}
+	if err := validateMailer(cfg.MailerWebhookURL, cfg.AppEnv); err != nil {
 		log.Fatal(err)
 	}
 	if err := validateDBSSLMode(cfg.DBSSLMode, cfg.AppEnv); err != nil {
@@ -125,6 +142,37 @@ func validateAppEnv(value string) error {
 func validateCookieSameSite(value string) error {
 	if value != "strict" && value != "lax" {
 		return fmt.Errorf("COOKIE_SAMESITE must be 'strict' or 'lax', got %q", value)
+	}
+	return nil
+}
+
+// validatePublicBaseURL checks the origin reset links are built from. Like
+// storage origins it must be absolute http(s) without credentials, and
+// publicly reachable in production so emailed links work.
+func validatePublicBaseURL(raw, appEnv string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fmt.Errorf("PUBLIC_BASE_URL is required")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return fmt.Errorf("PUBLIC_BASE_URL must be an absolute http or https URL")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return fmt.Errorf("PUBLIC_BASE_URL must not include credentials, a query, or a fragment")
+	}
+	if strings.EqualFold(appEnv, "production") && (isLoopbackHost(parsed.Hostname()) || isPrivateIP(parsed.Hostname())) {
+		return fmt.Errorf("PUBLIC_BASE_URL must be publicly reachable in production")
+	}
+	return nil
+}
+
+// validateMailer requires real delivery in production: a password reset the
+// user never receives is a locked account with no recourse. Development and
+// tests use the log-only mailer.
+func validateMailer(webhookURL, appEnv string) error {
+	if strings.EqualFold(appEnv, "production") && webhookURL == "" {
+		return fmt.Errorf("MAILER_WEBHOOK_URL is required in production so password reset emails are actually delivered (email provider: [FILL IN])")
 	}
 	return nil
 }

@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
 import { BookmarkIcon, CloseIcon } from "@/components/icons";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useCollections } from "@/hooks/useCollections";
-import { fetchCollection, removePinFromCollection } from "@/lib/api";
+import { fetchCollection } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
 import type { CollectionDetail, PinListEntry } from "@/lib/types";

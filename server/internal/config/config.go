@@ -44,6 +44,11 @@ type Config struct {
 	SentryEnv          string
 	MaxSSEConnections  int
 	CookieSameSite     string // "strict" or "lax"
+	// TrustedProxies is the gin trusted-proxy list. Empty (default) keeps
+	// today's behavior: ClientIP() returns the direct TCP peer and
+	// X-Forwarded-For is ignored, so per-IP rate limits are shared per proxy
+	// behind the Next rewrite (which does not forward X-Forwarded-For).
+	TrustedProxies []string
 }
 
 func Load() *Config {
@@ -71,6 +76,7 @@ func Load() *Config {
 		SentryEnv:          getEnv("SENTRY_ENV", "development"),
 		MaxSSEConnections:  getEnvInt("MAX_SSE_CONNECTIONS", 1000),
 		CookieSameSite:     strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", "strict"))),
+		TrustedProxies:     mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
 	}
 
 	if err := validateJWTSecret(cfg.JWTSecret); err != nil {
@@ -194,6 +200,47 @@ func getOrigins(raw string) []string {
 		}
 	}
 	return origins
+}
+
+// parseTrustedProxies parses TRUSTED_PROXIES as comma-separated IPs or CIDRs
+// for gin's SetTrustedProxies. Empty input returns nil, which preserves
+// today's behavior (ClientIP returns the direct peer, X-Forwarded-For
+// ignored). Open ranges 0.0.0.0/0 and ::/0 are rejected because trusting every
+// address would let any client spoof X-Forwarded-For and evade per-IP rate
+// limits.
+func parseTrustedProxies(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	var out []string
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if entry == "0.0.0.0/0" || entry == "::/0" {
+			return nil, fmt.Errorf("TRUSTED_PROXIES %q trusts every address and would allow IP spoofing; list only your proxy addresses or CIDRs", entry)
+		}
+		if strings.Contains(entry, "/") {
+			if _, _, err := net.ParseCIDR(entry); err != nil {
+				return nil, fmt.Errorf("TRUSTED_PROXIES %q is not a valid IP or CIDR", entry)
+			}
+		} else if ip := net.ParseIP(entry); ip == nil {
+			return nil, fmt.Errorf("TRUSTED_PROXIES %q is not a valid IP or CIDR", entry)
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+// mustParseTrustedProxies fails fast at startup on an invalid entry.
+func mustParseTrustedProxies(raw string) []string {
+	parsed, err := parseTrustedProxies(raw)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return parsed
 }
 
 func (c *Config) DSN() string {

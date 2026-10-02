@@ -874,6 +874,68 @@ func TestSpoofedHeaderCannotBypassRateLimit(t *testing.T) {
 	}
 }
 
+func TestTrustedProxyClientIPIsHonored(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	if err := r.SetTrustedProxies([]string{"10.0.0.1"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+
+	lim := middleware.New(1, time.Minute)
+	r.POST("/limited", lim.Middleware(), func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ip": c.ClientIP()})
+	})
+
+	post := func(remoteAddr, xff string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/limited", strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = remoteAddr
+		if xff != "" {
+			req.Header.Set("X-Forwarded-For", xff)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	// Same proxy peer, distinct forwarded clients: separate limiter buckets.
+	if w := post("10.0.0.1:1111", "203.0.113.9"); w.Code != http.StatusOK {
+		t.Fatalf("first client: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w := post("10.0.0.1:2222", "198.51.100.7"); w.Code != http.StatusOK {
+		t.Fatalf("second client behind same proxy: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	// First client again: its bucket is spent.
+	if w := post("10.0.0.1:3333", "203.0.113.9"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("repeat client: expected 429, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestUntrustedPeerIgnoresForwardedForValue(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	_ = r.SetTrustedProxies(nil)
+	r.GET("/ip", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ip": c.ClientIP()})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ip", nil)
+	req.RemoteAddr = "192.0.2.1:1234"
+	req.Header.Set("X-Forwarded-For", "203.0.113.9")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ip"] != "192.0.2.1" {
+		t.Fatalf("untrusted peer: ClientIP=%q, want peer 192.0.2.1 (XFF must be ignored)", body["ip"])
+	}
+}
+
 func TestLoginLockoutAfterFailures(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

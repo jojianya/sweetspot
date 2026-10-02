@@ -29,7 +29,12 @@ import (
 func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog.Logger, rep *report.Reporter) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.SetTrustedProxies(nil)
+	// TrustedProxies comes from TRUSTED_PROXIES and is validated at startup.
+	// Empty (default) is today's behavior: ClientIP returns the direct peer
+	// and X-Forwarded-For is ignored, which is spoof-safe but means per-IP
+	// rate limits are shared per proxy behind the Next rewrite (which does not
+	// forward X-Forwarded-For). Only list proxy addresses/CIDRs you operate.
+	_ = r.SetTrustedProxies(cfg.TrustedProxies)
 	r.Use(middleware.Recover(rep), middleware.RequestLogger(lg, "/health"), middleware.ReportErrors(rep), middleware.CORS(cfg.CORSAllowedOrigins...), middleware.SecurityHeaders())
 
 	r.Static("/uploads", "./uploads")

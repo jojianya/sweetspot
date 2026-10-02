@@ -106,6 +106,29 @@ func TestValidateStorageBase(t *testing.T) {
 	}
 }
 
+func TestParseTrustedProxies(t *testing.T) {
+	if got, err := parseTrustedProxies(""); err != nil || got != nil {
+		t.Fatalf("empty: got %v, %v; want nil, nil", got, err)
+	}
+	if got, err := parseTrustedProxies("  "); err != nil || got != nil {
+		t.Fatalf("blank: got %v, %v; want nil, nil", got, err)
+	}
+
+	got, err := parseTrustedProxies("10.0.0.1, 172.18.0.0/16")
+	if err != nil {
+		t.Fatalf("valid list: unexpected error: %v", err)
+	}
+	if len(got) != 2 || got[0] != "10.0.0.1" || got[1] != "172.18.0.0/16" {
+		t.Fatalf("valid list: got %v", got)
+	}
+
+	for _, bad := range []string{"not-an-ip", "10.0.0.1/33", "10.0.0.0/8, bogus", "0.0.0.0/0", "::/0"} {
+		if _, err := parseTrustedProxies(bad); err == nil {
+			t.Errorf("parseTrustedProxies(%q): expected rejection, got nil", bad)
+		}
+	}
+}
+
 // TestGetEnvInt tests the getEnvInt helper.
 func TestGetEnvInt(t *testing.T) {
 	oldVal := os.Getenv("TEST_INT")

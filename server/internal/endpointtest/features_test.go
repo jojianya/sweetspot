@@ -237,7 +237,7 @@ func setupFeaturesRouter(
 	authH := auth.NewHandler(authSvc, nil, middleware.New(1000, time.Minute), auth.SameSiteStrict)
 	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
-	jsonRoutes.POST("/errors", apphttp.ClientErrorIngest(nil))
+	jsonRoutes.POST("/errors", middleware.New(30, time.Minute).Middleware(), apphttp.ClientErrorIngest(nil))
 
 	store := storage.NewLocal(t.TempDir(), "http://test.local")
 	userH := users.NewHandler(usersSvc, store)
@@ -975,4 +975,21 @@ func TestClientErrorIngest(t *testing.T) {
 			t.Fatalf("expected 204, got %d (%s)", w.Code, w.Body.String())
 		}
 	})
+}
+
+// TestClientErrorIngestRateLimited proves the /errors limiter reuses the
+// existing in-memory middleware: a burst over 30/min per IP is cut off with
+// 429 instead of flooding the reporter, while the first 30 stay 204.
+func TestClientErrorIngestRateLimited(t *testing.T) {
+	r, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{}, newUsersSvc())
+
+	body := `{"message":"spam","url":"https://app.example/map"}`
+	for i := 0; i < 30; i++ {
+		if w := doJSON(t, r, http.MethodPost, "/errors", body, nil); w.Code != http.StatusNoContent {
+			t.Fatalf("request %d: expected 204, got %d (%s)", i+1, w.Code, w.Body.String())
+		}
+	}
+	if w := doJSON(t, r, http.MethodPost, "/errors", body, nil); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 on request 31, got %d (%s)", w.Code, w.Body.String())
+	}
 }

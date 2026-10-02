@@ -78,7 +78,12 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	// window errors) through the same reporter as server errors. Public and
 	// best-effort: malformed or oversized payloads are dropped quietly (204) so
 	// a broken client can never turn reporting itself into a failure.
-	jsonRoutes.POST("/errors", ClientErrorIngest(rep))
+	// Rate-limited per IP so a bot cannot flood Sentry/logs at line rate;
+	// excess hits get 429 while well-behaved and malformed reports still get
+	// 204. The client reporter (client/src/lib/monitoring.ts) is
+	// fire-and-forget with no retry, so a 429 never loops.
+	errorsLimit := middleware.New(30, time.Minute)
+	jsonRoutes.POST("/errors", errorsLimit.Middleware(), ClientErrorIngest(rep))
 
 	uploadRoutes := r.Group("")
 	uploadRoutes.Use(middleware.BodyLimit(64 << 20))

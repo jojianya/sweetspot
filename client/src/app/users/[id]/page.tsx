@@ -10,7 +10,8 @@ import { useFollow } from "@/hooks/useFollow";
 import { useProfile } from "@/hooks/useProfile";
 import { useProfileEditor } from "@/hooks/useProfileEditor";
 import { useAuth } from "@/store/auth";
-import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/PageState";
 import type { PinListEntry } from "@/lib/types";
 
 interface ProfilePageProps {
@@ -110,7 +111,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
     return (
       <>
         <Navbar backHref="/" />
-        <SkeletonRegion label="Loading profile…">
+        <PageLoading label="Loading profile…">
           <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-16 pt-20">
             {/* Header skeleton */}
             <div className="flex flex-col gap-5 rounded-2xl border border-zinc-200/70 p-5 shadow-sm dark:border-zinc-800 sm:flex-row sm:items-center">
@@ -181,7 +182,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               </div>
             </section>
           </div>
-        </SkeletonRegion>
+        </PageLoading>
       </>
     );
   }

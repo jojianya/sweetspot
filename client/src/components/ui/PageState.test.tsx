@@ -66,9 +66,10 @@ describe("PageState", () => {
       expect(onRetry).toHaveBeenCalledTimes(1);
     });
 
-    it("carries no alert role today (feed, reports and profile alike)", async () => {
+    it("announces the error text as an alert", async () => {
       await render(createElement(PageError, { error: "boom", onRetry: () => {} }));
-      expect(container.querySelector('[role="alert"]')).toBeNull();
+      const alert = container.querySelector('[role="alert"]');
+      expect(alert?.textContent).toContain("boom");
     });
   });
 

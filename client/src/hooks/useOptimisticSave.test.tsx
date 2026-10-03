@@ -125,6 +125,26 @@ describe("useOptimisticSave", () => {
     expect(container.textContent).toBe("saved:idle");
   });
 
+  it("sends one request for two clicks in the same tick", async () => {
+    loggedIn();
+    const pending = deferred<void>();
+    apiMocks.saveFavorite.mockReturnValue(pending.promise);
+    await act(async () => {
+      root.render(createElement(SaveProbe, { pinId: "pin-1" }));
+    });
+    // Two synchronous clicks before React re-renders: the ref-based
+    // in-flight guard drops the second even though `saving` is stale.
+    const button = container.querySelector("button") as HTMLButtonElement;
+    button.click();
+    button.click();
+    await act(async () => {
+      pending.resolve();
+      await pending.promise;
+    });
+    expect(apiMocks.saveFavorite).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toBe("saved:idle");
+  });
+
   it("drops a re-entrant click while a save is in flight", async () => {
     loggedIn();
     const pending = deferred<void>();

@@ -172,6 +172,34 @@ func thumbnailNullable(t *testing.T, pool *pgxpool.Pool) bool {
 	return nullable == "YES"
 }
 
+// pinViewsTable reports whether pin_views exists with its (pin_id, user_id)
+// primary key and both foreign keys.
+func pinViewsTable(t *testing.T, pool *pgxpool.Pool) (exists, pk, fks bool) {
+	t.Helper()
+	ctx := context.Background()
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'pin_views')`).Scan(&exists); err != nil {
+		t.Fatalf("check pin_views: %v", err)
+	}
+	if !exists {
+		return false, false, false
+	}
+	var pkName string
+	if err := pool.QueryRow(ctx, `
+		SELECT conname FROM pg_constraint
+		WHERE conrelid = 'pin_views'::regclass AND contype = 'p'
+	`).Scan(&pkName); err != nil {
+		t.Fatalf("read pin_views pk: %v", err)
+	}
+	var fkCount int
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM pg_constraint
+		WHERE conrelid = 'pin_views'::regclass AND contype = 'f'
+	`).Scan(&fkCount); err != nil {
+		t.Fatalf("count pin_views fks: %v", err)
+	}
+	return true, pkName != "", fkCount == 2
+}
+
 func pinsUpdatedAtTriggerExists(t *testing.T, pool *pgxpool.Pool) bool {
 	t.Helper()
 	var exists bool
@@ -243,6 +271,9 @@ func TestMigrationUpDownUp(t *testing.T) {
 		if !pinsUpdatedAtTriggerExists(t, pool) {
 			t.Error("after up: pins_updated_at trigger should exist")
 		}
+		if exists, pk, fks := pinViewsTable(t, pool); !exists || !pk || !fks {
+			t.Errorf("after up: pin_views should exist with pk+fks (exists=%v pk=%v fks=%v)", exists, pk, fks)
+		}
 		assertAllApplied(t, pool, dir)
 	})
 
@@ -309,6 +340,11 @@ func TestMigrationUpDownUp(t *testing.T) {
 					t.Error("after rolling back 0015: 0016's trigger must not be resurrected")
 				}
 
+			case "0021_pin_views.sql":
+				if exists, _, _ := pinViewsTable(t, pool); exists {
+					t.Error("after rolling back 0021: pin_views should be gone")
+				}
+
 			default:
 				// Newer migrations are rolled back on the way to the target and
 				// have no schema assertion attached here, but the loop is what
@@ -344,6 +380,9 @@ func TestMigrationUpDownUp(t *testing.T) {
 		}
 		if !pinsUpdatedAtTriggerExists(t, pool) {
 			t.Error("after final up: pins_updated_at trigger should exist")
+		}
+		if exists, pk, fks := pinViewsTable(t, pool); !exists || !pk || !fks {
+			t.Errorf("after final up: pin_views should exist with pk+fks (exists=%v pk=%v fks=%v)", exists, pk, fks)
 		}
 		assertAllApplied(t, pool, dir)
 	})

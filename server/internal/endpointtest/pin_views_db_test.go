@@ -253,18 +253,67 @@ func TestDBPinViewsDegradedAuthActsAnonymous(t *testing.T) {
 	}
 }
 
-func TestDBPinViewsRateLimited(t *testing.T) {
+func TestDBPinViewsRateBudgetsPerUser(t *testing.T) {
+	pool := requireEndpointDB(t)
+	ctx := context.Background()
+	repo := pins.NewRepository(pool)
+	h := pins.NewHandler(repo, nil, nil, nil)
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	pins.RegisterRoutes(r.Group(""), h, pins.RouteOptions{JWTSecret: viewTestSecret})
+
+	// Seed two viewers and one pin through the shared fixture for data.
 	f := setupViews(t, nil)
+	tokenA := viewToken(t, f.other)
+	second := seedDBUserWithRole(t, ctx, pool, fmt.Sprintf("view-budget-%d@example.com", time.Now().UnixNano()), "user")
+	tokenB := viewToken(t, second)
+
+	post := func(token string) int {
+		req := httptest.NewRequest(http.MethodPost, "/pins/"+f.pinID+"/view", nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	// User A exhausts a full minute of distinct-pin opens.
 	for i := 0; i < 60; i++ {
-		if w := postView(t, f, f.pinID, ""); w.Code != http.StatusOK {
-			t.Fatalf("request %d: got %d, want 200", i+1, w.Code)
+		if code := post(tokenA); code != http.StatusOK {
+			t.Fatalf("user A request %d: got %d, want 200", i+1, code)
 		}
 	}
-	if w := postView(t, f, f.pinID, ""); w.Code != http.StatusTooManyRequests {
-		t.Fatalf("request 61: got %d, want 429", w.Code)
+	if code := post(tokenA); code != http.StatusTooManyRequests {
+		t.Fatalf("user A request 61: got %d, want 429", code)
 	}
-	if got := pinViews(t, f); got != 0 {
-		t.Errorf("views = %d after anonymous flood, want 0", got)
+	// User B shares the proxy IP but has a fresh budget.
+	if code := post(tokenB); code != http.StatusOK {
+		t.Fatalf("user B first request: got %d, want 200", code)
+	}
+}
+
+func TestDBPinViewsAnonymousNotUserCapped(t *testing.T) {
+	pool := requireEndpointDB(t)
+	repo := pins.NewRepository(pool)
+	h := pins.NewHandler(repo, nil, nil, nil)
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	pins.RegisterRoutes(r.Group(""), h, pins.RouteOptions{JWTSecret: viewTestSecret})
+
+	f := setupViews(t, nil)
+	// Anonymous opens never write, so the per-user cap must not apply: 61
+	// anonymous requests from one IP all pass (only the 600/min backstop
+	// could trip, far above this).
+	for i := 0; i < 61; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/pins/"+f.pinID+"/view", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("anonymous request %d: got %d, want 200", i+1, w.Code)
+		}
 	}
 }
 

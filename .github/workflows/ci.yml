@@ -163,7 +163,7 @@ jobs:
           PGPASSWORD: testpass
         run: |
           psql -h localhost -U postgres -d goodspotdb -tc "SELECT 1 FROM pg_database WHERE datname='endpoint_test'" | grep -q 1 || psql -h localhost -U postgres -d goodspotdb -c 'CREATE DATABASE endpoint_test'
-          go test ./internal/endpointtest/ -run 'TestDBDeletePin|TestDBPasswordReset|TestDBCollection' -race -count=1 -v
+          go test ./internal/endpointtest/ -run 'TestDBDeletePin|TestDBPasswordReset|TestDBCollection|TestDBCover' -race -count=1 -v
 
       - name: Vet
         run: go vet ./...

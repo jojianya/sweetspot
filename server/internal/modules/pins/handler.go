@@ -16,7 +16,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
-	"github.com/jojianya/sweetspot247-backend/internal/modules/pins/imaging"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/imaging"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/pkg/geohash"

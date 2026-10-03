@@ -36,7 +36,7 @@ func mustUUID(s string) pgtype.UUID {
 
 func validJPEG(t *testing.T) []byte {
 	t.Helper()
-	raw, err := os.ReadFile("imaging/testdata/gps-exif.jpg")
+	raw, err := os.ReadFile("../../platform/imaging/testdata/gps-exif.jpg")
 	if err != nil {
 		t.Fatalf("read test image: %v", err)
 	}

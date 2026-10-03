@@ -257,7 +257,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 This app is photo-heavy and map-based — unprocessed multi-photo uploads at up to 10MB each will hurt storage costs and load times fast once there's real traffic. Do this now, before Phase 4 puts real images in front of real users, not as a later optimization pass.
 
-- [x] `go get github.com/h2non/bimg` — **chosen:** libvips via `bimg` (CGO binding; requires libvips installed), implemented in `internal/modules/pins/imaging/imaging.go`
+- [x] `go get github.com/h2non/bimg` — **chosen:** libvips via `bimg` (CGO binding; requires libvips installed), implemented in `internal/platform/imaging/imaging.go` (moved from `internal/modules/pins/imaging/` in B6)
 - [x] Resize to a max dimension (1600px) and compress uploaded images to WebP q80 before saving
 - [x] Generate a 400px square thumbnail alongside the full size for map/list views (stored in `pin_photos.thumbnail_url`, migration `0006`)
 - [x] Reject images above 8000×8000 px (checked via metadata before decode) and cap concurrent libvips processes at 2

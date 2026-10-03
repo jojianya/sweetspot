@@ -26,7 +26,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jojianya/sweetspot247-backend/internal/modules/pins/imaging"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/imaging"
 )
 
 func main() {

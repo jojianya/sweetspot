@@ -218,9 +218,7 @@ sweetspot/
 │   │   │   │   ├── model.go         # Pin, PinPhoto, PinDetail, PinListEntry, Category
 │   │   │   │   ├── repository.go    # PostGIS queries
 │   │   │   │   ├── errors.go        # ErrNotFound
-│   │   │   │   ├── pins_test.go
-│   │   │   │   └── imaging/
-│   │   │   │       └── imaging.go   # image validation + processing (libvips via bimg)
+│   │   │   │   └── pins_test.go
 │   │   │   ├── reports/
 │   │   │   │   ├── handler.go       # Create, List, Review handlers
 │   │   │   │   ├── service.go       # business logic
@@ -273,6 +271,10 @@ sweetspot/
 │   │   │       ├── local.go         # local filesystem storage
 │   │   │       ├── local_test.go
 │   │   │       └── fileid.go        # server-generated random hex file IDs
+│   │   └── imaging/
+│   │       ├── imaging.go       # image validation + processing (libvips via bimg)
+│   │       ├── strip.go         # EXIF stripping
+│   │       └── testdata/        # GPS/orientation fixtures
 │   │   └── endpointtest/
 │   │       └── endpoints_test.go    # security regression tests (546 lines)
 │   ├── pkg/

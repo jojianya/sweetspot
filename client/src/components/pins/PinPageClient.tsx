@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
@@ -41,9 +41,10 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
 
   // Applies the counted total only while the same pin is still open; a late
   // response after switching pins (or unmount) is discarded.
-  if (view && view.pinId === pin.id && view.views !== pin.views) {
+  useEffect(() => {
+    if (!view) return;
     setPin((prev) => (prev.id === view.pinId ? { ...prev, views: view.views } : prev));
-  }
+  }, [view]);
 
   const photo = pin.photos[index];
   const count = pin.photos.length;

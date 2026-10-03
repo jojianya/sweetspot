@@ -19,6 +19,7 @@ import {
   selectNearbyPins,
   type PinCoordinate,
 } from "@/lib/utils";
+import { neighborhoodBounds } from "@/lib/utils/geo";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import type { Theme } from "@/store/theme";
 import { ensurePinLayers, notCluster, type GeoFeature } from "./pinLayers";
@@ -93,33 +94,13 @@ function fitPinNeighborhood(
   clickedId: string
 ): void {
   const points: PinCoordinate[] = selectNearbyPins(clickedId, pins);
-  if (points.length < 2) return;
+  const frame = neighborhoodBounds(points, PIN_FIT_MIN_SPAN_DEGREES);
+  if (!frame) return;
 
-  let bounds = new LngLatBounds();
-  for (const point of points) {
-    bounds.extend([point.lng, point.lat]);
-  }
-
-  // Avoid asking fitBounds to maximize zoom when pins share (or nearly share)
-  // a coordinate. A small geographic floor keeps the detail view readable.
-  const west = bounds.getWest();
-  const east = bounds.getEast();
-  const south = bounds.getSouth();
-  const north = bounds.getNorth();
-  const centerLng = (west + east) / 2;
-  const centerLat = (south + north) / 2;
-  const lngSpan = Math.max(east - west, PIN_FIT_MIN_SPAN_DEGREES);
-  const latSpan = Math.max(north - south, PIN_FIT_MIN_SPAN_DEGREES);
-
-  if (
-    east - west < PIN_FIT_MIN_SPAN_DEGREES ||
-    north - south < PIN_FIT_MIN_SPAN_DEGREES
-  ) {
-    bounds = new LngLatBounds(
-      [centerLng - lngSpan / 2, centerLat - latSpan / 2],
-      [centerLng + lngSpan / 2, centerLat + latSpan / 2]
-    );
-  }
+  const bounds = new LngLatBounds(
+    [frame.west, frame.south],
+    [frame.east, frame.north]
+  );
 
   map.fitBounds(bounds, {
     padding: PIN_FIT_PADDING,

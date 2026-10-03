@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
@@ -9,6 +9,7 @@ import CommentsSection from "@/components/pins/CommentsSection";
 import PinEditSheet from "@/components/pins/PinEditSheet";
 import AddToCollectionSheet from "@/components/pins/AddToCollectionSheet";
 import ReportSheet from "@/components/pins/ReportSheet";
+import PinViews from "./PinViews";
 import { BookmarkIcon, PersonIcon, PinIcon } from "@/components/icons";
 import { fetchPin } from "@/lib/api";
 import { useCategories } from "@/hooks/useCategories";
@@ -36,7 +37,14 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { saved, saving, handleSave } = useOptimisticSave(pin.id);
-  usePinView(pin.id, pin.user_id);
+  const view = usePinView(pin.id, pin.user_id);
+
+  // Applies the counted total only while the same pin is still open; a late
+  // response after switching pins (or unmount) is discarded.
+  useEffect(() => {
+    if (!view) return;
+    setPin((prev) => (prev.id === view.pinId ? { ...prev, views: view.views } : prev));
+  }, [view]);
 
   const photo = pin.photos[index];
   const count = pin.photos.length;
@@ -137,6 +145,8 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
               )}
               <span className="text-zinc-300 dark:text-zinc-600">·</span>
               <time dateTime={pin.created_at}>{formatTime(pin.created_at)}</time>
+              <span className="text-zinc-300 dark:text-zinc-600">·</span>
+              <PinViews views={pin.views} />
             </div>
           </div>
 

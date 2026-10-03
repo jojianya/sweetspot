@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PanelSheet from "@/components/PanelSheet";
 import {
@@ -27,6 +27,7 @@ import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/hooks/useOptimisticSave";
 import { usePinView } from "@/hooks/usePinView";
 import { usePinShare } from "@/hooks/usePinShare";
+import PinViews from "./PinViews";
 import { useAuth } from "@/store/auth";
 
 interface PinDetailPanelProps {
@@ -46,7 +47,14 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
   const [reportOpen, setReportOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const { saved, saving, handleSave } = useOptimisticSave(pin.id);
-  usePinView(pin.id, pin.user_id);
+  const view = usePinView(pin.id, pin.user_id);
+
+  // Applies the counted total only while the same pin is still open; a late
+  // response after switching pins (or unmount) is discarded.
+  useEffect(() => {
+    if (!view) return;
+    setPin((prev) => (prev.id === view.pinId ? { ...prev, views: view.views } : prev));
+  }, [view]);
 
   const photo = pin.photos[index];
   const count = pin.photos.length;
@@ -129,6 +137,8 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
                 <span className="truncate">{pin.username}</span>
               </Link>
             )}
+            <span className="text-zinc-300 dark:text-zinc-600">·</span>
+            <PinViews views={pin.views} />
           </div>
 
           {/* Actions */}

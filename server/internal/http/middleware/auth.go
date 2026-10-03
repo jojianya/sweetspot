@@ -103,7 +103,12 @@ func validateToken(c *gin.Context, jwtSecret string, bl *cache.Blacklist, checke
 			slog.Default().Error("session check failed, denying request", "error", err.Error(), "user_id", claims.UserID)
 			return nil, "session verification unavailable, please try again", false
 		}
-		if claims.IssuedAt != nil && claims.IssuedAt.Time.Before(state.ValidAfter) {
+		// The floor keeps full precision in storage, but JWT issued-at is
+		// whole seconds: compare at second precision so a login minted in
+		// the reset's own second is not read as "before". This leaves up to
+		// a one-second window where a pre-reset token from the same second
+		// still passes; see docs/SECURITY.md.
+		if claims.IssuedAt != nil && claims.IssuedAt.Time.Before(state.ValidAfter.Truncate(time.Second)) {
 			return nil, "session was reset, please sign in again", false
 		}
 		applyRole(c, state.Role)

@@ -8,9 +8,7 @@ import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
 import type { MapLocation } from "@/components/map/MapView";
 import { errorMessage, getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
-
-const MAX_PHOTOS = 5;
-const MAX_PHOTO_SIZE = 10 * 1024 * 1024;
+import { buildCreatePinPayload, validatePhotoFiles } from "@/lib/utils/photoValidation";
 
 interface CreatePinButtonProps {
   lat: number;
@@ -80,21 +78,13 @@ export default function CreatePinButton({
   const handleFiles = (list: FileList | null) => {
     if (!list) return;
     const picked = Array.from(list);
-    const valid = picked.filter((f) => /^image\/(jpeg|png)$/.test(f.type));
-    if (valid.length !== picked.length) {
-      setError("Only JPG and PNG images are allowed");
-      return;
-    }
-    if (valid.length > MAX_PHOTOS) {
-      setError(`You can upload at most ${MAX_PHOTOS} photos`);
-      return;
-    }
-    if (valid.some((f) => f.size > MAX_PHOTO_SIZE)) {
-      setError("Each photo must be 10MB or smaller");
+    const error = validatePhotoFiles(picked);
+    if (error) {
+      setError(error);
       return;
     }
     setError(null);
-    setFiles(valid);
+    setFiles(picked);
   };
 
   const useCurrentLocation = () => {
@@ -117,20 +107,15 @@ export default function CreatePinButton({
 
   const submit = async () => {
     if (!user) return;
-    if (files.length < 1) {
-      setError("Select at least one photo");
+    const shaped = buildCreatePinPayload({ lat, lng, categoryId, caption, files });
+    if ("error" in shaped) {
+      setError(shaped.error);
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
-      const result = await createPin({
-        lat,
-        lng,
-        categoryId,
-        caption: caption.trim() || null,
-        photos: files,
-      });
+      const result = await createPin(shaped.payload);
       onCreated(result.pin, result.photos);
       setFiles([]);
       setCaption("");

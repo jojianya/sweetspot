@@ -1,4 +1,5 @@
 import axios from "axios";
+// eslint-disable-next-line no-restricted-imports -- allowlisted: the axios 401 interceptor clears a dead session via the store; P8 will inject a callback instead.
 import { useAuth } from "@/store/auth";
 import { API_BASE_URL, reportError } from "@/lib/monitoring";
 import { isSessionEnded } from "./session";

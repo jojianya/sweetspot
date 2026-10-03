@@ -16,6 +16,27 @@ const eslintConfig = defineConfig([
     // produces ~1098 warnings that drown out real issues.
     "public/**",
   ]),
+  // Dependency-flow guard: pure lib must not import the store.
+  // Only client/src/lib/api/client.ts may (allowlisted via eslint-disable,
+  // pending the P8 callback injection). Hooks/components importing the store
+  // is the correct direction and stays allowed.
+  {
+    files: ["src/lib/api/**", "src/lib/types/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/store/*"],
+              message:
+                "Pure lib must not import the store. Inject a callback instead (see lib/api/client.ts allowlist).",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

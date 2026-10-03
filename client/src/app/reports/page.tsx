@@ -6,7 +6,8 @@ import Navbar from "@/components/layout/Navbar";
 import { fetchReports, reviewReport } from "@/lib/api";
 import { errorMessage, relativeTime } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
-import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { PageEmpty, PageError, PageLoading } from "@/components/ui/PageState";
 import type { ReportEntry, ReportStatus } from "@/lib/types";
 
 const STATUS_OPTIONS: Array<{ value: ReportStatus | "all"; label: string }> = [
@@ -129,7 +130,7 @@ export default function ReportsPage() {
   const renderContent = () => {
     if (loading) {
       return (
-        <SkeletonRegion label="Loading reports…">
+        <PageLoading label="Loading reports…">
           <ul className="mt-4 space-y-2.5" role="list" aria-busy="true">
             {Array.from({ length: 5 }).map((_, i) => (
               <li key={`skeleton-${i}`}>
@@ -148,37 +149,24 @@ export default function ReportsPage() {
               </li>
             ))}
           </ul>
-        </SkeletonRegion>
+        </PageLoading>
       );
     }
 
     if (error) {
-      return (
-        <div className="flex flex-col items-center gap-3 py-10 text-center">
-          <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
-          <button
-            type="button"
-            onClick={retry}
-            className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            Retry
-          </button>
-        </div>
-      );
+      return <PageError error={error} onRetry={retry} />;
     }
 
     if (reports.length === 0) {
       return (
-        <div className="rounded-xl border border-dashed border-zinc-300 py-12 px-6 text-center dark:border-zinc-700">
-          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            No {status === "all" ? "" : `${status} `}reports
-          </p>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            {status === "pending"
-              ? "You're all caught up."
-              : "Try another filter."}
-          </p>
-        </div>
+        <PageEmpty
+          title={`No ${status === "all" ? "" : `${status} `}reports`}
+          description={
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              {status === "pending" ? "You're all caught up." : "Try another filter."}
+            </p>
+          }
+        />
       );
     }
 

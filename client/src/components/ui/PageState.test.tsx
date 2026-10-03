@@ -39,10 +39,9 @@ describe("PageState", () => {
       "announces %s as a busy status with the skeleton inside",
       async (label) => {
         await render(
-          createElement(PageLoading, {
-            label,
-            children: createElement("ul", null, "rows"),
-          })
+          <PageLoading label={label}>
+            <ul>rows</ul>
+          </PageLoading>
         );
         const region = container.querySelector('[role="status"]');
         expect(region?.getAttribute("aria-busy")).toBe("true");

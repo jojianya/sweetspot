@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
 import { BookmarkIcon, CloseIcon } from "@/components/icons";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useCollections } from "@/hooks/useCollections";
-import { fetchCollection, updateCollection } from "@/lib/api";
+import { useCollectionDetail } from "@/hooks/useCollectionDetail";
 import { errorMessage } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
-import type { CollectionDetail, PinListEntry } from "@/lib/types";
+import type { PinListEntry } from "@/lib/types";
 
 interface SavedPinsPanelProps {
   onClose: () => void;
@@ -25,9 +25,17 @@ export default function SavedPinsPanel({
   activeId,
 }: SavedPinsPanelProps) {
   const [tab, setTab] = useState<Tab>("saved");
-  const [openCollection, setOpenCollection] = useState<CollectionDetail | null>(null);
-  const [openingId, setOpeningId] = useState<string | null>(null);
-  const [collectionError, setCollectionError] = useState<string | null>(null);
+  const {
+    openCollection,
+    setOpenCollection,
+    openingId,
+    collectionError,
+    setCollectionError,
+    togglingPrivate,
+    openCollectionDetail,
+    handleRemovePin,
+    handleTogglePrivate,
+  } = useCollectionDetail();
 
   const favorites = useFavorites();
   const collections = useCollections();
@@ -38,50 +46,17 @@ export default function SavedPinsPanel({
     error: collectionsError,
     retry: collectionsRetry,
     create,
-    removePin,
-    patchLocal,
   } = collections;
 
   const [newName, setNewName] = useState("");
   const [newPrivate, setNewPrivate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [togglingPrivate, setTogglingPrivate] = useState(false);
   const { user } = useAuth();
 
   const title = (e: PinListEntry) =>
     e.caption?.trim() || (e.username ? `@${e.username}` : "Untitled");
 
   const subtitle = (e: PinListEntry) => (e.username ? `@${e.username}` : "Pin");
-
-  const openCollectionDetail = useCallback(async (id: string) => {
-    setOpeningId(id);
-    setCollectionError(null);
-    try {
-      const detail = await fetchCollection(id);
-      setOpenCollection(detail);
-    } catch (e) {
-      setCollectionError(errorMessage(e));
-    } finally {
-      setOpeningId(null);
-    }
-  }, []);
-
-  const handleRemovePin = useCallback(
-    async (collectionId: string, pinId: string) => {
-      setOpenCollection((prev) => {
-        if (!prev) return prev;
-        const removed = prev.pins.filter((p) => p.id !== pinId);
-        return { ...prev, pins: removed, pin_count: Math.max(0, prev.pin_count - 1) };
-      });
-      try {
-        await removePin(collectionId, pinId);
-      } catch (e) {
-        setCollectionError(errorMessage(e));
-        await openCollectionDetail(collectionId);
-      }
-    },
-    [removePin, openCollectionDetail]
-  );
 
   const handleCreate = async () => {
     const name = newName.trim();
@@ -96,25 +71,6 @@ export default function SavedPinsPanel({
       setCollectionError(errorMessage(e));
     } finally {
       setCreating(false);
-    }
-  };
-
-  const handleTogglePrivate = async (isPrivate: boolean) => {
-    if (!openCollection || togglingPrivate) return;
-    setTogglingPrivate(true);
-    setCollectionError(null);
-    try {
-      await updateCollection(openCollection.id, {
-        name: openCollection.name,
-        description: openCollection.description,
-        isPrivate,
-      });
-      setOpenCollection({ ...openCollection, is_private: isPrivate });
-      patchLocal(openCollection.id, { is_private: isPrivate });
-    } catch (e) {
-      setCollectionError(errorMessage(e));
-    } finally {
-      setTogglingPrivate(false);
     }
   };
 

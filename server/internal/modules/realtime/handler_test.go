@@ -13,41 +13,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// TestValidateBbox tests the pure bbox validation function.
-func TestValidateBbox(t *testing.T) {
-	tests := []struct {
-		name    string
-		bbox    [4]float64
-		wantErr bool
-	}{
-		{"valid", [4]float64{14.4, 120.9, 14.8, 121.1}, false},
-		{"valid negative", [4]float64{-10, -20, 10, 20}, false},
-		{"lat too high", [4]float64{91, 0, 92, 1}, true},
-		{"lat too low", [4]float64{-91, 0, -90, 1}, true},
-		{"lng too high", [4]float64{0, 181, 1, 182}, true},
-		{"lng too low", [4]float64{0, -181, 1, -180}, true},
-		{"minLat == maxLat", [4]float64{10, 0, 10, 1}, true},
-		{"minLat > maxLat", [4]float64{10, 0, 5, 1}, true},
-		{"minLng > maxLng", [4]float64{0, 10, 1, 5}, true},
-		{"zero area", [4]float64{0, 0, 0, 0}, true},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := validateBbox(tc.bbox)
-			if tc.wantErr {
-				if err == nil {
-					t.Errorf("validateBbox(%v): expected error, got nil", tc.bbox)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("validateBbox(%v): unexpected error: %v", tc.bbox, err)
-				}
-			}
-		})
-	}
-}
-
 // TestConnectionLimiter tests the connection limiter acquire/release logic.
 func TestConnectionLimiter(t *testing.T) {
 	// Test nil limiter (no limit)

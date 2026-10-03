@@ -17,21 +17,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// validateBbox checks that a parsed bbox [minLat, minLng, maxLat, maxLng] has
-// valid coordinate ranges and non-zero area. Returns nil if valid.
-func validateBbox(b [4]float64) error {
-	if b[0] < -90 || b[0] > 90 || b[2] < -90 || b[2] > 90 {
-		return fmt.Errorf("latitudes must be between -90 and 90")
-	}
-	if b[1] < -180 || b[1] > 180 || b[3] < -180 || b[3] > 180 {
-		return fmt.Errorf("longitudes must be between -180 and 180")
-	}
-	if b[0] >= b[2] || b[1] >= b[3] {
-		return fmt.Errorf("bbox min must be less than max (minLat < maxLat and minLng < maxLng)")
-	}
-	return nil
-}
-
 // sseTracker tracks active SSE connections so graceful shutdown can notify
 // them to close rather than waiting for the full shutdown timeout.
 type sseTracker struct {
@@ -172,13 +157,10 @@ func (h *Handler) Stream(c *gin.Context) {
 
 	var bbox *[4]float64
 	if raw := strings.TrimSpace(c.Query("bbox")); raw != "" {
+		// ParseBbox is the single source of truth for bbox validation: it
+		// rejects out-of-range, inverted and zero-area boxes itself.
 		b, ok := httpx.ParseBbox(c)
 		if !ok {
-			return
-		}
-		// Validate bbox coordinate ranges.
-		if err := validateBbox(b); err != nil {
-			response.BadRequest(c, err.Error())
 			return
 		}
 		bbox = &b

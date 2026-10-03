@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 )
 
 type Repository interface {
@@ -64,15 +65,10 @@ func (r *postgresRepository) PinExists(ctx context.Context, pinID string) (bool,
 func (r *postgresRepository) List(ctx context.Context, userID string) ([]Entry, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
-		       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username, f.created_at AS saved_at
+		       ` + database.CoverPhotoCoalesce + `, u.username, f.created_at AS saved_at
 		FROM favorites f
 		JOIN pins p ON p.id = f.pin_id
-		LEFT JOIN LATERAL (
-			SELECT photo_url, thumbnail_url FROM pin_photos
-			WHERE pin_id = p.id
-			ORDER BY position
-			LIMIT 1
-		) pp ON true
+		` + database.CoverPhotoLateral + `
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE f.user_id = $1 AND p.is_hidden = false
 		ORDER BY f.created_at DESC

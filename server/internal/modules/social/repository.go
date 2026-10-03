@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 )
 
 var ErrNotFound = errors.New("user not found")
@@ -99,15 +100,10 @@ func (r *postgresRepository) CountPins(ctx context.Context, userID string) (int,
 func (r *postgresRepository) Feed(ctx context.Context, userID string, limit int) ([]pins.PinListEntry, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
-		       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username
+		       ` + database.CoverPhotoCoalesce + `, u.username
 		FROM follows f
 		JOIN pins p ON p.user_id = f.followee_id
-		LEFT JOIN LATERAL (
-			SELECT photo_url, thumbnail_url FROM pin_photos
-			WHERE pin_id = p.id
-			ORDER BY position
-			LIMIT 1
-		) pp ON true
+		` + database.CoverPhotoLateral + `
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE f.follower_id = $1 AND p.is_hidden = false
 		ORDER BY p.created_at DESC

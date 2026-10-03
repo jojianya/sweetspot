@@ -15,7 +15,11 @@ export default function PrivacyPage() {
         stored or logged in plain text), avatar, profile links, and role.
         Content you post: pin locations, captions, categories, photos,
         comments, favorites, follows, and collections (including their
-        public/private setting). Uploaded photos are re-encoded and stripped
+        public/private setting). We also record which signed-in account
+        viewed which pin (one entry per account and pin, used only to
+        count unique views for trending); opening a pin while signed out
+        is never recorded, and your own opens of your own pins are not
+        counted. Uploaded photos are re-encoded and stripped
         of EXIF location metadata before storage.
       </p>
       <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">2. Technical data</h2>

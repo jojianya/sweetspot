@@ -175,7 +175,15 @@ export default function SavedPinsPanel({
 
             {collectionError && (
               <p className="mb-2 text-xs text-rose-600 dark:text-rose-400" role="alert">
-                {collectionError}
+                {collectionError}{" "}
+                <button
+                  type="button"
+                  onClick={() => setCollectionError(null)}
+                  className="font-medium underline"
+                  aria-label="Dismiss error"
+                >
+                  Dismiss
+                </button>
               </p>
             )}
 
@@ -361,7 +369,15 @@ export default function SavedPinsPanel({
 
             {collectionError && !openCollection && (
               <p className="mb-2 px-1 text-xs text-rose-600 dark:text-rose-400" role="alert">
-                {collectionError}
+                {collectionError}{" "}
+                <button
+                  type="button"
+                  onClick={() => setCollectionError(null)}
+                  className="font-medium underline"
+                  aria-label="Dismiss error"
+                >
+                  Dismiss
+                </button>
               </p>
             )}
 

@@ -42,8 +42,12 @@ export function useCollectionDetail() {
       try {
         await removePin(collectionId, pinId);
       } catch (e) {
-        setCollectionError(errorMessage(e));
+        // The rollback refetch starts by clearing the error; restore the
+        // removal failure afterwards so it stays visible until the next
+        // successful action or an explicit dismiss.
+        const message = errorMessage(e);
         await openCollectionDetail(collectionId);
+        setCollectionError(message);
       }
     },
     [removePin, openCollectionDetail]

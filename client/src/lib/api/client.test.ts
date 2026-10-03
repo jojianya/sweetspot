@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AxiosAdapter } from "axios";
-import api, { ApiError } from "./client";
+import api, { ApiError, setUnauthorizedHandler } from "./client";
 import { errorMessage } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
@@ -76,11 +76,24 @@ describe("401 session backstop", () => {
 
   beforeEach(() => {
     signedIn();
+    // Mirrors what SessionSync registers in the browser; the API layer
+    // itself ships a no-op default.
+    setUnauthorizedHandler(() => useAuth.getState().clearAuth());
   });
 
   afterEach(() => {
     useAuth.setState({ user: null });
+    setUnauthorizedHandler(() => {});
     vi.restoreAllMocks();
+  });
+
+  it("leaves the session alone while no handler is registered", async () => {
+    setUnauthorizedHandler(() => {});
+    signedIn();
+    await expect(
+      api.get("/feed", { adapter: failWith(401, "/feed") }).catch((e) => e)
+    ).resolves.toMatchObject({ status: 401 });
+    expect(useAuth.getState().user).not.toBeNull();
   });
 
   it("clears the session on a 401 from an authenticated request", async () => {

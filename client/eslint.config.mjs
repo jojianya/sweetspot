@@ -17,11 +17,12 @@ const eslintConfig = defineConfig([
     "public/**",
   ]),
   // Dependency-flow guard: pure lib must not import the store.
-  // Only client/src/lib/api/client.ts may (allowlisted via eslint-disable,
-  // pending the P8 callback injection). Hooks/components importing the store
-  // is the correct direction and stays allowed.
+  // Test files are excluded: they need the store to assert behavior.
+  // Hooks/components importing the store is the correct direction and stays
+  // allowed.
   {
     files: ["src/lib/api/**", "src/lib/types/**"],
+    ignores: ["**/*.test.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",

@@ -4,11 +4,11 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Avatar from "@/components/Avatar";
-import { fetchUser, fetchUserCollections, fetchUserPins, updateMyProfile, type ProfileEdit } from "@/lib/api";
-import { ApiError } from "@/lib/api/client";
+import { updateMyProfile, type ProfileEdit } from "@/lib/api";
 import { errorMessage, formatTime } from "@/lib/utils";
 import { socialLinks, socialsChanged, strSocial } from "@/lib/utils/profile";
 import { useFollow } from "@/hooks/useFollow";
+import { useProfile } from "@/hooks/useProfile";
 import { useAuth } from "@/store/auth";
 import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
 import type { CollectionEntry, PinListEntry, PublicProfile } from "@/lib/types";
@@ -81,46 +81,10 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const { user } = useAuth();
   const isSelf = user !== null && user.id === id;
 
-  const [profile, setProfile] = useState<PublicProfile | null>(null);
-  const [pins, setPins] = useState<PinListEntry[]>([]);
-  const [collections, setCollections] = useState<CollectionEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  const { profile, setProfile, pins, collections, loading, notFound, error, retry } =
+    useProfile(id);
 
   const { stats, busy, error: followError, toggle } = useFollow(id);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const [prof, userPins, userCollections] = await Promise.all([
-          fetchUser(id),
-          fetchUserPins(id),
-          fetchUserCollections(id),
-        ]);
-        if (cancelled) return;
-        setProfile(prof);
-        setPins(userPins);
-        setCollections(userCollections);
-      } catch (e) {
-        if (cancelled) return;
-        if (e instanceof ApiError && e.status === 404) {
-          setNotFound(true);
-        } else {
-          setError(errorMessage(e));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, attempt]);
 
   // Profile editing state (own profile only).
   const [editing, setEditing] = useState(false);
@@ -142,13 +106,6 @@ export default function ProfilePage({ params }: ProfilePageProps) {
       if (avatarPreview) URL.revokeObjectURL(avatarPreview);
     };
   }, [avatarPreview]);
-
-  const retry = () => {
-    setError(null);
-    setNotFound(false);
-    setLoading(true);
-    setAttempt((n) => n + 1);
-  };
 
   const openEdit = () => {
     if (!profile) return;

@@ -15,6 +15,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { PinListEntry } from "@/lib/types";
 import {
   boundsToValidBbox,
+  formatBbox,
   parsePoint,
   selectNearbyPins,
   type PinCoordinate,
@@ -296,7 +297,7 @@ export default function MapView({
         });
 
         const [south, west, north, east] = boundsToValidBbox(map.getBounds());
-        onBoundsRef.current(`${south},${west},${north},${east}`, {
+        onBoundsRef.current(formatBbox([south, west, north, east]), {
           lat: map.getCenter().lat,
           lng: map.getCenter().lng,
         });
@@ -305,7 +306,7 @@ export default function MapView({
 
     map.on("moveend", () => {
       const [south, west, north, east] = boundsToValidBbox(map.getBounds());
-      onBoundsRef.current(`${south},${west},${north},${east}`, {
+      onBoundsRef.current(formatBbox([south, west, north, east]), {
         lat: map.getCenter().lat,
         lng: map.getCenter().lng,
       });

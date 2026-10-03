@@ -3,6 +3,7 @@ export { formatTime, relativeTime } from "./format";
 export {
   boundsToValidBbox,
   distanceMeters,
+  formatBbox,
   getCurrentPosition,
   geolocationAvailable,
   parsePoint,

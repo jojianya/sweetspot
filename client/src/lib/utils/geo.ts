@@ -205,3 +205,13 @@ export function boundsToValidBbox(b: LngLatBounds): [number, number, number, num
   if (lngMax < lngMin) return [south, -180, north, 180];
   return [south, lngMin, north, lngMax];
 }
+
+/**
+ * Serializes a bbox to exactly four decimals per coordinate. The quantized
+ * numbers carry binary float artifacts (77.65430000000003); rendering with
+ * toFixed keeps the wire format clean while parsing back to the same
+ * meaning the server already receives.
+ */
+export function formatBbox(bbox: readonly [number, number, number, number]): string {
+  return bbox.map((n) => n.toFixed(4)).join(",");
+}

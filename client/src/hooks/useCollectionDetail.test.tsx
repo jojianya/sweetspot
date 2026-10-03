@@ -35,11 +35,10 @@ function detail(overrides: Partial<CollectionDetail> = {}): CollectionDetail {
     user_id: "user-1",
     name: "Secret",
     description: null,
-    cover_url: null,
+    cover_url: "",
     is_private: true,
     pin_count: 2,
     created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:00:00Z",
     pins: [
       {
         id: "pin-1",

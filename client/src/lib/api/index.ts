@@ -1,7 +1,7 @@
 export { default as api, API_BASE_URL } from "./client";
 export { confirmPasswordReset, login, logout, register, requestPasswordReset } from "./auth";
 export { fetchCategories } from "./categories";
-export { createPin, deletePin, fetchPin, fetchPins, fetchTrendingPins, registerPinView, searchPins, updatePin } from "./pins";
+export { createPin, deletePin, fetchPin, fetchPins, fetchTrendingPins, searchPins, updatePin } from "./pins";
 export { searchPlaces, type PlaceResult } from "./geocoding";
 export { fetchFavoriteIDs, fetchFavorites, removeFavorite, saveFavorite, type FavoriteEntry } from "./favorites";
 export { createComment, deleteComment, fetchComments } from "./comments";

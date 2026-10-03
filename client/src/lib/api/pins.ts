@@ -87,13 +87,3 @@ export async function updatePin(
 export async function deletePin(id: string): Promise<void> {
   await api.delete(`/pins/${id}`);
 }
-
-/**
- * Registers a single view for a pin and returns the updated counter. Call this
- * when a pin's detail is actually opened — the read endpoints never increment
- * views, so SSR fetches and crawlers cannot inflate the count.
- */
-export async function registerPinView(id: string): Promise<number> {
-  const { data } = await api.post<{ views: number }>(`/pins/${id}/view`);
-  return data.views;
-}

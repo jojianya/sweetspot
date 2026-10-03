@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTime } from "./format";
+import { formatTime, formatViews } from "./format";
 
 const SHAPE =
   /^(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec) \d{4}, \d{2}:\d{2}$/;
@@ -13,5 +13,20 @@ describe("formatTime", () => {
 
   it("returns an empty string for an invalid date", () => {
     expect(formatTime("not-a-date")).toBe("");
+  });
+});
+describe("formatViews", () => {
+  it("uses the singular for one view", () => {
+    expect(formatViews(1)).toBe("1 view");
+  });
+
+  it("uses the plural otherwise, including zero", () => {
+    expect(formatViews(0)).toBe("0 views");
+    expect(formatViews(2)).toBe("2 views");
+  });
+
+  it("groups thousands", () => {
+    expect(formatViews(1234)).toBe("1,234 views");
+    expect(formatViews(1000000)).toBe("1,000,000 views");
   });
 });

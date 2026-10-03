@@ -16,6 +16,11 @@ function ViewProbe({ pinId, ownerId }: { pinId: string | null; ownerId?: string 
   return <span>{pinId ?? "none"}</span>;
 }
 
+function ResultProbe({ pinId, ownerId }: { pinId: string | null; ownerId?: string | null }) {
+  const result = usePinView(pinId, ownerId);
+  return <span>{result === null ? "none" : `${result.pinId}:${result.views}`}</span>;
+}
+
 describe("usePinView", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -87,6 +92,37 @@ describe("usePinView", () => {
     await act(async () => {
       root.render(createElement(ViewProbe, { pinId: "pin-1", ownerId: "owner-9" }));
     });
+    expect(debugSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the counted views once", async () => {
+    apiMocks.registerPinView.mockResolvedValue(7);
+    await act(async () => {
+      root.render(createElement(ResultProbe, { pinId: "pin-1", ownerId: "owner-9" }));
+    });
+    expect(container.textContent).toBe("pin-1:7");
+  });
+
+  it("returns null on skips and on the repeat guard", async () => {
+    await act(async () => {
+      root.render(createElement(ResultProbe, { pinId: "pin-1", ownerId: "viewer-1" }));
+    });
+    expect(container.textContent).toBe("none");
+    await act(async () => {
+      root.render(createElement(ResultProbe, { pinId: "pin-2", ownerId: "owner-9" }));
+    });
+    await act(async () => {
+      root.render(createElement(ResultProbe, { pinId: "pin-2", ownerId: "owner-9" }));
+    });
+    expect(apiMocks.registerPinView).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null when the call fails", async () => {
+    apiMocks.registerPinView.mockRejectedValue(new Error("offline"));
+    await act(async () => {
+      root.render(createElement(ResultProbe, { pinId: "pin-1", ownerId: "owner-9" }));
+    });
+    expect(container.textContent).toBe("none");
     expect(debugSpy).toHaveBeenCalledTimes(1);
   });
 });

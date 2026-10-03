@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import PanelSheet from "@/components/PanelSheet";
 import {
   BookmarkIcon,
@@ -22,12 +21,12 @@ import ReportSheet from "./ReportSheet";
 import type { PinDetail } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
 import { categorySlug } from "@/lib/utils/category";
-import { reverseGeocode } from "@/lib/api/geocoding";
 import { fetchPin } from "@/lib/api/pins";
-import { removeFavorite, saveFavorite } from "@/lib/api/favorites";
 import { useCategories } from "@/hooks/useCategories";
+import { usePinAddress } from "@/hooks/usePinAddress";
+import { useOptimisticSave } from "@/hooks/useOptimisticSave";
+import { usePinShare } from "@/hooks/usePinShare";
 import { useAuth } from "@/store/auth";
-import { useSavedStatus } from "@/hooks/useFavorites";
 
 interface PinDetailPanelProps {
   pin: PinDetail;
@@ -36,19 +35,16 @@ interface PinDetailPanelProps {
 }
 
 export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: PinDetailPanelProps) {
-  const router = useRouter();
   const { user } = useAuth();
   const { categories } = useCategories();
   const [pin, setPin] = useState<PinDetail>(initialPin);
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
-  const { saved, setSaved } = useSavedStatus(pin.id, user !== null);
+  const { saved, saving, handleSave } = useOptimisticSave(pin.id);
 
   const photo = pin.photos[index];
   const count = pin.photos.length;
@@ -57,65 +53,9 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
   const isOwner =
     user !== null && (user.id === pin.user_id || user.role === "admin" || user.role === "owner");
 
-  const [address, setAddress] = useState<string | null>(null);
+  const address = usePinAddress(point);
 
-  useEffect(() => {
-    if (!point) return;
-    const controller = new AbortController();
-    reverseGeocode(point, controller.signal)
-      .then((text) => {
-        if (!controller.signal.aborted) setAddress(text);
-      })
-      .catch(() => {
-        // lookup failed; the address row falls back to a neutral label
-      });
-    return () => controller.abort();
-  }, [point]);
-
-  const handleSave = () => {
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-    if (saving) return;
-    setSaving(true);
-    const next = !saved;
-    setSaved(next);
-    const op = next ? saveFavorite(pin.id) : removeFavorite(pin.id);
-    op.then(() => setSaving(false)).catch(() => {
-      setSaved(!next);
-      setSaving(false);
-    });
-  };
-
-  const handleShare = async () => {
-    const text = `Check out ${pin.caption ?? "this place"} on GoodSpot`;
-    const url = `${window.location.origin}/pin/${pin.id}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: text, text, url });
-        return;
-      } catch {
-        // user dismissed the share sheet; fall through to clipboard
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(`${text} ${url}`);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore clipboard failures
-    }
-  };
-
-  const goDirections = () => {
-    if (!point) return;
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}`,
-      "_blank",
-      "noopener,noreferrer"
-    );
-  };
+  const { copied, handleShare, goDirections } = usePinShare(pin.caption, pin.id, point);
 
   const handleUpdated = async () => {
     try {

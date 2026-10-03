@@ -179,4 +179,25 @@ describe("ProfilePage", () => {
     expect(container.textContent).not.toContain("User not found");
     expect(container.textContent).toContain("server error");
   });
+
+  it("badges private collections and counts pins on each", async () => {
+    useAuth.getState().setUser({ ...viewer, id: USER_ID, username: "alice" });
+    apiMocks.fetchUserCollections.mockResolvedValue([
+      { id: "col-1", name: "Secret", cover_url: null, is_private: true, pin_count: 1 },
+      { id: "col-2", name: "Public", cover_url: null, is_private: false, pin_count: 3 },
+    ]);
+
+    await renderProfile();
+
+    expect(container.textContent).toContain("Private");
+    expect(container.textContent).toContain("1 pin");
+    expect(container.textContent).toContain("3 pins");
+  });
+
+  it("offers logged-out viewers a login link instead of a follow button", async () => {
+    await renderProfile(OTHER_USER_ID);
+
+    expect(button(container, "Follow")).toBeUndefined();
+    expect(container.querySelector('a[href="/login"]')?.textContent).toBe("Follow");
+  });
 });

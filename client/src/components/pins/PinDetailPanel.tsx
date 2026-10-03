@@ -53,6 +53,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
   // response after switching pins (or unmount) is discarded.
   useEffect(() => {
     if (!view) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- merge the freshly counted total into local pin state once per fetch
     setPin((prev) => (prev.id === view.pinId ? { ...prev, views: view.views } : prev));
   }, [view]);
 

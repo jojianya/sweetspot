@@ -113,9 +113,14 @@ describe("PinDetailPanel view count", () => {
     });
     expect(container.textContent).toContain("10 views");
 
+    // Navigate to pin B: a fresh mount, like the map's key={detail.id} remount.
     await act(async () => {
       root.unmount();
     });
+    container.remove();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
     await act(async () => {
       root.render(
         createElement(PinDetailPanel, { pin: pin("pin-b", 20), onClose: noop, onDeleted: noop })

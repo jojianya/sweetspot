@@ -1,17 +1,17 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Avatar from "@/components/Avatar";
-import { updateMyProfile, type ProfileEdit } from "@/lib/api";
-import { errorMessage, formatTime } from "@/lib/utils";
-import { socialLinks, socialsChanged, strSocial } from "@/lib/utils/profile";
+import { formatTime } from "@/lib/utils";
+import { socialLinks } from "@/lib/utils/profile";
 import { useFollow } from "@/hooks/useFollow";
 import { useProfile } from "@/hooks/useProfile";
+import { useProfileEditor } from "@/hooks/useProfileEditor";
 import { useAuth } from "@/store/auth";
 import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
-import type { CollectionEntry, PinListEntry, PublicProfile } from "@/lib/types";
+import type { PinListEntry } from "@/lib/types";
 
 interface ProfilePageProps {
   params: Promise<{ id: string }>;
@@ -86,79 +86,25 @@ export default function ProfilePage({ params }: ProfilePageProps) {
 
   const { stats, busy, error: followError, toggle } = useFollow(id);
 
-  // Profile editing state (own profile only).
-  const [editing, setEditing] = useState(false);
-  const [editUsername, setEditUsername] = useState("");
-  const [editInstagram, setEditInstagram] = useState("");
-  const [editTwitter, setEditTwitter] = useState("");
-  const [editWebsite, setEditWebsite] = useState("");
-  const [editAvatar, setEditAvatar] = useState<File | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const avatarPreview = useMemo(
-    () => (editAvatar ? URL.createObjectURL(editAvatar) : null),
-    [editAvatar]
-  );
-
-  useEffect(() => {
-    return () => {
-      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
-    };
-  }, [avatarPreview]);
-
-  const openEdit = () => {
-    if (!profile) return;
-    setEditUsername(profile.username);
-    setEditInstagram(strSocial(profile.socials.instagram));
-    setEditTwitter(strSocial(profile.socials.twitter));
-    setEditWebsite(strSocial(profile.socials.website));
-    setEditAvatar(null);
-    setSaveError(null);
-    setEditing(true);
-  };
-
-  const save = async () => {
-    if (!profile) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const edit: ProfileEdit = {};
-      const username = editUsername.trim();
-      if (username !== profile.username) edit.username = username;
-      const socials = socialsChanged(profile.socials, {
-        instagram: editInstagram,
-        twitter: editTwitter,
-        website: editWebsite,
-      });
-      if (socials) edit.socials = socials;
-      if (editAvatar) edit.avatar = editAvatar;
-      if (edit.username === undefined && edit.socials === undefined && edit.avatar === undefined) {
-        setEditing(false);
-        return;
-      }
-      const updated = await updateMyProfile(edit);
-      setProfile(updated);
-      useAuth.setState((s) =>
-        s.user
-          ? {
-              user: {
-                ...s.user,
-                username: updated.username,
-                avatar_url: updated.avatar_url,
-                socials: updated.socials,
-              },
-            }
-          : s
-      );
-      setEditing(false);
-      setEditAvatar(null);
-    } catch (e) {
-      setSaveError(errorMessage(e));
-    } finally {
-      setSaving(false);
-    }
-  };
+  const {
+    editing,
+    setEditing,
+    editUsername,
+    setEditUsername,
+    editInstagram,
+    setEditInstagram,
+    editTwitter,
+    setEditTwitter,
+    editWebsite,
+    setEditWebsite,
+    editAvatar,
+    setEditAvatar,
+    saving,
+    saveError,
+    avatarPreview,
+    openEdit,
+    save,
+  } = useProfileEditor(profile, setProfile);
 
   if (loading) {
     return (

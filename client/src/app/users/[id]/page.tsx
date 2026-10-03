@@ -7,6 +7,7 @@ import Avatar from "@/components/Avatar";
 import { fetchUser, fetchUserCollections, fetchUserPins, updateMyProfile, type ProfileEdit } from "@/lib/api";
 import { ApiError } from "@/lib/api/client";
 import { errorMessage, formatTime } from "@/lib/utils";
+import { socialLinks, socialsChanged, strSocial } from "@/lib/utils/profile";
 import { useFollow } from "@/hooks/useFollow";
 import { useAuth } from "@/store/auth";
 import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
@@ -27,44 +28,6 @@ const stroke = {
 
 const INPUT_CLASS =
   "w-full rounded-xl border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100";
-
-function strSocial(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-/** Builds the socials payload, dropping unchanged known keys so no-op saves are skipped. */
-function socialsChanged(
-  current: Record<string, unknown>,
-  edits: Record<string, string>
-): Record<string, unknown> | undefined {
-  const next: Record<string, unknown> = { ...current };
-  let changed = false;
-  for (const key of Object.keys(edits)) {
-    const before = typeof current[key] === "string" ? current[key] : "";
-    if (edits[key] !== before) {
-      next[key] = edits[key];
-      changed = true;
-    }
-  }
-  return changed ? next : undefined;
-}
-
-/** Renders profile socials as external links (instragram/twitter handles, website URL). */
-function socialLinks(socials: Record<string, unknown>): Array<{ label: string; href: string }> {
-  const links: Array<{ label: string; href: string }> = [];
-  const handle = (v: string) => v.trim().replace(/^@/, "");
-  if (typeof socials.instagram === "string" && socials.instagram.trim()) {
-    links.push({ label: "Instagram", href: `https://instagram.com/${handle(socials.instagram)}` });
-  }
-  if (typeof socials.twitter === "string" && socials.twitter.trim()) {
-    links.push({ label: "Twitter", href: `https://x.com/${handle(socials.twitter)}` });
-  }
-  if (typeof socials.website === "string" && socials.website.trim()) {
-    const site = socials.website.trim();
-    links.push({ label: "Website", href: /^https?:\/\//i.test(site) ? site : `https://${site}` });
-  }
-  return links;
-}
 
 function CollectionGlyph() {
   return (

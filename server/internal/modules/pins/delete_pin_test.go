@@ -16,9 +16,9 @@ import (
 
 func init() { gin.SetMode(gin.TestMode) }
 
-// stubRepo implements Repository with only the two methods DeletePin touches.
-// The embedded nil interface means any other call panics, which is what we want
-// from a test double.
+// stubRepo implements Repository with only the methods the handler tests
+// touch. The embedded nil interface means any other call panics, which is
+// what we want from a test double.
 type stubRepo struct {
 	Repository
 
@@ -29,6 +29,15 @@ type stubRepo struct {
 	deletedID          string
 	deletedUserID      string
 	deletedIsModerator bool
+
+	userExists    bool
+	userExistsErr error
+	categoryExists bool
+	createErr     error
+	created       bool
+	updateErr     error
+	updated       bool
+	updatePhotos  int
 }
 
 func (s *stubRepo) GetPin(context.Context, string) (PinDetail, error) {
@@ -38,6 +47,27 @@ func (s *stubRepo) GetPin(context.Context, string) (PinDetail, error) {
 func (s *stubRepo) DeletePin(_ context.Context, id, userID string, isModerator bool) error {
 	s.deletedID, s.deletedUserID, s.deletedIsModerator = id, userID, isModerator
 	return s.delErr
+}
+
+func (s *stubRepo) UserExists(context.Context, string) (bool, error) {
+	return s.userExists, s.userExistsErr
+}
+
+func (s *stubRepo) CategoryExists(context.Context, int) (bool, error) {
+	return s.categoryExists, nil
+}
+
+func (s *stubRepo) CreatePin(_ context.Context, _ NewPin) (Pin, error) {
+	s.created = true
+	return Pin{}, s.createErr
+}
+
+func (s *stubRepo) UpdatePin(_ context.Context, _ string, patch UpdatePinPatch) (Pin, error) {
+	s.updated = true
+	if patch.Photos != nil {
+		s.updatePhotos = len(patch.Photos)
+	}
+	return Pin{}, s.updateErr
 }
 
 // stubRoles is a one-method RoleReader returning a fixed role for any caller.

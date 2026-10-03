@@ -48,7 +48,7 @@ type stubPinRepo struct {
 	viewErr       error
 }
 
-func (s *stubPinRepo) RegisterView(context.Context, string) (int64, error) {
+func (s *stubPinRepo) RegisterView(context.Context, string, string) (int64, error) {
 	return s.views, s.viewErr
 }
 

@@ -26,9 +26,11 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 	createLimit := middleware.New(10, time.Minute)
 	rg.POST("/pins", createLimit.Middleware(), middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions), h.CreatePin)
 
-	// View counting is public (like reading the pin) and intentionally not
-	// rate-limited: it is a counter, not a state change worth throttling.
-	rg.POST("/pins/:id/view", validid.Middleware(), h.RegisterView)
+	// View counting reads the session when present but stays open: anonymous
+	// visitors get the current count without recording anything. Lenient
+	// per-IP cap (a human cannot open 60 pins a minute); floods answer 429.
+	viewLimit := middleware.New(60, time.Minute)
+	rg.POST("/pins/:id/view", validid.Middleware(), viewLimit.Middleware(), middleware.OptionalAuth(opts.JWTSecret, opts.Blacklist, opts.Sessions), h.RegisterView)
 
 	authRequired := middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions)
 	rg.PATCH("/pins/:id", validid.Middleware(), authRequired, h.UpdatePin)

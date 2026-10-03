@@ -179,11 +179,11 @@ func (h *Handler) canViewHidden(c *gin.Context, pin PinDetail) bool {
 	return users.IsModerator(h.roles, c)
 }
 
-// RegisterView counts a view of a pin. It is public: anyone who opens a pin
-// counts, so SSR fetches and crawlers calling GET /pins/:id do not inflate the
-// number — the client registers views explicitly when a detail is opened.
+// RegisterView counts a unique per-account view. It is read-safe for
+// anonymous visitors: without a session it returns the current count
+// unchanged, so opening a pin logged out never errors and never counts.
 func (h *Handler) RegisterView(c *gin.Context) {
-	views, err := h.repo.RegisterView(c.Request.Context(), c.Param("id"))
+	views, err := h.repo.RegisterView(c.Request.Context(), c.Param("id"), middleware.GetUserID(c))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")

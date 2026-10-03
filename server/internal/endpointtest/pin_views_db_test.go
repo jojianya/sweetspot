@@ -8,6 +8,7 @@ package endpointtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -35,7 +36,7 @@ type viewFixture struct {
 	pinID  string
 }
 
-func setupViews(t *testing.T, bl *cache.Blacklist) viewFixture {
+func setupViews(t *testing.T, bl *cache.Blacklist, checker ...middleware.SessionChecker) viewFixture {
 	t.Helper()
 	pool := requireEndpointDB(t)
 	ctx := context.Background()
@@ -59,7 +60,11 @@ func setupViews(t *testing.T, bl *cache.Blacklist) viewFixture {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	viewLimit := middleware.New(60, time.Minute)
-	r.POST("/pins/:id/view", viewLimit.Middleware(), middleware.OptionalAuth(viewTestSecret, bl, nil), h.RegisterView)
+	var ch middleware.SessionChecker
+	if len(checker) > 0 {
+		ch = checker[0]
+	}
+	r.POST("/pins/:id/view", middleware.OptionalAuth(viewTestSecret, bl, ch), viewLimit.Middleware(), h.RegisterView)
 	return viewFixture{router: r, repo: repo, pool: pool, author: author, other: other, pinID: p.ID.String()}
 }
 
@@ -200,6 +205,15 @@ func TestDBPinViewsMissingAndHidden(t *testing.T) {
 	}
 }
 
+type floorChecker struct {
+	floor time.Time
+	err   error
+}
+
+func (s floorChecker) CheckSession(context.Context, string) (middleware.SessionState, error) {
+	return middleware.SessionState{ValidAfter: s.floor}, s.err
+}
+
 func TestDBPinViewsDegradedAuthActsAnonymous(t *testing.T) {
 	expired, err := jwt.Generate(viewTestSecret, "someone", -time.Hour)
 	if err != nil {
@@ -213,13 +227,18 @@ func TestDBPinViewsDegradedAuthActsAnonymous(t *testing.T) {
 	live, liveOK := liveEndpointBlacklist(t)
 
 	cases := []struct {
-		name  string
-		bl    *cache.Blacklist
-		token string
+		name       string
+		bl         *cache.Blacklist
+		checker    middleware.SessionChecker
+		token      string
+		skipNoLive bool
 	}{
-		{"expired token", nil, expired},
-		{"malformed token", nil, "not-a-token"},
-		{"redis outage", cache.New("127.0.0.1:1", ""), viewToken(t, "someone")},
+		{"expired token", nil, nil, expired, false},
+		{"malformed token", nil, nil, "not-a-token", false},
+		{"redis outage", cache.New("127.0.0.1:1", ""), nil, viewToken(t, "someone"), false},
+		{"revoked token", nil, nil, revoked, true},
+		{"revoked floor", nil, floorChecker{floor: time.Now().Add(time.Minute)}, viewToken(t, "someone"), false},
+		{"checker error", nil, floorChecker{err: errDegradedBoom}, viewToken(t, "someone"), false},
 	}
 	if liveOK {
 		claims, err := jwt.Validate(viewTestSecret, revoked)
@@ -229,16 +248,32 @@ func TestDBPinViewsDegradedAuthActsAnonymous(t *testing.T) {
 		if err := live.Revoke(context.Background(), claims.ID, time.Minute); err != nil {
 			t.Fatalf("revoke: %v", err)
 		}
-		cases = append(cases, struct {
-			name  string
-			bl    *cache.Blacklist
-			token string
-		}{"revoked token", live, revoked})
+		for i := range cases {
+			if cases[i].name == "revoked token" {
+				cases[i].bl = live
+			}
+		}
 	}
-
+	if liveOK {
+		claims, err := jwt.Validate(viewTestSecret, revoked)
+		if err != nil {
+			t.Fatalf("validate test token: %v", err)
+		}
+		if err := live.Revoke(context.Background(), claims.ID, time.Minute); err != nil {
+			t.Fatalf("revoke: %v", err)
+		}
+		for i := range cases {
+			if cases[i].name == "revoked token" {
+				cases[i].bl = live
+			}
+		}
+	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f := setupViews(t, tc.bl)
+			if tc.skipNoLive && !liveOK {
+				t.Skip("redis unreachable, skipping revoked-token case")
+			}
+			f := setupViews(t, tc.bl, tc.checker)
 			w := postView(t, f, f.pinID, tc.token)
 			if w.Code != http.StatusOK {
 				t.Fatalf("got %d (%s), want 200", w.Code, w.Body.String())
@@ -252,6 +287,8 @@ func TestDBPinViewsDegradedAuthActsAnonymous(t *testing.T) {
 		})
 	}
 }
+
+var errDegradedBoom = errors.New("boom")
 
 func TestDBPinViewsRateBudgetsPerUser(t *testing.T) {
 	pool := requireEndpointDB(t)

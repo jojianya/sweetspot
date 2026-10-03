@@ -214,7 +214,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
       <>
         <Navbar backHref="/" />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-          <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+          <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{error}</p>
           <button
             type="button"
             onClick={retry}

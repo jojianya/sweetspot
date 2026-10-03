@@ -91,7 +91,7 @@ export default function CommentsSection({ pinId, compact = false }: CommentsSect
           </ul>
         </SkeletonRegion>
       ) : error ? (
-        <div className="flex items-center gap-2 py-3 text-sm text-rose-600 dark:text-rose-400">
+        <div className="flex items-center gap-2 py-3 text-sm text-rose-600 dark:text-rose-400" role="alert">
           <span>{error}</span>
           <button
             type="button"

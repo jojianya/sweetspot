@@ -277,7 +277,7 @@ export default function SavedPinsPanel({
 
             {!loading && error && (
               <div className="px-3 py-8 text-center">
-                <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+                <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{error}</p>
                 <button
                   type="button"
                   onClick={retry}
@@ -399,7 +399,7 @@ export default function SavedPinsPanel({
 
             {!collectionsLoading && collectionsError && (
               <div className="px-3 py-8 text-center">
-                <p className="text-sm text-rose-600 dark:text-rose-400">{collectionsError}</p>
+                <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{collectionsError}</p>
                 <button
                   type="button"
                   onClick={collectionsRetry}

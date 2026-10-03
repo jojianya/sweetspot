@@ -23,7 +23,7 @@ export function PageLoading({
 export function PageError({ error, onRetry }: { error: string; onRetry: () => void }) {
   return (
     <div className="flex flex-col items-center gap-3 py-10 text-center">
-      <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+      <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{error}</p>
       <button
         type="button"
         onClick={onRetry}

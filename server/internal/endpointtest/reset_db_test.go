@@ -25,6 +25,11 @@ type captureMailer struct {
 	sent  []string
 	links []string
 	wake  chan struct{}
+	// seen counts consumed mails so consecutive waitForMail calls return
+	// successive links. The old code returned links[last] every time, so a
+	// second call made before the next delivery landed silently returned
+	// the first link again.
+	seen int
 }
 
 func (m *captureMailer) SendPasswordReset(_ context.Context, to, link string) error {
@@ -45,11 +50,14 @@ func (m *captureMailer) waitForMail(t *testing.T) string {
 	for {
 		m.mu.Lock()
 		n := len(m.links)
+		seen := m.seen
 		m.mu.Unlock()
-		if n > 0 {
+		if n > seen {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			return m.links[n-1]
+			link := m.links[seen]
+			m.seen = seen + 1
+			return link
 		}
 		select {
 		case <-m.wake:
@@ -263,8 +271,12 @@ func TestDBPasswordResetSupersedesEarlierToken(t *testing.T) {
 	seedResetUser(t, f.pool, email)
 
 	doJSON(t, f.router, http.MethodPost, "/auth/password/request", `{"email":"`+email+`"}`, nil)
+	// Request #1, then its mail #1: waitForMail consumes in order, so this
+	// is the first link even though delivery runs in a detached goroutine.
 	first := tokenFromLink(t, f.mailer.waitForMail(t))
 	doJSON(t, f.router, http.MethodPost, "/auth/password/request", `{"email":"`+email+`"}`, nil)
+	// Request #2, then its mail #2: this blocks until a second delivery
+	// exists, so it can never repeat the first link.
 	second := tokenFromLink(t, f.mailer.waitForMail(t))
 
 	w := doJSON(t, f.router, http.MethodPost, "/auth/password/reset",

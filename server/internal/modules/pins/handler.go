@@ -275,45 +275,13 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		return
 	}
 
-	lat, err := strconv.ParseFloat(c.PostForm("lat"), 64)
-	if err != nil {
-		response.BadRequest(c, "lat must be a number")
-		return
-	}
-	lng, err := strconv.ParseFloat(c.PostForm("lng"), 64)
-	if err != nil {
-		response.BadRequest(c, "lng must be a number")
-		return
-	}
-	if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
-		response.BadRequest(c, "latitude or longitude out of range")
-		return
-	}
-
-	categoryID, err := strconv.Atoi(c.PostForm("category_id"))
-	if err != nil {
-		response.BadRequest(c, "category_id must be an integer")
-		return
-	}
-
-	var caption *string
-	if v := c.PostForm("caption"); v != "" {
-		if len([]rune(v)) > 500 {
-			response.BadRequest(c, "caption must be at most 500 characters")
-			return
-		}
-		caption = &v
-	}
-
 	files := form.File["photos"]
-	if len(files) < 1 {
-		response.BadRequest(c, "at least one photo is required")
+	input, verr := validateCreateFields(c.PostForm("lat"), c.PostForm("lng"), c.PostForm("category_id"), c.PostForm("caption"), len(files))
+	if verr != nil {
+		response.Error(c, verr.status, verr.msg)
 		return
 	}
-	if len(files) > maxPhotosPerPin {
-		response.BadRequest(c, "photo count exceeds maximum")
-		return
-	}
+	lat, lng, categoryID, caption := input.lat, input.lng, input.categoryID, input.caption
 
 	validated, perr := processPhotos(files)
 	if perr != nil {
@@ -554,29 +522,27 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		return
 	}
 
-	caption := strings.TrimSpace(c.PostForm("caption"))
-	if utf8.RuneCountInString(caption) > 500 {
-		response.BadRequest(c, "caption must be at most 500 characters")
+	fields, verr := validateUpdateFields(
+		strings.TrimSpace(c.PostForm("caption")),
+		strings.TrimSpace(c.PostForm("category_id")),
+		len(form.File["photos"]),
+	)
+	if verr != nil {
+		response.Error(c, verr.status, verr.msg)
 		return
 	}
+	caption, categoryID := fields.caption, fields.categoryID
 
-	var categoryID *int
-	if catStr := strings.TrimSpace(c.PostForm("category_id")); catStr != "" {
-		idv, err := strconv.Atoi(catStr)
+	if categoryID != nil {
+		exists, err := h.repo.CategoryExists(c.Request.Context(), *categoryID)
 		if err != nil {
-			response.BadRequest(c, "category_id must be an integer")
-			return
-		}
-		exists, err := h.repo.CategoryExists(c.Request.Context(), idv)
-		if err != nil {
-			response.Internal(c, "update pin: category exists", err, "category_id", idv)
+			response.Internal(c, "update pin: category exists", err, "category_id", *categoryID)
 			return
 		}
 		if !exists {
 			response.BadRequest(c, "category not found")
 			return
 		}
-		categoryID = &idv
 	}
 
 	patch := UpdatePinPatch{
@@ -585,10 +551,6 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 	}
 
 	files := form.File["photos"]
-	if len(files) > maxPhotosPerPin {
-		response.BadRequest(c, "photo count exceeds maximum")
-		return
-	}
 	if len(files) > 0 {
 		validated, perr := processPhotos(files)
 		if perr != nil {

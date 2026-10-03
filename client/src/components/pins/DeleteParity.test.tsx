@@ -19,6 +19,7 @@ vi.mock("@/lib/api", () => ({
   deleteComment: vi.fn(),
   updatePin: vi.fn(),
   deletePin: vi.fn(),
+  registerPinView: vi.fn().mockResolvedValue(1),
 }));
 
 vi.mock("@/lib/api/geocoding", () => ({

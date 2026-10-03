@@ -87,3 +87,13 @@ export async function updatePin(
 export async function deletePin(id: string): Promise<void> {
   await api.delete(`/pins/${id}`);
 }
+
+/**
+ * Registers the viewer's view of a pin and returns the updated counter.
+ * Fire-and-forget: the server counts at most once per account (unique
+ * pin_views row), so callers only need a once-per-open guard.
+ */
+export async function registerPinView(id: string): Promise<number> {
+  const { data } = await api.post<{ views: number }>(`/pins/${id}/view`);
+  return data.views;
+}

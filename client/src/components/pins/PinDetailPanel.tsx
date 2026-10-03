@@ -25,6 +25,7 @@ import { fetchPin } from "@/lib/api/pins";
 import { useCategories } from "@/hooks/useCategories";
 import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/hooks/useOptimisticSave";
+import { usePinView } from "@/hooks/usePinView";
 import { usePinShare } from "@/hooks/usePinShare";
 import { useAuth } from "@/store/auth";
 
@@ -45,6 +46,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
   const [reportOpen, setReportOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const { saved, saving, handleSave } = useOptimisticSave(pin.id);
+  usePinView(pin.id, pin.user_id);
 
   const photo = pin.photos[index];
   const count = pin.photos.length;

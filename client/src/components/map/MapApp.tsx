@@ -15,6 +15,7 @@ import { useCategories } from "@/hooks/useCategories";
 import { usePinStream } from "@/hooks/usePinStream";
 import { useTrending } from "@/hooks/useTrending";
 import { parsePoint } from "@/lib/utils";
+import { toPinListEntry } from "@/lib/utils/pinEntry";
 import {
   canonicalCategoryAction,
   categoryHref,
@@ -181,21 +182,8 @@ export default function MapApp({
 
   const handleCreated = useCallback(
     (pin: CreatedPin, photos: NewPinPhoto[]) => {
-      const cover = photos[0]?.thumbnail_url ?? photos[0]?.photo_url ?? "";
       const username = useAuth.getState().user?.username ?? "";
-      addPin({
-        id: pin.id,
-        user_id: pin.user_id,
-        location: pin.location,
-        geohash: pin.geohash,
-        caption: pin.caption,
-        category_id: pin.category_id,
-        is_hidden: pin.is_hidden,
-        views: pin.views,
-        created_at: pin.created_at,
-        cover_url: cover,
-        username,
-      });
+      addPin(toPinListEntry(pin, photos, username));
       setSelectedPinId(pin.id);
       setHighlightId(pin.id);
       closeOverlays();

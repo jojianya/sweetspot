@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	golangjwt "github.com/golang-jwt/jwt/v5"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 )
@@ -32,6 +33,46 @@ func signedToken(t *testing.T) string {
 		t.Fatalf("generate token: %v", err)
 	}
 	return tok
+}
+
+// tokenAt mints a token with an explicit issued-at for floor-boundary tests.
+func tokenAt(t *testing.T, issuedAt time.Time) string {
+	t.Helper()
+	claims := jwt.Claims{
+		UserID: "user-1",
+		RegisteredClaims: golangjwt.RegisteredClaims{
+			ID:        "test-jti",
+			ExpiresAt: golangjwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  golangjwt.NewNumericDate(issuedAt),
+		},
+	}
+	tok, err := golangjwt.NewWithClaims(golangjwt.SigningMethodHS256, claims).SignedString([]byte(testSecret))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	return tok
+}
+
+// TestValidateTokenFloorSecondPrecision pins the one-second revocation
+// window: the stored floor keeps microseconds, but the comparison truncates
+// it, so a token from the floor's own second is valid while anything older
+// is not. A zero floor (never reset) accepts everything unexpired.
+func TestValidateTokenFloorSecondPrecision(t *testing.T) {
+	floor := time.Now().Add(-time.Second).Truncate(time.Second).Add(500 * time.Millisecond)
+	checker := stubChecker{state: SessionState{ValidAfter: floor, Role: "user"}}
+
+	if _, _, ok := validateToken(testContext(), testSecret, nil, checker, tokenAt(t, floor.Add(-2*time.Second))); ok {
+		t.Error("accepted a token issued two seconds before the floor")
+	}
+	if _, _, ok := validateToken(testContext(), testSecret, nil, checker, tokenAt(t, floor.Truncate(time.Second))); !ok {
+		t.Error("rejected a token issued in the floor's own second")
+	}
+	if _, _, ok := validateToken(testContext(), testSecret, nil, checker, tokenAt(t, floor.Add(time.Second))); !ok {
+		t.Error("rejected a token issued after the floor")
+	}
+	if _, _, ok := validateToken(testContext(), testSecret, nil, stubChecker{}, tokenAt(t, floor.Add(-time.Hour))); !ok {
+		t.Error("rejected a token with a zero floor")
+	}
 }
 
 func testContext() *gin.Context {

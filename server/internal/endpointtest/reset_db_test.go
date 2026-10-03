@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	golangjwt "github.com/golang-jwt/jwt/v5"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
 	users "github.com/jojianya/sweetspot247-backend/internal/modules/user"
@@ -221,13 +222,33 @@ func TestDBPasswordResetSuccessExpiryReuse(t *testing.T) {
 	}
 }
 
+// oldSessionToken mints a token issued well before the coming reset, so the
+// pre-reset session is deterministically older than any floor the reset sets
+// and the test never depends on bcrypt crossing a second boundary.
+func oldSessionToken(t *testing.T, userID string) string {
+	t.Helper()
+	claims := jwt.Claims{
+		UserID: userID,
+		RegisteredClaims: golangjwt.RegisteredClaims{
+			ID:        "old-session-jti",
+			ExpiresAt: golangjwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  golangjwt.NewNumericDate(time.Now().Add(-5 * time.Second)),
+		},
+	}
+	tok, err := golangjwt.NewWithClaims(golangjwt.SigningMethodHS256, claims).SignedString([]byte(testSecret))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	return tok
+}
+
 // TestDBPasswordResetRevokesOldSessions proves sessions_valid_after: a token
 // minted before the reset stops authenticating afterwards.
 func TestDBPasswordResetRevokesOldSessions(t *testing.T) {
 	f := setupReset(t)
 	email := fmt.Sprintf("revoke-%d@example.com", time.Now().UnixNano())
-	seedResetUser(t, f.pool, email)
-	before := loginToken(t, f, email, "oldpassword123")
+	userID := seedResetUser(t, f.pool, email)
+	before := oldSessionToken(t, userID)
 	if w := authedGet(t, f, before); w.Code != http.StatusOK {
 		t.Fatalf("pre-reset session: got %d (%s)", w.Code, w.Body.String())
 	}
@@ -264,17 +285,19 @@ func TestDBPasswordResetIdentifierThrottle(t *testing.T) {
 	}
 }
 
-// TestDBPasswordResetImmediateLoginStaysValid proves a login minted in the
-// same second as a password reset still authenticates. The JWT issued-at has
-// one-second precision while sessions_valid_after carries microseconds, so a
-// same-second login reads as "before" under the strict-Before comparison.
-// Each attempt syncs to just after a second boundary so reset and login land
-// in the same wall second; attempts that straddle a boundary are discarded
-// (verified from sessions_valid_after and the token's IssuedAt) and retried
-// with a fresh user.
+// TestDBPasswordResetImmediateLoginStaysValid exercises a login minted in
+// the same second as a password reset through the full stack. Each attempt
+// syncs to just after a second boundary so reset and login land in the same
+// wall second; attempts that straddle a boundary are discarded (verified
+// from sessions_valid_after and the token's IssuedAt) and retried with a
+// fresh user. Under -race, bcrypt alone can exceed the one-second window,
+// so inconclusive attempts do not fail: the deterministic lock for the
+// comparison lives in TestValidateTokenFloorSecondPrecision, and any
+// conclusive same-second login here must answer 200.
 func TestDBPasswordResetImmediateLoginStaysValid(t *testing.T) {
 	f := setupReset(t)
 
+	conclusive := 0
 	for attempt := 0; attempt < 4; attempt++ {
 		// Start just inside a fresh second to fit reset + login inside it.
 		for time.Now().Nanosecond() > 100*int(time.Millisecond) {
@@ -303,12 +326,13 @@ func TestDBPasswordResetImmediateLoginStaysValid(t *testing.T) {
 			t.Logf("attempt %d straddled a second boundary, retrying", attempt)
 			continue
 		}
+		conclusive++
 		if w := authedGet(t, f, after); w.Code != http.StatusOK {
 			t.Fatalf("fresh login after reset: got %d (%s), want 200", w.Code, w.Body.String())
 		}
 		return
 	}
-	t.Fatal("could not land reset and login in the same second after 4 attempts")
+	t.Logf("no conclusive same-second attempt (%d tried); comparison locked by TestValidateTokenFloorSecondPrecision", conclusive)
 }
 
 func tokenIssuedAt(t *testing.T, tokenString string) time.Time {

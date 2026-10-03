@@ -126,3 +126,72 @@ describe("usePinView", () => {
     expect(debugSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("usePinView stale results", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    apiMocks.registerPinView.mockReset();
+    useAuth.setState({
+      user: { id: "viewer-1", username: "viewer", avatar_url: null, role: "user" },
+    });
+    const actEnvironment = globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT: boolean;
+    };
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    useAuth.setState({ user: null });
+  });
+
+  it("exposes A's response only to the instance that asked, never to B", async () => {
+    const first = { resolve: null as null | ((v: number) => void) };
+    const second = { resolve: null as null | ((v: number) => void) };
+    apiMocks.registerPinView.mockImplementation((id: string) => {
+      if (id === "pin-a") return new Promise((done) => { first.resolve = done; });
+      return new Promise((done) => { second.resolve = done; });
+    });
+
+    function Show({ id }: { id: string }) {
+      const r = usePinView(id, "owner-9");
+      return <span>{r === null ? "none" : `${r.pinId}:${r.views}`}</span>;
+    }
+
+    await act(async () => {
+      root.render(createElement(Show, { id: "pin-a" }));
+    });
+    await act(async () => {
+      root.unmount();
+    });
+
+    const container2 = document.createElement("div");
+    document.body.appendChild(container2);
+    const root2 = createRoot(container2);
+    await act(async () => {
+      root2.render(createElement(Show, { id: "pin-b" }));
+    });
+
+    await act(async () => {
+      first.resolve?.(99);
+    });
+    expect(container2.textContent).toBe("none");
+
+    await act(async () => {
+      second.resolve?.(21);
+    });
+    expect(container2.textContent).toBe("pin-b:21");
+    await act(async () => {
+      root2.unmount();
+    });
+    container2.remove();
+  });
+});

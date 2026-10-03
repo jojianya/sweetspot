@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -37,6 +38,51 @@ func testContext() *gin.Context {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodGet, "/me", nil)
 	return c
+}
+
+// liveBlacklist dials the real Redis used by the compose stack (and the CI
+// redis service) and skips when it is unreachable, following the
+// requireEndpointDB convention of staying green without infrastructure.
+func liveBlacklist(t *testing.T) *cache.Blacklist {
+	t.Helper()
+	addr := getenv("REDIS_ADDR", "127.0.0.1:6379")
+	bl := cache.New(addr, getenv("REDIS_PASSWORD", ""))
+	if err := bl.Ping(context.Background()); err != nil {
+		t.Skip("redis unreachable, skipping live-blacklist test")
+	}
+	return bl
+}
+
+func getenv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// TestValidateTokenRejectsRevokedToken is the explicit counterpart to the
+// outage test above: a JTI on the blacklist must be denied with the
+// logged-out reason, not accepted and not confused with an outage.
+func TestValidateTokenRejectsRevokedToken(t *testing.T) {
+	bl := liveBlacklist(t)
+	ctx := context.Background()
+
+	tokenString := signedToken(t)
+	claims, err := jwt.Validate(testSecret, tokenString)
+	if err != nil {
+		t.Fatalf("validate test token: %v", err)
+	}
+	if err := bl.Revoke(ctx, claims.ID, time.Minute); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	_, reason, ok := validateToken(testContext(), testSecret, bl, nil, tokenString)
+	if ok {
+		t.Fatal("validateToken accepted a revoked token")
+	}
+	if reason != "session was logged out, please sign in again" {
+		t.Errorf("reason = %q, want the logged-out message", reason)
+	}
 }
 
 // TestValidateTokenFailsClosedWhenBlacklistUnavailable is the regression test for

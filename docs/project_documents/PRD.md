@@ -36,7 +36,7 @@
 | Upload photo(s)           | One or more photos tied to that specific pin (multi-photo upload, ordered)                                                                                          |
 | Viewport-based discovery | View pins within the current map view                                                                                                                                |
 | Auth                     | Register / login required only to create a pin; browsing the map and viewing pin details is open to guests                                                          |
-| Real-time updates        | New pins appear live via WebSocket, no refresh needed — **deferred to Phase 5 (not yet implemented)**                                                               |
+| Real-time updates        | New pins appear live via SSE (`GET /events`), no refresh needed                                                                                                    |
 | Location-based discovery | Core browsing model is the map, not a feed                                                                                                                           |
 | Categories               | Each pin has a fixed, required category (e.g. Food, Nature, Event, Nightlife), for filtering/discovery                                                              |
 | Content reporting        | Users can report a pin; an **admin** reviews and actions reports in-app (hides the pin if warranted) — see §5.1a                                                    |
@@ -89,7 +89,7 @@
 
 - Backend: **Go** — chosen for real-time concurrency demands (live pins, livestreaming) over Node/Express; see [[goodspot247]] architecture notes for full reasoning
 - Database: PostgreSQL + PostGIS for geospatial queries
-- Real-time: WebSocket-based, geohash-partitioned rooms, batched broadcasts, Redis pub/sub for horizontal scaling — **planned (Phase 5), not yet implemented**
+- Real-time: SSE via `GET /events`, Redis pub/sub for horizontal scaling — implemented; batching and outbox-gap hardening are deferred documented items.
 - Frontend: Next.js (web) — React Native (mobile) is a future consideration
 
 ## 9. Open Questions

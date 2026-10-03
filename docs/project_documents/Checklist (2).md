@@ -321,39 +321,39 @@ This app is photo-heavy and map-based — unprocessed multi-photo uploads at up 
 
 ## Phase 5 — Real-Time Layer
 
-> Note (B1): the one-line `internal/realtime/{hub,dto,pubsub,broadcast}.go` stubs were deleted; live realtime is `broker.go` + `handler.go` (SSE). The items below still describe unbuilt work.
-### 5.1 WebSocket server setup
+> **Status:** the plan was revised from WebSocket to Server-Sent Events. The live design is `GET /events` (one global stream per process, no rooms): `internal/modules/realtime/broker.go` publishes `pins.Event` JSON to Redis channel `goodspot:pins`; each client connection subscribes and `runStreamLoop` (`realtime/handler.go:198`) filters server-side by bbox (`matches`, handler.go:237-250) and category, writes `event: pin` messages, and emits a `: heartbeat` comment every 20 s (`handler.go:65`). `MAX_SSE_CONNECTIONS` caps total connections per process (`handler.go:78-95`); Caddy serves `/events` with `flush_interval -1` so frames are not buffered.
 
-- [ ] `go get github.com/gorilla/websocket`
-- [ ] `internal/realtime/hub.go` — connection registry (`map[string][]*Connection` keyed by geohash cell)
-- [ ] `internal/realtime/handler.go` — WebSocket upgrade handler, route: `GET /ws`
-- [ ] Handle client `subscribe`/`unsubscribe` messages (cell list) — shapes defined in `internal/realtime/dto.go`
+### 5.1 WebSocket server setup — superseded by SSE
 
-### 5.2 Redis pub/sub
+- [ ] `go get github.com/gorilla/websocket` — superseded: no WebSocket library; SSE instead.
+- [ ] `internal/realtime/hub.go` — connection registry (`map[string][]*Connection` keyed by geohash cell) — superseded: single global broker per process, per-subscriber Redis subscription, no geohash cell rooms.
+- [ ] `internal/realtime/handler.go` — WebSocket upgrade handler, route: `GET /ws` — superseded: `Handler.Stream` at `GET /events` (router.go:130).
+- [ ] Handle client `subscribe`/`unsubscribe` messages (cell list) — superseded: client passes `bbox`/`category` as query params; `runStreamLoop`/`matches` decide which events reach that subscriber.
+
+### 5.2 Redis pub/sub — done (SSE)
 
 - [ ] `go get github.com/redis/go-redis/v9`
 - [ ] `REDIS_URL` in `.env`
-- [ ] `internal/realtime/pubsub.go` — on pin creation, publish event to Redis channel keyed by geohash cell
-- [ ] Realtime hub subscribes to relevant Redis channels, receives cross-instance events
-- [ ] (Known gap, not required for MVP) Pin write and Redis publish are two separate steps today — a crash between them means a pin is saved but never broadcast. Revisit with a transactional outbox table + poller before relying on real-time delivery being 100% reliable.
+- [ ] `internal/realtime/broker.go` — on pin creation, `Broker.PinCreated` publishes the event to Redis channel `goodspot:pins` (`broker.go:9,36-51`).
+- [ ] Each `GET /events` connection subscribes and receives cross-instance events (`broker.go:53-55`, `handler.go:179-180`).
+- [ ] (Known gap, deferred) Pin write and Redis publish are two separate steps — a crash between them means a pin is saved but never broadcast. Documented, not fixed; a transactional outbox table + poller can close it if it becomes a real problem.
 
-### 5.3 Batching
+### 5.3 Batching — deferred
 
-- [ ] `internal/realtime/broadcast.go` — per-cell buffer + ticker (500ms–1s)
-- [ ] On tick, flush buffered pins as one `pin_batch` message to all connections in that room
+- [ ] Batching of bursts (one event per create today, `handler.go:216`). Deferred: no burst requirement demonstrated; revisit only if a real storm appears.
 
-### 5.4 Frontend WebSocket client
+### 5.4 Frontend WebSocket client — superseded by SSE
 
-- [ ] Native `WebSocket` (or `reconnecting-websocket`) connects on map load
-- [ ] Compute visible geohash cells from current viewport, send `subscribe`
-- [ ] On viewport change, update subscription (unsubscribe old cells, subscribe new ones)
-- [ ] On `pin_batch` message, merge new pins into map state without a full refetch
+- [ ] Native `WebSocket` connect on map load — superseded: `openPinStream` uses `EventSource` (`client/src/lib/api/realtime.ts`).
+- [ ] Compute visible geohash cells, send `subscribe` — superseded: client sends `bbox` + `category` query params (`realtime.ts`, `usePinStream.ts:24`).
+- [ ] Update subscription on viewport change — `usePinStream` re-opens on `[bbox, category, onPin]` (`usePinStream.ts:40`).
+- [ ] On `pin_batch` message, merge new pins without a full refetch — live: one `event: pin` per create; `usePinStream` enriches it and calls `onPin` (current behavior verified; payload schema is client-validated with zod).
 
 ### 5.5 Testing
 
 - [ ] Open app in two browser tabs/windows
 - [ ] Post a pin in tab A
-- [ ] Confirm it appears in tab B within the batch window, no refresh
+- [ ] Confirm it appears in tab B (no refresh) — with matching category and live bbox overlap.
 
 **Phase 5 done when:** Two-tab live-update test passes reliably.
 

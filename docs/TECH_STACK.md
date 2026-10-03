@@ -106,8 +106,10 @@ A monorepo with two runtimes (Go + Node) and one docker-compose stack. Product n
 | **PostGIS** | Postgres extension | none (open source, GPLv2) | Geospatial functions |
 | **libvips / bimg** | server image pipeline | none (open source) | Image processing |
 
+### Live realtime
+- **SSE + Redis pub/sub** — `GET /events` streams newly created pins; the Redis channel `goodspot:pins` fans events out across instances.
+
 ### Planned / stubbed (not live)
-- **WebSocket + Redis pub/sub** — `realtime` module stubs for Phase 5 geohash-room fan-out.
 - **Cloudflare R2** — R2 env vars (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`) documented but never wired; storage is local-disk only.
 
 ## 5. Service contract (ports)

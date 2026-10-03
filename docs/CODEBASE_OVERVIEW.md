@@ -62,9 +62,8 @@ A user can:
 - **See live pins appear** while someone else creates one, via an SSE stream (see [§8](#8-real-time-sse)).
 - **Manage roles** as the `owner`: `/roles` promotes/demotes `user` / `admin` / `owner`.
 
-Non-features that are easy to assume exist but don't: there is no messaging, no live video (the `streams/`
-package is empty scaffolding), no search-by-location-bbox on the feed, and **no reverse geocoding stored on
-the pin** (see [§9.4](#94-reverse-geocoding-at-creation-is-not-done)).
+Non-features that are easy to assume exist but don't: there is no messaging, no live video, no search-by-location-bbox on the feed, and **no reverse geocoding stored on
+the pin** (see [§9.4](#94-reverse-geocoding-at-creation-is-not-done)). The stub `streams/` package was deleted in B1; only its orphan `streams` DB table (from `0005_streams.sql`) remains.
 
 Domain: the app's default map centre and the self-hosted tileset both point at **different countries** —
 the client defaults to Hyderabad, India (`17.385, 78.4867` in `MapApp.tsx`) while `maps/` is built for the
@@ -351,7 +350,7 @@ server/
 │   ├── di/container.go        Build(cfg, pool) *Container
 │   ├── http/                  router.go + middleware/ + response/ + params/ + validid/
 │   ├── modules/               auth, pins, collections, comments, favorites,
-│   │                          realtime, reports, social, user, streams(empty)
+│   │                          realtime, reports, social, user
 │   ├── observability/         logger/ (slog + request logger), report/ (slog + Sentry)
 │   └── platform/              cache/ (Redis blacklist), database/ (pool + migrations),
 │                              storage/ (local disk)
@@ -476,10 +475,7 @@ Notable per-module behaviour:
   number only) / `avatar` (≤5 MB → `imaging.Avatar` → 256 px WEBP); deletes the new avatar on failure and the
   old avatar on success. `User.PasswordHash` is `json:"-"`, and `ToPrivate()` (which includes `email`) is used
   only when the viewer *is* the subject.
-- **`realtime`** — see [§8](#8-real-time-sse). Note that `hub.go`, `pubsub.go`, `rooms.go`, `dto.go` and
-  `broadcast.go` each contain exactly one line, `package realtime`. They are empty placeholders.
-- **`streams`** — **not wired into the router at all.** All six files (`handler.go`, `service.go`,
-  `repository.go`, `model.go`, `dto.go`, `webhook.go`) contain only `package streams`.
+- **`realtime`** — see [§8](#8-real-time-sse). Live files are `broker.go` + `handler.go` (+ tests); the old one-line placeholder stubs were deleted in B1.
   Migration `0005_streams.sql` creates a `streams` table, but there is no code behind it.
 
 ### 4.6 Platform layer (`internal/platform/`)

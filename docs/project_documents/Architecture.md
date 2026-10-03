@@ -10,19 +10,18 @@
                                            │
                         ┌───────────────────┼───────────────────┐
                         │                   │
-                  REST API (HTTPS)   WebSocket (real-time)
-                        │              [Phase 5, planned]
+                  REST API (HTTPS)   SSE (`/events`, via Next rewrite)
+                        │              [implemented]
                         ▼                   ▼
              ┌─────────────────┐  ┌──────────────────┐
-             │   Go API Server  │  │  Go Realtime Hub  │
-             │  (Gin)           │  │  [scaffolded,     │
-             │                  │  │   not yet built]  │
+             │   Go API Server  │  │  Go API Server    │
+             │  (Gin)           │  │  realtime handler │
+             │                  │  │  (SSE, Redis bus) │
              └────────┬─────────┘  └─────────┬─────────┘
                       │                      │
                       │              ┌───────┴────────┐
                       │              │  Redis Pub/Sub  │
-                      │              │ [Phase 5,       │
-                      │              │  planned]       │
+                      │              │  (used)         │
                       │              └────────────────┘
                       │
          ┌────────────┼─────────────────┐
@@ -68,23 +67,19 @@ Handles standard CRUD + business logic:
 
 Framework: **Gin** (not Chi — the original plan was revised)
 
-### 2.3 Go Realtime Hub (WebSocket layer) — **Phase 5, scaffolded, not yet implemented**
+### 2.3 Realtime — Server-Sent Events over Redis
 
-Separate logical service (can run as its own goroutine pool within the same binary initially, split out later if needed):
+Implemented as `GET /events` in the same Go binary. One global stream per process, no rooms:
 
-- Manages WebSocket connections
-- Groups clients into **geohash-based rooms** (only broadcast to viewers actually watching that map cell)
-- **Batches** broadcasts (e.g., every 500ms–1s) instead of pushing every event instantly
-- Publishes/subscribes via **Redis Pub/Sub** so multiple Go instances stay in sync
+- `Broker.PinCreated` publishes `pins.Event` JSON to Redis channel `goodspot:pins` (`broker.go:9,36-51`).
+- Each connection subscribes; `runStreamLoop` (`realtime/handler.go:198`) filters by bbox (`matches`, handler.go:237-250) and category.
+- 20 s `: heartbeat` comment keeps intermediaries alive (`handler.go:65`); capped by `MAX_SSE_CONNECTIONS` (`handler.go:78-95`); Caddy sets `flush_interval -1` for `/events`.
 
 Used for:
 
 - New pin notifications in a viewport
-- Live event pin updates
-- Chat/reactions during livestreams
-- Viewer count updates
 
-**Current status:** `internal/modules/realtime/` contains empty placeholder files (`package realtime` only). No WebSocket library is in `go.mod`. No `/ws` route is registered. Redis is currently used only as a JWT blacklist. The geohash encoding utility (`pkg/geohash/`) is implemented and ready for room assignment.
+Deferred designs: no WebSocket, no geohash-cell rooms, no batching, no outbox. The previously planned hub/rooms/ws shapes are obsolete.
 
 ### 2.4 Database — PostgreSQL + PostGIS
 
@@ -108,7 +103,7 @@ Used for:
 
 **Planned:**
 
-- **Pub/Sub** — coordinates real-time broadcasts across multiple Go instances (Phase 5)
+- **Pub/Sub** — coordinates real-time broadcasts across multiple Go instances
 - Optional: cache hot queries (e.g., trending spots) later
 
 ---
@@ -124,9 +119,9 @@ Client → (must have valid JWT) → POST /pins (Go API) → validate → save p
                                        → save processed files to local filesystem
                                        → return pin + photos to client
 
-[Phase 5, planned] → publish event to Redis
-                         → Realtime Hub picks up
-                         → broadcasts to geohash room
+[done] → publish event to Redis
+                         → Broker subscribers pick up
+                         → filter (bbox/category) per connection
                          → connected viewers see it live
 ```
 
@@ -135,9 +130,8 @@ Client → (must have valid JWT) → POST /pins (Go API) → validate → save p
 ```
 Client → GET /pins?bbox=...&category=... (Go API, public endpoint) → PostGIS bounding-box query (excludes is_hidden pins) → return pins
 
-[Phase 5, planned]
-Client → opens WebSocket → subscribes to visible geohash cells
-       → receives live updates as new pins appear in view
+Client → opens EventSource GET /events?bbox=&category= → server filters by viewport bbox + category live
+       → receives new pins as they appear in view
 ```
 
 ### D) Admin reviews a report
@@ -162,9 +156,9 @@ Owner client → (valid JWT, role = owner) → PATCH /users/:id/role { role: "ad
 ## 4. Scaling Path (as traffic grows)
 
 1. **Single Go instance** — current state, fine for MVP and early growth
-2. **Horizontal scaling** — run multiple Go API/Realtime instances behind a load balancer, coordinated via Redis Pub/Sub (requires Phase 5)
+2. **Horizontal scaling** — run multiple Go API/Realtime instances behind a load balancer, coordinated via Redis Pub/Sub
 3. **Read replicas** for Postgres if read load grows
-5. Only if a genuine, measured bottleneck appears in the WebSocket layer specifically (rare) — consider splitting Realtime Hub into its own dedicated service/cluster
+5. (No planned split; realtime is in-process SSE over Redis — split only if profiling proves it.)
 
 ---
 
@@ -238,13 +232,9 @@ sweetspot/
 │   │   │   │   ├── repository.go
 │   │   │   │   ├── errors.go        # ErrNotFound, ErrCannotChangeOwnRole, ErrCannotDemoteLastOwner
 │   │   │   │   └── user_test.go
-│   │   │   ├── realtime/            # Phase 5 — scaffolded, not yet built
-│   │   │   │   ├── handler.go       # (empty)
-│   │   │   │   ├── hub.go           # (empty)
-│   │   │   │   ├── rooms.go         # (empty)
-│   │   │   │   ├── broadcast.go     # (empty)
-│   │   │   │   ├── pubsub.go        # (empty)
-│   │   │   │   └── dto.go           # (empty)
+│   │   │   ├── realtime/            # Phase 5 — implemented as SSE broker + handler
+│   │   │   │   ├── broker.go        # Redis pub/sub bridge for pin events
+│   │   │   │   └── handler.go       # GET /events SSE stream + limiter + runStreamLoop
 │   │   │   └── streams/             # Phase 8 — scaffolded, not yet built
 │   │   │       ├── handler.go       # (empty)
 │   │   │       ├── service.go       # (empty)
@@ -354,6 +344,6 @@ sweetspot/
 4. ✅ Reports: create (any logged-in user) + admin review endpoint (hide pin on action, FOR UPDATE locking)
 5. ✅ Photo upload with processing: validation (JPG/PNG, ≤8000×8000px), WebP conversion (≤1600px, q80), 400px square thumbnails (libvips via bimg)
 6. ✅ Frontend map view: MapLibre GL, category filter chips, pin detail panel, create-pin flow, auth screens
-7. ⬜ WebSocket layer: geohash rooms + batching for live pin updates (Phase 5)
+7. ✅ SSE real-time layer: one `GET /events` stream, Redis pub/sub bus; batching and outbox are deferred (documented).
 8. ⬜ Production storage swap: Cloudflare R2 (Phase 6)
 9. ⬜ Deploy MVP (Phase 7)

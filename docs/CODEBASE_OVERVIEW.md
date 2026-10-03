@@ -513,7 +513,7 @@ Notable per-module behaviour:
 
 ### 4.8 `pkg/`
 
-- **`jwt`** — HS256 only; `Validate` pins the method family to `*jwt.SigningMethodHMAC`, rejecting `none`/RSA.
+- **`jwt`** — `Generate` signs HS256; `Validate` currently accepts any HMAC algorithm (HS256/384/512) with the shared secret, rejecting `none`/RSA. (Filed: pin to HS256.)
   `Claims` = `{ UserID, RegisteredClaims }` with a UUID-v4-shaped `jti` (`newJTI()`). **No `Role` field.**
 - **`password`** — owns bcrypt's 72-**byte** limit so it cannot drift from validation: `MinRunes = 8`,
   `MaxLen = 72`, `Validate(p)` checks both bounds in the units that matter, `ErrTooLong.Is()` satisfies
@@ -521,7 +521,7 @@ Notable per-module behaviour:
 - **`validid`** — `IsUUID` (length 36, dashes at 8/13/18/23, hex elsewhere), `Middleware()` (checks `:id`),
   `MiddlewareParam(name)`. Route ordering matters: on `/collections/:id/pins/:pinId`, `id` is the collection,
   so the pin needs `MiddlewareParam("pinId")`.
-- **`geohash`** — `Encode(lat, lng)` at precision 7 (used on pin create) and `Neighbors` (**no callers**).
+- **`geohash`** — `Encode(lat, lng)` at precision 7 (used on pin create). (`Neighbors` removed in B1 — had no callers.)
 
 ---
 

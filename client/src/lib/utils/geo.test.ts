@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LngLatBounds } from "maplibre-gl";
 import {
   boundsToValidBbox,
+  formatBbox,
   neighborhoodBounds,
   parsePoint,
   PIN_NEIGHBOR_LIMIT,
@@ -109,6 +110,12 @@ describe("boundsToValidBbox", () => {
     expect(boundsToValidBbox(bounds(12.345678, 77.654321, 12.365678, 77.674321))).toEqual([
       south, west, north, east,
     ]);
+  });
+
+  it("serializes exactly four decimals with no float artifacts", () => {
+    expect(formatBbox([12.3457, 77.65430000000003, 12.3657, 77.67430000000002])).toBe(
+      "12.3457,77.6543,12.3657,77.6743"
+    );
   });
 
   it("clamps latitudes to the valid range", () => {

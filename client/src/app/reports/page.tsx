@@ -25,6 +25,20 @@ const STATUS_STYLES: Record<ReportStatus, string> = {
     "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300",
 };
 
+/** Empty-state copy per tab. The All tab has no filter applied, so it must not suggest trying another one. */
+export function reportEmptyCopy(status: ReportStatus | "all"): {
+  title: string;
+  description: string;
+} {
+  if (status === "all") {
+    return { title: "No reports", description: "No reports have been filed yet." };
+  }
+  return {
+    title: `No ${status} reports`,
+    description: status === "pending" ? "You're all caught up." : "Try another filter.",
+  };
+}
+
 export default function ReportsPage() {
   const { user } = useAuth();
   const isModerator = user?.role === "admin" || user?.role === "owner";
@@ -158,12 +172,13 @@ export default function ReportsPage() {
     }
 
     if (reports.length === 0) {
+      const copy = reportEmptyCopy(status);
       return (
         <PageEmpty
-          title={`No ${status === "all" ? "" : `${status} `}reports`}
+          title={copy.title}
           description={
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              {status === "pending" ? "You're all caught up." : "Try another filter."}
+              {copy.description}
             </p>
           }
         />

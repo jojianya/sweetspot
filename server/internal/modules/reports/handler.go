@@ -2,7 +2,6 @@ package reports
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
@@ -72,14 +71,9 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	offset := 0
-	if oStr := c.Query("offset"); oStr != "" {
-		o, err := strconv.Atoi(oStr)
-		if err != nil || o < 0 {
-			response.BadRequest(c, "offset must be a non-negative integer")
-			return
-		}
-		offset = o
+	offset, ok := httpx.ParseOffset(c)
+	if !ok {
+		return
 	}
 
 	reports, err := h.service.ListReports(c.Request.Context(), status, limit, offset)

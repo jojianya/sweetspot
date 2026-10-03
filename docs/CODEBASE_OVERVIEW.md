@@ -147,7 +147,7 @@ this branch**. Both are stale; see [§9.2](#92-stale-env-example--documentation-
 ## 3. Client structure (`client/`)
 
 Next.js **16.3.4**, React **19.2.8**, TypeScript, Tailwind v4, `output: "standalone"`, pnpm 10.28.0, Node 20.
-Packages: `axios`, `maplibre-gl` ^6.9, `react-icons`, `zod` ^4.5, `zustand` ^5.
+Packages: `axios`, `maplibre-gl` ^6.9, `zod` ^4.5, `zustand` ^5. (`react-icons` removed in B1 — no importers.)
 
 House rule from `client/AGENTS.md`: **never use `dangerouslySetInnerHTML`** (or any raw-HTML rendering) on
 user-generated content — captions, usernames, socials JSON. React escapes by default; only break that
@@ -211,9 +211,11 @@ so `generateMetadata` and the page share one API read per SSR request.
   the keyboard route to canvas-drawn markers.
 - If `MAPTILER_KEY` is empty it renders a "Map unavailable" panel naming the env var, instead of the map.
 
-**`pinLayers.ts`** — `ensurePinLayers(map, isActive)` builds **18 images** (`pin-cat-1..8`,
-`pin-cat-N-selected`, `pin-default`, `pin-selected`) by rendering `IoPinSharp` from `react-icons/io5` via
-`renderToStaticMarkup` → Blob → `Image` → 54px canvas → `ImageData`, then `map.addImage`. Exports `GeoFeature`,
+**`pinLayers.ts`** — `ensurePinLayers(map, isActive)` builds **2 images** (`pin-post`,
+`pin-post-selected`) from an inline SVG teardrop (`pinSvg(fill)` → Blob → `Image` → 28x40 canvas →
+`ImageData`, `PIN_FILL = #EA4335`), then `map.addImage`. The per-category ids (`pin-cat-1..8`,
+`pin-cat-N-selected`, `pin-default`, `pin-selected`) are stale ids released on hot-reload only; nothing
+references them. Exports `GeoFeature`,
 `EMPTY_GEOJSON`, `CLUSTER_MAX_ZOOM = 8`, `CLUSTERING_ENABLED = true`, `notCluster`. Existing layers are
 reconfigured with `setLayoutProperty` rather than re-added.
 
@@ -256,7 +258,7 @@ address line, comments, and the `PhotoLightbox`/`PinEditSheet`/`AddToCollectionS
 dialog; `MAX_PHOTOS = 5`, `MAX_PHOTO_SIZE = 10MB`, JPG/PNG only, "Use current location"),
 `PinEditSheet.tsx`, `SavedPinsPanel.tsx` (saved/collections tabs + collection drill-in),
 `TrendingList.tsx`, `CommentsSection.tsx`, `PhotoLightbox.tsx`, `AddToCollectionSheet.tsx`,
-`ReportSheet.tsx` (reason 3–1000 chars, `QUICK_REASONS` chips), `CategoryDropdown.tsx` (**no importers** — dead).
+`ReportSheet.tsx` (reason 3–1000 chars, `QUICK_REASONS` chips). (`CategoryDropdown.tsx` removed in B1 — had no importers.)
 
 Shared: `components/PanelSheet.tsx` (bottom sheet + `useDialogFocus`), `Avatar.tsx`, `SessionSync.tsx`,
 `RuntimeErrorReporter.tsx`, `icons.tsx` (16 inline SVGs), `layout/Navbar.tsx`, `ui/Skeleton.tsx`
@@ -277,9 +279,9 @@ Shared: `components/PanelSheet.tsx` (bottom sheet + `useDialogFocus`), `Avatar.t
 `es.close()`. **No manual reconnect** — it relies on `EventSource`'s own retry, so `onPin` must be referentially
 stable (`MapApp` uses `useCallback`). Skipped entirely while `bbox === null`.
 `useGeolocation()`, `useDialogFocus(ref, onClose?)`, `useFavorites()` / `useSavedStatus(pinId, enabled)`,
-`useCollections()`, `useComments(pinId)`, `useTrending(bbox)`, `usePinView(pinId)` (**no callers** — dead),
+`useCollections()`, `useComments(pinId)`, `useTrending(bbox)`,
 `useFollow(userId)`, `useCategories()`, `usePinDetail(id)`, `useLogout()`, `useSessionSync()`,
-`useSessionRefresh()`.
+`useSessionRefresh()`. (`usePinView(pinId)` removed in B1 — had no callers.)
 
 ### 3.5 The API layer (`client/src/lib/api/`)
 
@@ -1041,11 +1043,11 @@ Verified still present in the tree:
 | **`MapNavBar` account menu is `role="menu"` with no keyboard handling** — no Escape, no click-outside, no arrow navigation. `useDialogFocus` exists and is used by `PanelSheet`. | `MapNavBar.tsx:67` onward |
 | **`CreatePinButton` hand-rolls its dialog** — its own `window` keydown listener, own `role="dialog"`, no focus trap/restore/`aria-modal`. Every other sheet goes through `PanelSheet`. | `CreatePinButton.tsx:72-73, 159` |
 | **Stale draft on map-click dismissal** — `MapApp.handleMapClick` does `setCreateOpen(false)` directly instead of the child's `handleClose`, so `files`/`caption` survive into the next open. | `MapApp.tsx:156-167` |
-| **`usePinView` has no callers** — pin views are never registered from the UI, so `pins.views` only moves when something external hits `POST /pins/:id/view`. This undercuts trending's main input. | `hooks/usePinView.ts` |
-| **`CategoryDropdown.tsx` has no importers**; `pin-default` icon is unreachable (`CATEGORY_IDS` hardcoded 1–8). | |
+| **Pin views never registered from the UI** — `usePinView` was removed in B1 (had no callers), so `pins.views` only moves when something external hits `POST /pins/:id/view`. This undercuts trending's main input. | `POST /pins/:id/view` (server route kept; client hook removed) |
+| **`CategoryDropdown.tsx` removed in B1** (had no importers); `pin-default` icon is unreachable (`CATEGORY_IDS` hardcoded 1–8). | |
 | **`useSessionRefresh` fires on every navigation** from both navbars, no TTL. | `Navbar.tsx:28`, `MapNavBar.tsx:40` |
 | **`roles/page.tsx` has no skeleton** — the only loading page left without `SkeletonRegion`. | |
-| **Unused exports** — `geohash.Neighbors`, `CategoryDropdown`, `usePinView`, the 5 stub `realtime/*.go` files, all 7 `streams/*.go` files, `storage.ErrUnsupportedContentType`, `server/deployments/k8s/` (empty tracked dir). | |
+| **Unused exports (remaining)** — `storage.ErrUnsupportedContentType`, `server/deployments/k8s/` (empty tracked dir). Removed in B1: `geohash.Neighbors`, `CategoryDropdown`, `usePinView`, the 5 stub `realtime/*.go` files, all `streams/*.go` files. | |
 | **Vendored MapLibre in `client/public/`** defeats tree-shaking and hand-pins a dependency `pnpm` also installs. The lint-noise half of this was fixed (`public/**` in `globalIgnores`); the vendoring itself was not. | `client/eslint.config.mjs` |
 | **New engineer trap: `client/AGENTS.md`** tells agents to read `node_modules/next/dist/docs/` because Next 16 has breaking changes vs. training data. Take it seriously. | |
 

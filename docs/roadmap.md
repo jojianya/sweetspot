@@ -51,7 +51,7 @@ Progress: **5 of 11 done** (1 in progress, 5 todo).
 ## 3. Small quick wins
 
 - [ ] **I. Finish and land the in-flight pin-views work** — in progress · Small
-  - **What:** `0012_pin_views.sql`, `usePinView.ts`, `POST /pins/:id/view` and the `TestPinView` test are written but uncommitted — wire it into the pin pages (live view counter + "viewed recently") and it unblocks trending.
+  - **What:** `0012_pin_views.sql`, `POST /pins/:id/view` and the `TestPinView` test are written but uncommitted — wire them into the pin pages (live view counter + "viewed recently") and it unblocks trending. (`usePinView.ts` was removed in B1 — it had no callers; wire a fresh hook into the pin pages.)
   - **Why:** Already written on disk; landing it closes the loop and unblocks item D.
   - **Files:** the diff already on disk.
 

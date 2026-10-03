@@ -583,11 +583,10 @@ Everything compiles — the findings below are logic, security, and robustness i
 ### P3.22 `server/deployments/k8s/` is an empty tracked directory
 - [ ] **Add manifests or drop the path** — `-` (directory only, no files).
 
-### P3.23 Dead scaffolding in the server module tree
-- [ ] **Delete or annotate** — 6 one-line files in `server/internal/modules/streams/`
+### P3.23 Dead scaffolding in the server module tree — done in B1
+- [x] ~~**Delete or annotate** — 6 one-line files in `server/internal/modules/streams/`
       (`webhook`, `service`, `repository`, `model`, `handler`, `dto`) plus
-      `realtime/{rooms,pubsub,hub,dto,broadcast}.go`. `migrations/0005_streams.sql` also exists with no
-      code behind it. Delete, or add a `// TODO(owner):` header.
+      `realtime/{rooms,pubsub,hub,dto,broadcast}.go`.~~ Deleted in B1. (`migrations/0005_streams.sql` untouched — migrations are out of scope.)
 
 ---
 

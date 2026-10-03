@@ -317,6 +317,7 @@ This app is photo-heavy and map-based — unprocessed multi-photo uploads at up 
 
 ## Phase 5 — Real-Time Layer
 
+> Note (B1): the one-line `internal/realtime/{hub,dto,pubsub,broadcast}.go` stubs were deleted; live realtime is `broker.go` + `handler.go` (SSE). The items below still describe unbuilt work.
 ### 5.1 WebSocket server setup
 
 - [ ] `go get github.com/gorilla/websocket`

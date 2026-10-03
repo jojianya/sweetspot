@@ -173,7 +173,7 @@ describe("useCollectionDetail", () => {
     expect(state()).toContain("col-1:1:1:private");
   });
 
-  it("refetches to roll back when removal fails, clearing the error", async () => {
+  it("refetches to roll back when removal fails and keeps the error visible", async () => {
     collectionsMocks.removePin.mockRejectedValueOnce(new Error("offline"));
     await renderProbe();
     await act(async () => {
@@ -185,10 +185,10 @@ describe("useCollectionDetail", () => {
       click("remove");
     });
     expect(apiMocks.fetchCollection).toHaveBeenCalledTimes(2);
-    // The rollback refetch resets the error it just set: the failure is
-    // visible only while the refetch is in flight. Preserved as-is.
+    // The rollback refetch restores the pin list, but the removal failure
+    // stays visible until the next successful action clears it.
     expect(state()).toContain("col-1:2:2:private");
-    expect(state()).toContain("noerror");
+    expect(state()).toContain("offline");
   });
 
   it("toggles privacy locally and in the list", async () => {

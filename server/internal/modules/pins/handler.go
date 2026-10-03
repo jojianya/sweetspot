@@ -511,7 +511,12 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 	}
 
 	// Only non-owners reach the role lookup, keeping it off the common path.
-	if existing.UserID.String() != userID && !users.IsModerator(h.roles, c) {
+	// Without a wired RoleReader nobody is a moderator (same as DeletePin).
+	isModerator := false
+	if h.roles != nil {
+		isModerator = users.IsModerator(h.roles, c)
+	}
+	if existing.UserID.String() != userID && !isModerator {
 		response.Forbidden(c, "you can only edit your own pins")
 		return
 	}

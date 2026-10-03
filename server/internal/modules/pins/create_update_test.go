@@ -282,6 +282,18 @@ func TestUpdatePinNotFound(t *testing.T) {
 	}
 }
 
+func TestUpdatePinForbiddenWithoutRoles(t *testing.T) {
+	// UpdatePin must answer 403 for a non-owner even when no RoleReader is
+	// wired, the way DeletePin does — never panic.
+	r := newUpdateHarness(t, baseUpdateRepoOther(), t.TempDir(), nil)
+	req := multipartBody(t, http.MethodPatch, "/pins/pin-1", map[string]string{"caption": "x"}, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+}
+
 func TestUpdatePinForbidden(t *testing.T) {
 	// NOTE: roles must be wired here. UpdatePin, unlike DeletePin, has no
 	// nil guard on h.roles: a non-owner with nil roles panics in

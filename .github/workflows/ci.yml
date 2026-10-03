@@ -104,7 +104,7 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          key: ${{ runner.os }}-go-${{ hashFiles('server/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
 

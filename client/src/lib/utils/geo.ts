@@ -101,6 +101,52 @@ export type GeoCoords = {
   lng: number;
 };
 
+/** Geographic floor (degrees) for the camera fit-box. Mirrors the map view. */
+export const NEIGHBORHOOD_MIN_SPAN_DEGREES = 0.01;
+
+export interface NeighborhoodBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+/**
+ * Bounds framing the given neighborhood points for the camera fit. Returns
+ * null for fewer than two points (nothing to frame). Coincident (or nearly
+ * coincident) points expand to the minimum span so the camera does not
+ * maximize zoom on a single coordinate.
+ */
+export function neighborhoodBounds(
+  points: readonly GeoCoords[],
+  minSpan = NEIGHBORHOOD_MIN_SPAN_DEGREES
+): NeighborhoodBounds | null {
+  if (points.length < 2) return null;
+  let west = Infinity;
+  let east = -Infinity;
+  let south = Infinity;
+  let north = -Infinity;
+  for (const point of points) {
+    if (point.lng < west) west = point.lng;
+    if (point.lng > east) east = point.lng;
+    if (point.lat < south) south = point.lat;
+    if (point.lat > north) north = point.lat;
+  }
+  const centerLng = (west + east) / 2;
+  const centerLat = (south + north) / 2;
+  const lngSpan = Math.max(east - west, minSpan);
+  const latSpan = Math.max(north - south, minSpan);
+  if (east - west < minSpan || north - south < minSpan) {
+    return {
+      west: centerLng - lngSpan / 2,
+      south: centerLat - latSpan / 2,
+      east: centerLng + lngSpan / 2,
+      north: centerLat + latSpan / 2,
+    };
+  }
+  return { west, south, east, north };
+}
+
 const DEFAULT_POSITION_OPTIONS: PositionOptions = {
   enableHighAccuracy: true,
   timeout: 10000,

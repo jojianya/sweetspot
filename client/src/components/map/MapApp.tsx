@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import MapView, { type MapLocation } from "./MapView";
@@ -17,7 +15,13 @@ import { useCategories } from "@/hooks/useCategories";
 import { usePinStream } from "@/hooks/usePinStream";
 import { useTrending } from "@/hooks/useTrending";
 import { parsePoint } from "@/lib/utils";
-import { categoryHref, resolveCategoryParam } from "@/lib/utils/category";
+import {
+  canonicalCategoryAction,
+  categoryHref,
+  pickCategoryParam,
+  resolveCategoryParam,
+  slugForCategoryId,
+} from "@/lib/utils/category";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -36,7 +40,7 @@ export default function MapApp({
   const requestedCategoryRef = useRef<{ slug: string | null } | null>(null);
   const currentQuery = searchParams.toString();
   const currentCategoryParam = searchParams.get("category");
-  const categoryParam = currentQuery === "" ? initialCategory : currentCategoryParam;
+  const categoryParam = pickCategoryParam(currentQuery, currentCategoryParam, initialCategory);
   const resolvedCategory =
     categories.length > 0 ? resolveCategoryParam(categoryParam, categories) : null;
 
@@ -95,8 +99,7 @@ export default function MapApp({
 
   const handleSelectCategory = useCallback(
     (id: number | null) => {
-      const category = id === null ? null : categories.find((item) => item.id === id);
-      const slug = category?.slug ?? null;
+      const slug = slugForCategoryId(id, categories);
       requestedCategoryRef.current = { slug };
       replaceCategoryParam(slug);
     },
@@ -106,19 +109,19 @@ export default function MapApp({
   // Legacy numeric links resolve to their category and are canonicalized to
   // the slug. Unknown values remain "All" and are removed from the query.
   useEffect(() => {
-    const requestedCategory = requestedCategoryRef.current;
-    if (requestedCategory !== null) {
-      if (currentCategoryParam === requestedCategory.slug) {
-        requestedCategoryRef.current = null;
-      }
+    const requested = requestedCategoryRef.current;
+    const action = canonicalCategoryAction(
+      requested ? requested.slug : undefined,
+      currentCategoryParam,
+      categories
+    );
+    if (action.type === "clear-requested") {
+      requestedCategoryRef.current = null;
       return;
     }
-
-    if (categories.length === 0 || currentCategoryParam === null) return;
-
-    const canonicalSlug = resolveCategoryParam(currentCategoryParam, categories)?.slug ?? null;
-    if (canonicalSlug === currentCategoryParam) return;
-    replaceCategoryParam(canonicalSlug);
+    if (action.type === "replace") {
+      replaceCategoryParam(action.slug);
+    }
   }, [categories, currentCategoryParam, replaceCategoryParam]);
 
   // The overlays (posting crosshair, create dialog, saved panel) are mutually

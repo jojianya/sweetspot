@@ -103,28 +103,15 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 	}
 	fields := c.Request.MultipartForm.Value
 
-	var patch UpdateProfilePatch
-	if vals := fields["username"]; len(vals) > 0 {
-		username := strings.TrimSpace(vals[0])
-		if username == "" {
-			response.BadRequest(c, "username cannot be empty")
-			return
-		}
-		if n := utf8.RuneCountInString(username); n < usernameMinRunes || n > usernameMaxRunes {
-			response.BadRequest(c, "username must be between 3 and 30 characters")
-			return
-		}
-		patch.Username = &username
+	input, msg := validateProfileFields(fields["username"], fields["socials"], len(c.Request.MultipartForm.File["avatar"]) > 0)
+	if msg != "" {
+		response.BadRequest(c, msg)
+		return
 	}
 
-	if vals := fields["socials"]; len(vals) > 0 {
-		socials, parseErr := parseSocials(vals[0])
-		if parseErr != nil {
-			response.BadRequest(c, parseErr.Error())
-			return
-		}
-		patch.Socials = &socials
-	}
+	var patch UpdateProfilePatch
+	patch.Username = input.username
+	patch.Socials = input.socials
 
 	var newAvatar *string
 	if fhs := c.Request.MultipartForm.File["avatar"]; len(fhs) > 0 {
@@ -160,11 +147,6 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 		}
 		newAvatar = &url
 		patch.AvatarURL = &url
-	}
-
-	if patch.Username == nil && patch.Socials == nil && patch.AvatarURL == nil {
-		response.BadRequest(c, "nothing to update")
-		return
 	}
 
 	updated, err := h.service.UpdateProfile(c.Request.Context(), userID, patch)

@@ -15,6 +15,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
 	users "github.com/jojianya/sweetspot247-backend/internal/modules/user"
+	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
 )
 
@@ -261,6 +262,65 @@ func TestDBPasswordResetIdentifierThrottle(t *testing.T) {
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429, got %d (%s)", w.Code, w.Body.String())
 	}
+}
+
+// TestDBPasswordResetImmediateLoginStaysValid proves a login minted in the
+// same second as a password reset still authenticates. The JWT issued-at has
+// one-second precision while sessions_valid_after carries microseconds, so a
+// same-second login reads as "before" under the strict-Before comparison.
+// Each attempt syncs to just after a second boundary so reset and login land
+// in the same wall second; attempts that straddle a boundary are discarded
+// (verified from sessions_valid_after and the token's IssuedAt) and retried
+// with a fresh user.
+func TestDBPasswordResetImmediateLoginStaysValid(t *testing.T) {
+	f := setupReset(t)
+
+	for attempt := 0; attempt < 4; attempt++ {
+		// Start just inside a fresh second to fit reset + login inside it.
+		for time.Now().Nanosecond() > 100*int(time.Millisecond) {
+			time.Sleep(5 * time.Millisecond)
+		}
+
+		email := fmt.Sprintf("fresh-%d-%d@example.com", time.Now().UnixNano(), attempt)
+		seedResetUser(t, f.pool, email)
+
+		doJSON(t, f.router, http.MethodPost, "/auth/password/request", `{"email":"`+email+`"}`, nil)
+		raw := tokenFromLink(t, f.mailer.waitForMail(t))
+		w := doJSON(t, f.router, http.MethodPost, "/auth/password/reset",
+			`{"token":"`+raw+`","password":"brandnewpassword1"}`, nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("reset: got %d (%s)", w.Code, w.Body.String())
+		}
+		after := loginToken(t, f, email, "brandnewpassword1")
+
+		var validAfter time.Time
+		if err := f.pool.QueryRow(context.Background(),
+			`SELECT sessions_valid_after FROM users WHERE email = $1`, strings.ToLower(email)).Scan(&validAfter); err != nil {
+			t.Fatalf("read sessions_valid_after: %v", err)
+		}
+		issuedAt := tokenIssuedAt(t, after)
+		if validAfter.Unix() != issuedAt.Unix() {
+			t.Logf("attempt %d straddled a second boundary, retrying", attempt)
+			continue
+		}
+		if w := authedGet(t, f, after); w.Code != http.StatusOK {
+			t.Fatalf("fresh login after reset: got %d (%s), want 200", w.Code, w.Body.String())
+		}
+		return
+	}
+	t.Fatal("could not land reset and login in the same second after 4 attempts")
+}
+
+func tokenIssuedAt(t *testing.T, tokenString string) time.Time {
+	t.Helper()
+	claims, err := jwt.Validate(testSecret, tokenString)
+	if err != nil {
+		t.Fatalf("validate test token: %v", err)
+	}
+	if claims.IssuedAt == nil {
+		t.Fatal("test token has no issued-at")
+	}
+	return claims.IssuedAt.Time
 }
 
 // TestDBPasswordResetSupersedesEarlierToken proves only the latest emailed

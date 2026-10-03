@@ -55,17 +55,18 @@ func TestValidateRejectsWrongSecret(t *testing.T) {
 	}
 }
 
-func TestValidateAcceptsAnyHMACAlgorithm(t *testing.T) {
-	// Characterization, not endorsement: the keyfunc accepts every
-	// SigningMethodHMAC (HS256/384/512) with the shared secret and only
-	// rejects non-HMAC algorithms. Reported separately; do not "fix" here.
-	hs384 := jwt.NewWithClaims(jwt.SigningMethodHS384, Claims{UserID: "user-1"})
-	tokenString, err := hs384.SignedString([]byte("secret"))
-	if err != nil {
-		t.Fatalf("sign HS384: %v", err)
-	}
-	if _, err := Validate("secret", tokenString); err != nil {
-		t.Errorf("Validate rejected an HS384 token: %v", err)
+func TestValidateAcceptsOnlyHS256(t *testing.T) {
+	// HS384 and HS512 share the HMAC family but must not verify: only the
+	// HS256 tokens Generate issues are valid.
+	for _, method := range []any{jwt.SigningMethodHS384, jwt.SigningMethodHS512} {
+		signed, err := jwt.NewWithClaims(method.(jwt.SigningMethod), Claims{UserID: "user-1"}).
+			SignedString([]byte("secret"))
+		if err != nil {
+			t.Fatalf("sign: %v", err)
+		}
+		if _, err := Validate("secret", signed); err == nil {
+			t.Errorf("Validate accepted a %v token", method)
+		}
 	}
 
 	none := jwt.NewWithClaims(jwt.SigningMethodNone, Claims{UserID: "user-1"})

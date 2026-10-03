@@ -202,6 +202,8 @@ sweetspot/
 │   │   │   └── response/
 │   │   │       ├── response.go      # JSON response helpers
 │   │   │       └── errors.go        # error response helpers
+│   │   │   └── validid/
+│   │   │       └── validid.go       # UUID format validation middleware
 │   │   ├── modules/
 │   │   │   ├── auth/
 │   │   │   │   ├── handler.go       # Register, Login, Logout, Me handlers
@@ -284,8 +286,6 @@ sweetspot/
 │   │   │   └── jwt.go               # generate + validate HS256 tokens with jti
 │   │   ├── password/
 │   │   │   └── password.go          # bcrypt hash (cost 12) + verify
-│   │   └── validid/
-│   │       └── validid.go           # UUID format validation middleware
 │   ├── deployments/
 │   │   ├── docker/
 │   │   │   └── server.Dockerfile    # multi-stage: golang:1.27-alpine → alpine:3.20

@@ -349,13 +349,13 @@ server/
 │   ├── app/                   app.go (timeouts), graceful_shutdown.go (serve/signal)
 │   ├── config/                env → Config, with hard validations
 │   ├── di/container.go        Build(cfg, pool) *Container
-│   ├── http/                  router.go + middleware/ + response/ + params/
+│   ├── http/                  router.go + middleware/ + response/ + params/ + validid/
 │   ├── modules/               auth, pins, collections, comments, favorites,
 │   │                          realtime, reports, social, user, streams(empty)
 │   ├── observability/         logger/ (slog + request logger), report/ (slog + Sentry)
 │   └── platform/              cache/ (Redis blacklist), database/ (pool + migrations),
 │                              storage/ (local disk)
-├── pkg/                       geohash, jwt, password, validid
+├── pkg/                       geohash, jwt, password
 ├── deployments/docker/        server.Dockerfile(.dev)
 ├── .air.toml                  hot reload: go build -p 1 -o ./tmp/server ./cmd/api
 └── Makefile                   build/run/test/vet/fmt/lint/tidy + docker-*/backup/restore

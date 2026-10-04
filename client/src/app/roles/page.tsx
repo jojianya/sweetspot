@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Avatar from "@/components/Avatar";
+import { useAdminSession } from "@/hooks/useAdminSession";
 import { useUsersAdmin } from "@/hooks/useUsersAdmin";
 import { useAuth } from "@/store/auth";
 
@@ -16,27 +17,11 @@ const ROLE_STYLES: Record<string, string> = {
 
 export default function RolesPage() {
   const { user } = useAuth();
-  const isOwner = user?.role === "owner";
-
-  const {
-    query,
-    setQuery,
-    activeQuery,
-    results,
-    total,
-    loading,
-    loadingMore,
-    error,
-    notice,
-    busyId,
-    isSearching,
-    hasMore,
-    handleSearch,
-    showAll,
-    loadMore,
-    retryLoad,
-    handleRoleChange,
-  } = useUsersAdmin();
+  // The cached role in localStorage is not a credential, so /me decides
+  // whether the admin shell renders at all. Until it answers, authorized is
+  // false and the admin tree below is never mounted, so no admin request is
+  // made on the strength of a cache the caller could have edited.
+  const { authorized, checked } = useAdminSession("owner");
 
   if (!user) {
     return (
@@ -57,7 +42,9 @@ export default function RolesPage() {
     );
   }
 
-  if (!isOwner) {
+  if (!authorized) {
+    // While the check is in flight there is nothing to conclude yet, so show
+    // the same gate rather than flashing the admin shell.
     return (
       <>
         <Navbar backHref="/" backLabel="Back to map" />
@@ -66,7 +53,9 @@ export default function RolesPage() {
             Owners only
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Only the account owner can change roles.
+            {checked
+              ? "Only the account owner can change roles."
+              : "Checking your access…"}
           </p>
           <Link
             href="/"
@@ -78,6 +67,35 @@ export default function RolesPage() {
       </>
     );
   }
+
+  return <RolesAdminShell />;
+}
+
+/**
+ * The role console. Split out so useUsersAdmin — which fetches the user list on
+ * mount — only ever runs for a caller /me has confirmed is an owner.
+ */
+function RolesAdminShell() {
+  const { user } = useAuth();
+  const {
+    query,
+    setQuery,
+    activeQuery,
+    results,
+    total,
+    loading,
+    loadingMore,
+    error,
+    notice,
+    busyId,
+    isSearching,
+    hasMore,
+    handleSearch,
+    showAll,
+    loadMore,
+    retryLoad,
+    handleRoleChange,
+  } = useUsersAdmin();
 
   return (
     <>
@@ -193,7 +211,7 @@ export default function RolesPage() {
           <>
             <ul className="mt-4 space-y-2.5">
               {results.map((profile) => {
-                const isSelf = profile.id === user.id;
+                const isSelf = user !== null && profile.id === user.id;
                 return (
                   <li
                     key={profile.id}

@@ -57,8 +57,17 @@ func (s *stubPinRepo) GetPin(context.Context, string) (pins.PinDetail, error) {
 	return s.pinDetail, s.pinDetailErr
 }
 
-func (s *stubPinRepo) UpdatePin(context.Context, string, pins.UpdatePinPatch) (pins.Pin, []pins.PinPhoto, error) {
-	return s.updated, s.updatedPhotos, s.updateErr
+// UpdatePin mirrors the repository's UPDATE predicate: the pin detail carries
+// the owner, so a caller who is neither the owner nor a moderator is Forbidden
+// rather than silently allowed.
+func (s *stubPinRepo) UpdatePin(_ context.Context, _ string, userID string, isModerator bool, _ pins.UpdatePinPatch) (pins.Pin, []pins.PinPhoto, error) {
+	if s.updateErr != nil {
+		return pins.Pin{}, nil, s.updateErr
+	}
+	if s.pinDetail.UserID.String() != userID && !isModerator {
+		return pins.Pin{}, nil, pins.ErrForbidden
+	}
+	return s.updated, s.updatedPhotos, nil
 }
 
 func (s *stubPinRepo) PinVisible(context.Context, string) (bool, error) {

@@ -523,9 +523,11 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		return
 	}
 
-	// Hidden pins do not exist for edits. Checked before the ownership gate so
-	// a hidden pin answers 404 rather than revealing that it exists, the same
-	// rule DeletePin, comments, favorites, reports and collections follow.
+	// Hidden pins do not exist for edits. Checked before any work is done so a
+	// hidden pin answers 404 rather than revealing that it exists, the same rule
+	// DeletePin, comments, favorites, reports and collections follow. The UPDATE
+	// predicate repeats the check; this one just avoids staging uploads for a pin
+	// that cannot be edited.
 	visible, err := h.repo.PinVisible(c.Request.Context(), id)
 	if err != nil {
 		response.Internal(c, "update pin: visibility check", err, "pin_id", id)
@@ -536,15 +538,12 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		return
 	}
 
-	// Only non-owners reach the role lookup, keeping it off the common path.
 	// Without a wired RoleReader nobody is a moderator (same as DeletePin).
+	// Ownership itself is enforced by the UPDATE predicate, so there is no
+	// load-then-decide window between this read and the write.
 	isModerator := false
 	if h.roles != nil {
 		isModerator = users.IsModerator(h.roles, c)
-	}
-	if existing.UserID.String() != userID && !isModerator {
-		response.Forbidden(c, "you can only edit your own pins")
-		return
 	}
 
 	form, err := c.MultipartForm()
@@ -605,7 +604,7 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		}
 	}
 
-	updated, photos, err := h.repo.UpdatePin(c.Request.Context(), id, patch)
+	updated, photos, err := h.repo.UpdatePin(c.Request.Context(), id, userID, isModerator, patch)
 	if err != nil {
 		// The new photos are already on disk; remove them so a failed update
 		// cannot orphan files.
@@ -615,6 +614,10 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		}
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
+			return
+		}
+		if errors.Is(err, ErrForbidden) {
+			response.Forbidden(c, "you can only edit your own pins")
 			return
 		}
 		response.Internal(c, "update pin: database update", err, "pin_id", id)

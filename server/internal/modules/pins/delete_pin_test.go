@@ -38,6 +38,7 @@ type stubRepo struct {
 	updateErr      error
 	updated        bool
 	updatePhotos   int
+	updatedID      string
 	// updateResultPhotos is what UpdatePin reports as the pin's photo set
 	// after the update; visible answers PinVisible.
 	updateResultPhotos []PinPhoto
@@ -66,7 +67,7 @@ func (s *stubRepo) CreatePin(_ context.Context, _ NewPin) (Pin, error) {
 	return Pin{}, s.createErr
 }
 
-func (s *stubRepo) UpdatePin(_ context.Context, _ string, patch UpdatePinPatch) (Pin, []PinPhoto, error) {
+func (s *stubRepo) UpdatePin(_ context.Context, id, userID string, isModerator bool, patch UpdatePinPatch) (Pin, []PinPhoto, error) {
 	s.updated = true
 	if patch.Photos != nil {
 		s.updatePhotos = len(patch.Photos)
@@ -74,6 +75,14 @@ func (s *stubRepo) UpdatePin(_ context.Context, _ string, patch UpdatePinPatch) 
 	if s.updateErr != nil {
 		return Pin{}, nil, s.updateErr
 	}
+	// Mirror the repository's UPDATE predicate: owner or moderator, visible only.
+	if !s.visible {
+		return Pin{}, nil, ErrNotFound
+	}
+	if s.detail.UserID.String() != userID && !isModerator {
+		return Pin{}, nil, ErrForbidden
+	}
+	s.updatedID = id
 	return Pin{}, s.updateResultPhotos, nil
 }
 

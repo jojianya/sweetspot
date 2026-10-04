@@ -285,7 +285,8 @@ func TestUpdatePinNotFound(t *testing.T) {
 
 func TestUpdatePinForbiddenWithoutRoles(t *testing.T) {
 	// UpdatePin must answer 403 for a non-owner even when no RoleReader is
-	// wired, the way DeletePin does — never panic.
+	// wired, the way DeletePin does — never panic. The 403 now comes from the
+	// repository's UPDATE predicate, reached with isModerator=false.
 	r := newUpdateHarness(t, baseUpdateRepoOther(), t.TempDir(), nil)
 	req := multipartBody(t, http.MethodPatch, "/pins/pin-1", map[string]string{"caption": "x"}, nil)
 	w := httptest.NewRecorder()
@@ -296,15 +297,29 @@ func TestUpdatePinForbiddenWithoutRoles(t *testing.T) {
 }
 
 func TestUpdatePinForbidden(t *testing.T) {
-	// NOTE: roles must be wired here. UpdatePin, unlike DeletePin, has no
-	// nil guard on h.roles: a non-owner with nil roles panics in
-	// users.IsModerator instead of answering 403. Reported separately.
+	// A wired RoleReader reporting a non-moderator must not widen access:
+	// ownership is enforced by the UPDATE predicate, not by the handler.
 	r := newUpdateHarness(t, baseUpdateRepoOther(), t.TempDir(), stubRoles{role: users.RoleUser})
 	req := multipartBody(t, http.MethodPatch, "/pins/pin-1", map[string]string{"caption": "x"}, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", w.Code)
+	}
+	if msg := errorBody(t, w); msg != "you can only edit your own pins" {
+		t.Errorf("error = %q", msg)
+	}
+}
+
+func TestUpdatePinModeratorMayEditAnotherPin(t *testing.T) {
+	// The mirror of TestUpdatePinForbidden: the predicate's moderator
+	// alternative lets an admin edit a pin they do not own.
+	r := newUpdateHarness(t, baseUpdateRepoOther(), t.TempDir(), stubRoles{role: users.RoleAdmin})
+	req := multipartBody(t, http.MethodPatch, "/pins/pin-1", map[string]string{"caption": "x"}, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", w.Code, w.Body.String())
 	}
 }
 
@@ -390,7 +405,6 @@ func TestUpdatePinSweepsStalePhotosOnSuccess(t *testing.T) {
 	}
 }
 
-
 // TestUpdatePinReturnsPhotos proves the response carries the pin's photo set
 // after the update, so a client that replaced its photos does not have to
 // refetch the pin to learn the new URLs. CreatePin answers the same way.
@@ -430,7 +444,9 @@ func TestUpdatePinReturnsPhotos(t *testing.T) {
 }
 
 // TestUpdatePinHiddenPinIsNotFound proves a soft-hidden pin cannot be edited:
-// the shared VisiblePinExists rule makes it a 404, not a silent success.
+// the shared VisiblePinExists rule makes it a 404, not a silent success. The
+// UPDATE predicate repeats the rule, and TestDBUpdatePinAuthorization covers
+// that second gate against real SQL.
 func TestUpdatePinHiddenPinIsNotFound(t *testing.T) {
 	repo := baseUpdateRepo()
 	repo.visible = false

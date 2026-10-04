@@ -72,6 +72,21 @@ func TestValidateCookieSameSite(t *testing.T) {
 	}
 }
 
+// TestCookieSameSiteDefaultsToStrict pins the default itself, not just that it
+// is a valid value. This app has no anti-CSRF token: SameSite=Strict plus the
+// same-origin /api rewrite *is* the CSRF defence, so a default that quietly
+// became lax would remove it for every deployment that does not set the flag.
+// docker-compose.prod.yml also defaults to strict; see docs/SECURITY.md.
+func TestCookieSameSiteDefaultsToStrict(t *testing.T) {
+	if defaultCookieSameSite != "strict" {
+		t.Errorf("default COOKIE_SAMESITE = %q, want strict", defaultCookieSameSite)
+	}
+	// And it must be a mode the rest of the config accepts, or startup aborts.
+	if err := validateCookieSameSite(defaultCookieSameSite); err != nil {
+		t.Errorf("default COOKIE_SAMESITE is rejected by validation: %v", err)
+	}
+}
+
 func TestValidateStorageBase(t *testing.T) {
 	t.Run("LocalDevelopment", func(t *testing.T) {
 		if err := validateStorageBase("http://localhost:8081", "development"); err != nil {

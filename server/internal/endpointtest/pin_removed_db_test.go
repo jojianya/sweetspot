@@ -2,6 +2,7 @@ package endpointtest
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,6 +47,12 @@ func TestDBReviewApproveReturnsLocationAfterCommit(t *testing.T) {
 	}
 	if loc == nil || *loc == "" {
 		t.Fatalf("expected non-empty pin location after commit, got %v", loc)
+	}
+	// The payload must parse with exactly the logic realtime.matchesRemoved
+	// uses for bbox filtering — WKT "POINT(lng lat)", not raw EWKB hex.
+	var lng, lat float64
+	if _, err := fmt.Sscanf(*loc, "POINT(%f %f)", &lng, &lat); err != nil {
+		t.Fatalf("pin_removed location %q does not parse like matchesRemoved expects: %v", *loc, err)
 	}
 	if rep.Status != reports.StatusActioned {
 		t.Errorf("expected status actioned, got %q", rep.Status)

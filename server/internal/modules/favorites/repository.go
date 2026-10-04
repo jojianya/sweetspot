@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 )
 
@@ -52,14 +53,7 @@ func (r *postgresRepository) IsSaved(ctx context.Context, userID, pinID string) 
 }
 
 func (r *postgresRepository) PinExists(ctx context.Context, pinID string) (bool, error) {
-	var exists bool
-	err := r.pool.QueryRow(ctx, `
-		SELECT EXISTS(SELECT 1 FROM pins WHERE id = $1)
-	`, pinID).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
+	return pins.VisiblePinExists(ctx, r.pool, pinID)
 }
 
 func (r *postgresRepository) List(ctx context.Context, userID string) ([]Entry, error) {
@@ -95,7 +89,9 @@ func (r *postgresRepository) List(ctx context.Context, userID string) ([]Entry, 
 
 func (r *postgresRepository) ListIDs(ctx context.Context, userID string) ([]string, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT pin_id::text FROM favorites WHERE user_id = $1 ORDER BY created_at DESC
+		SELECT f.pin_id::text FROM favorites f
+		JOIN pins p ON p.id = f.pin_id AND p.is_hidden = false
+		WHERE f.user_id = $1 ORDER BY f.created_at DESC
 	`, userID)
 	if err != nil {
 		return nil, err

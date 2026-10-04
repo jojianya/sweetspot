@@ -87,6 +87,13 @@ type mockCommentRepo struct {
 	deleteErr   error
 	hideCalls   int
 	deleteCalls int
+	// pinGone makes PinExistsVisible report the pin as hidden/missing; the
+	// zero value (false) keeps the historical "pin exists" behavior.
+	pinGone bool
+}
+
+func (m *mockCommentRepo) PinExistsVisible(context.Context, string) (bool, error) {
+	return !m.pinGone, nil
 }
 
 func (m *mockCommentRepo) ListByPin(context.Context, string) ([]comments.Comment, error) {

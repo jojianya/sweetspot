@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
 
 type Repository interface {
@@ -25,12 +26,7 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 }
 
 func (r *postgresRepository) PinExists(ctx context.Context, pinID string) (bool, error) {
-	var exists bool
-	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pins WHERE id = $1)`, pinID).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
+	return pins.VisiblePinExists(ctx, r.pool, pinID)
 }
 
 func (r *postgresRepository) CreateReport(ctx context.Context, pinID, reporterID, reason string) (Report, error) {
@@ -79,9 +75,11 @@ func (r *postgresRepository) ReviewReport(ctx context.Context, reportID, action,
 		if _, err := tx.Exec(ctx, `UPDATE pins SET is_hidden = true WHERE id = $1`, pinID); err != nil {
 			return rep, nil, err
 		}
-		// Get the pin location for the pin_removed event
+		// Get the pin location for the pin_removed event. Must be WKT like
+		// the pins repo's ST_AsText, or matchesRemoved in realtime/handler.go
+		// drops it for bbox-filtered clients.
 		var location string
-		err := tx.QueryRow(ctx, `SELECT location FROM pins WHERE id = $1`, pinID).Scan(&location)
+		err := tx.QueryRow(ctx, `SELECT ST_AsText(location) FROM pins WHERE id = $1`, pinID).Scan(&location)
 		if err != nil {
 			return rep, nil, err
 		}

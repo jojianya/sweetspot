@@ -182,14 +182,7 @@ func (r *postgresRepository) ListPins(ctx context.Context, id string) ([]pins.Pi
 }
 
 func (r *postgresRepository) PinExists(ctx context.Context, pinID string) (bool, error) {
-	var exists bool
-	err := r.pool.QueryRow(ctx, `
-		SELECT EXISTS(SELECT 1 FROM pins WHERE id = $1 AND is_hidden = false)
-	`, pinID).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
+	return pins.VisiblePinExists(ctx, r.pool, pinID)
 }
 
 func (r *postgresRepository) AddPin(ctx context.Context, collectionID, pinID string) error {

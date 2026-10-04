@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -59,7 +60,16 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	if h.emailLim != nil && h.emailLim.Locked(req.Identifier) {
+	// Key the lockout on the client IP *and* the identifier. Keyed on the
+	// identifier alone, anyone who can reach this endpoint could spend the real
+	// owner's budget with five wrong passwords and lock that person out of their
+	// own account from anywhere — a denial of service aimed at one user rather
+	// than at the endpoint. Pairing the two means failures only ever lock out
+	// the (IP, identifier) pair that produced them; the per-IP and global
+	// middleware limits still bound one attacker from grinding through many
+	// identifiers.
+	lockKey := loginLockKey(c.ClientIP(), req.Identifier)
+	if h.emailLim != nil && h.emailLim.Locked(lockKey) {
 		response.TooManyRequests(c, "account locked, try again later")
 		return
 	}
@@ -68,7 +78,7 @@ func (h *Handler) Login(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
 			if h.emailLim != nil {
-				h.emailLim.AllowKey(req.Identifier)
+				h.emailLim.AllowKey(lockKey)
 			}
 			response.Unauthorized(c, "invalid email, username, or password")
 			return
@@ -78,7 +88,9 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	if h.emailLim != nil {
-		h.emailLim.Reset(req.Identifier)
+		// Success clears only this IP+identifier counter, so one user signing
+		// in does not release a lockout an attacker earned from their own IP.
+		h.emailLim.Reset(lockKey)
 	}
 
 	SetSessionCookie(c.Writer, c.Request, token, tokenExpiry, h.sameSite, h.trusted)
@@ -118,4 +130,17 @@ func (h *Handler) Me(c *gin.Context) {
 		"user_id": middleware.GetUserID(c),
 		"role":    role,
 	})
+}
+
+// loginLockKey is the failure-counter key for one login attempt: the client IP
+// plus the identifier being tried.
+//
+// The identifier is lowercased because the account lookup treats an email
+// case-insensitively (GetByLogin compares against LOWER(email)), so "USER@x.com"
+// and "user@x.com" are the same account. Without folding case here an attacker
+// could mint a fresh counter per variant and never reach the threshold. This
+// also merges case-distinct usernames into one counter, which can only make the
+// lockout slightly eager and only for the attacker's own IP.
+func loginLockKey(ip, identifier string) string {
+	return ip + "|" + strings.ToLower(identifier)
 }

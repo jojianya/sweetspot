@@ -321,39 +321,57 @@ This app is photo-heavy and map-based — unprocessed multi-photo uploads at up 
 
 ## Phase 5 — Real-Time Layer
 
-> **Status:** the plan was revised from WebSocket to Server-Sent Events. The live design is `GET /events` (one global stream per process, no rooms): `internal/modules/realtime/broker.go` publishes `pins.Event` JSON to Redis channel `goodspot:pins`; each client connection subscribes and `runStreamLoop` (`realtime/handler.go:198`) filters server-side by bbox (`matches`, handler.go:237-250) and category, writes `event: pin` messages, and emits a `: heartbeat` comment every 20 s (`handler.go:65`). `MAX_SSE_CONNECTIONS` caps total connections per process (`handler.go:78-95`); Caddy serves `/events` with `flush_interval -1` so frames are not buffered.
+> **Status:** the plan was revised from WebSocket to Server-Sent Events. The live design is `GET /events` (one global stream per process, no rooms): `internal/modules/realtime/broker.go` publishes `pins.Event` JSON to Redis channel `goodspot:pins`; each client connection subscribes and `runStreamLoop` (in `realtime/handler.go`) filters server-side by bbox (`matches`) and category, writes `event: pin` messages, and emits a `: heartbeat` comment every 20 s. `MAX_SSE_CONNECTIONS` caps total connections per process; Caddy serves `/events` with `flush_interval -1` so frames are not buffered.
 
 ### 5.1 WebSocket server setup — superseded by SSE
 
-- [ ] `go get github.com/gorilla/websocket` — superseded: no WebSocket library; SSE instead.
-- [ ] `internal/realtime/hub.go` — connection registry (`map[string][]*Connection` keyed by geohash cell) — superseded: single global broker per process, per-subscriber Redis subscription, no geohash cell rooms.
-- [ ] `internal/realtime/handler.go` — WebSocket upgrade handler, route: `GET /ws` — superseded: `Handler.Stream` at `GET /events` (router.go:130).
-- [ ] Handle client `subscribe`/`unsubscribe` messages (cell list) — superseded: client passes `bbox`/`category` as query params; `runStreamLoop`/`matches` decide which events reach that subscriber.
+- [x] `go get github.com/gorilla/websocket` — superseded: no WebSocket library; SSE instead.
+- [x] `internal/realtime/hub.go` — connection registry (`map[string][]*Connection` keyed by geohash cell) — superseded: single global broker per process, per-subscriber Redis subscription, no geohash cell rooms.
+- [x] `internal/realtime/handler.go` — WebSocket upgrade handler, route: `GET /ws` — superseded: `Handler.Stream` at `GET /events`.
+- [x] Handle client `subscribe`/`unsubscribe` messages (cell list) — superseded: client passes `bbox`/`category` as query params; `runStreamLoop`/`matches` decide which events reach that subscriber.
 
 ### 5.2 Redis pub/sub — done (SSE)
 
-- [ ] `go get github.com/redis/go-redis/v9`
-- [ ] `REDIS_URL` in `.env`
-- [ ] `internal/realtime/broker.go` — on pin creation, `Broker.PinCreated` publishes the event to Redis channel `goodspot:pins` (`broker.go:9,36-51`).
-- [ ] Each `GET /events` connection subscribes and receives cross-instance events (`broker.go:53-55`, `handler.go:179-180`).
-- [ ] (Known gap, deferred) Pin write and Redis publish are two separate steps — a crash between them means a pin is saved but never broadcast. Documented, not fixed; a transactional outbox table + poller can close it if it becomes a real problem.
+- [x] `go get github.com/redis/go-redis/v9`
+- [x] `REDIS_URL` in `.env`
+- [x] `internal/realtime/broker.go` — on pin creation, `Broker.PinCreated` publishes the event to Redis channel `goodspot:pins`.
+- [x] Each `GET /events` connection subscribes and receives cross-instance events.
+- [x] (Known gap, deferred) Pin write and Redis publish are two separate steps — a crash between them means a pin is saved but never broadcast. Documented, not fixed; a transactional outbox table + poller can close it if it becomes a real problem.
 
 ### 5.3 Batching — deferred
 
-- [ ] Batching of bursts (one event per create today, `handler.go:216`). Deferred: no burst requirement demonstrated; revisit only if a real storm appears.
+- [ ] Batching of bursts (one event per create today). Deferred: no burst requirement demonstrated; revisit only if a real storm appears.
 
 ### 5.4 Frontend WebSocket client — superseded by SSE
 
-- [ ] Native `WebSocket` connect on map load — superseded: `openPinStream` uses `EventSource` (`client/src/lib/api/realtime.ts`).
-- [ ] Compute visible geohash cells, send `subscribe` — superseded: client sends `bbox` + `category` query params (`realtime.ts`, `usePinStream.ts:24`).
-- [ ] Update subscription on viewport change — `usePinStream` re-opens on `[bbox, category, onPin]` (`usePinStream.ts:40`).
-- [ ] On `pin_batch` message, merge new pins without a full refetch — live: one `event: pin` per create; `usePinStream` enriches it and calls `onPin` (current behavior verified; payload schema is client-validated with zod).
+- [x] Native `WebSocket` connect on map load — superseded: `openPinStream` uses `EventSource` (`client/src/lib/api/realtime.ts`).
+- [x] Compute visible geohash cells, send `subscribe` — superseded: client sends `bbox` + `category` query params (`realtime.ts`, `usePinStream`).
+- [x] Update subscription on viewport change — `usePinStream` re-opens on `[bbox, category, onPin, onPinRemoved, onReconnect]` (`usePinStream`).
+- [x] On `pin_batch` message, merge new pins without a full refetch — live: one `event: pin` per create; `usePinStream` enriches it and calls `onPin` (current behavior verified; payload schema is client-validated with zod).
 
 ### 5.5 Testing
 
 - [ ] Open app in two browser tabs/windows
 - [ ] Post a pin in tab A
 - [ ] Confirm it appears in tab B (no refresh) — with matching category and live bbox overlap.
+- [ ] Delete a pin in tab A; confirm it disappears from tab B and closes its open detail panel.
+
+### 5.6 Removal events and reconnect catch-up
+
+- [x] Separate Redis channel for removals: `goodspot:pin-removed` (never mixed into `goodspot:pins`).
+- [x] Test proving a removal cannot produce `event: pin` (it must emit `event: pin_removed` only).
+- [x] Publish `pin_removed` from the pin delete handler (`Handler.DeletePin`).
+- [x] Publish `pin_removed` from report approve, with `reports` free of a `pins` import (publisher interface defined inside `reports`, broker implements it, wired in router/routes).
+- [x] Handler tests for `pin_removed`.
+- [x] DB-backed publish-after-commit tests: repository returns the pin location only after the commit (`TestDBReviewApproveReturnsLocationAfterCommit`, `TestDBReviewDismissReturnsNilLocation`, `TestDBReviewUpdateErrorSurfaces`: UPDATE-error fix); handler publishes nothing when the service errors (`TestReviewErrorPublishesNothing`). No test asserts the Redis publish itself fires after commit.
+- [x] Client: map list removes the pin on `pin_removed`.
+- [x] Client: detail panel closes when its open pin is removed.
+- [x] Client: permalink page behavior (`/pin/[id]` does not use `usePinStream`; document/leave as-is).
+- [x] Reconnect catch-up: `onerror` only marks the episode — no refetch while the stream is broken (SSE has no replay, so that refetch could be immediately stale). The first `onopen` after any error always refetches, even if time has passed; an episode yields exactly one refetch if a reconnect follows, zero otherwise.
+- [x] The seven fake-`EventSource` test cases: (1) normal `pin_removed` delivered calls `onPinRemoved` with the pin id, (2) `pin_removed` never calls `onPin` (removals cannot produce pin events), (3) error alone never refetches (no timer; waits for open), (4) clean intentional re-subscription does not refetch (bbox change without error), (5) error then open refetches exactly once, (6) error, time passes, then open refetches on open, (7) repeated errors before one open refetch exactly once.
+- [x] Arch test passes without an allowlist change (`reports` must not import `pins`).
+
+> **Note:** Removals share the same known gap as pin creation — a crash between the DB commit and the Redis publish means the removal is persisted but never broadcast. Reconnect catch-up (refetch on the first `onopen` after any error — the only refetch; nothing fires while the stream is broken) is the partial mitigation, not a full outbox.
 
 **Phase 5 done when:** Two-tab live-update test passes reliably.
 

@@ -969,7 +969,22 @@ func TestUntrustedPeerIgnoresForwardedForValue(t *testing.T) {
 	}
 }
 
-func TestLoginLockoutAfterFailures(t *testing.T) {
+// doLogin posts a login attempt as if it came from clientIP. Trusted proxies
+// are disabled on the test routers, so RemoteAddr is what c.ClientIP() reads.
+func doLogin(t *testing.T, r *gin.Engine, body, clientIP string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = clientIP + ":54321"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+// loginLockoutRouter wires a login route with the given failure budget and a
+// single known account, and returns the limiter so a test can inspect it.
+func loginLockoutRouter(t *testing.T, budget int) (*gin.Engine, *middleware.Limiter) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	_ = r.SetTrustedProxies(nil)
@@ -979,31 +994,152 @@ func TestLoginLockoutAfterFailures(t *testing.T) {
 	usersSvc := &mockUserService{
 		byEmail: map[string]users.User{"lock@example.com": {ID: testUUID1, Email: "lock@example.com", PasswordHash: hash, Role: users.RoleUser}},
 	}
-	authSvc := auth.NewService(usersSvc, testSecret)
-	emailLim := middleware.New(5, time.Minute)
-	authH := auth.NewHandler(authSvc, nil, emailLim, auth.SameSiteStrict, nil)
-	auth.RegisterRoutes(r.Group(""), authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
+	lim := middleware.New(budget, time.Minute)
+	authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, lim, auth.SameSiteStrict, nil)
+	// Only the login route: the per-IP and global limiters registered by
+	// RegisterRoutes would otherwise mask the per-identifier budget under test.
+	r.POST("/auth/login", authH.Login)
+	return r, lim
+}
+
+func TestLoginLockoutAfterFailures(t *testing.T) {
+	r, _ := loginLockoutRouter(t, 5)
 
 	for i := 0; i < 5; i++ {
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"wrong"}`, nil)
+		w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("attempt %d: expected 401, got %d (%s)", i+1, w.Code, w.Body.String())
 		}
 	}
 
-	w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"wrong"}`, nil)
+	w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 once locked, got %d (%s)", w.Code, w.Body.String())
 	}
 
-	w = doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"password123"}`, nil)
+	w = doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "192.0.2.1")
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 for correct password while locked, got %d (%s)", w.Code, w.Body.String())
 	}
+}
 
-	emailLim.Reset("lock@example.com")
-	w = doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"password123"}`, nil)
+// The point of keying on IP+identifier: failures spent from one address must
+// not lock the real owner out when they log in from another.
+func TestLoginLockoutIsScopedToTheFailingIP(t *testing.T) {
+	r, _ := loginLockoutRouter(t, 5)
+
+	for i := 0; i < 5; i++ {
+		if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1"); w.Code != http.StatusUnauthorized {
+			t.Fatalf("attacker attempt %d: expected 401, got %d", i+1, w.Code)
+		}
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected the attacking IP to be locked, got %d", w.Code)
+	}
+
+	// The owner's own address is unaffected, and the correct password works.
+	w := doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "198.51.100.7")
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 after Reset, got %d (%s)", w.Code, w.Body.String())
+		t.Fatalf("victim locked out from another IP: %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+// One IP exhausting the budget on one identifier must not lock a second
+// identifier from that same IP.
+func TestLoginLockoutDoesNotBleedAcrossIdentifiers(t *testing.T) {
+	r, _ := loginLockoutRouter(t, 5)
+
+	for i := 0; i < 6; i++ {
+		doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "192.0.2.1"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected the locked identifier to stay locked, got %d", w.Code)
+	}
+
+	w := doLogin(t, r, `{"identifier":"other@example.com","password":"whatever"}`, "192.0.2.1")
+	if w.Code == http.StatusTooManyRequests {
+		t.Fatalf("a different identifier was locked out too: %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+// A successful login clears only its own IP+identifier counter, so it cannot be
+// used to release a lockout an attacker earned from their own address.
+func TestLoginSuccessClearsOnlyItsOwnCounter(t *testing.T) {
+	r, lim := loginLockoutRouter(t, 5)
+
+	for i := 0; i < 6; i++ {
+		doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected attacker locked, got %d", w.Code)
+	}
+
+	// A good password from the owner's address succeeds...
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "198.51.100.7"); w.Code != http.StatusOK {
+		t.Fatalf("owner login: %d (%s)", w.Code, w.Body.String())
+	}
+	// ...and that success must not have released the attacker's lockout.
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("owner's success released the attacker's lockout: %d (%s)", w.Code, w.Body.String())
+	}
+
+	if !lim.Locked("192.0.2.1|lock@example.com") {
+		t.Error("expected the attacker key to still be locked")
+	}
+	if lim.Locked("198.51.100.7|lock@example.com") {
+		t.Error("expected the owner key to have been cleared")
+	}
+}
+
+// An identifier nobody has must be indistinguishable from one that exists:
+// same status, same body. (Their timing is equalized inside service.Login.)
+func TestLoginDoesNotRevealAccountExistence(t *testing.T) {
+	r, _ := loginLockoutRouter(t, 100)
+
+	existing := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
+	absent := doLogin(t, r, `{"identifier":"nobody@example.com","password":"wrong"}`, "192.0.2.1")
+
+	if existing.Code != http.StatusUnauthorized || absent.Code != http.StatusUnauthorized {
+		t.Fatalf("status codes differ: existing=%d absent=%d", existing.Code, absent.Code)
+	}
+	if existing.Body.String() != absent.Body.String() {
+		t.Fatalf("bodies differ:\n existing=%s\n absent=%s", existing.Body.String(), absent.Body.String())
+	}
+}
+
+// A locked-out attempt must also look the same whether or not the account
+// exists: the 429 is emitted before any lookup.
+func TestLoginLockoutDoesNotRevealAccountExistence(t *testing.T) {
+	r, _ := loginLockoutRouter(t, 2)
+
+	for i := 0; i < 3; i++ {
+		doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
+		doLogin(t, r, `{"identifier":"ghost@example.com","password":"wrong"}`, "192.0.2.1")
+	}
+
+	existing := doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "192.0.2.1")
+	absent := doLogin(t, r, `{"identifier":"ghost@example.com","password":"password123"}`, "192.0.2.1")
+
+	if existing.Code != http.StatusTooManyRequests || absent.Code != http.StatusTooManyRequests {
+		t.Fatalf("status codes differ: existing=%d absent=%d", existing.Code, absent.Code)
+	}
+	if existing.Body.String() != absent.Body.String() {
+		t.Fatalf("bodies differ:\n existing=%s\n absent=%s", existing.Body.String(), absent.Body.String())
+	}
+}
+
+// The identifier is case-folded because the account lookup is: otherwise an
+// attacker mints a fresh counter per variant and never reaches the threshold.
+func TestLoginLockoutFoldsIdentifierCase(t *testing.T) {
+	r, lim := loginLockoutRouter(t, 3)
+
+	for i := 0; i < 4; i++ {
+		doLogin(t, r, `{"identifier":"LOCK@example.com","password":"wrong"}`, "192.0.2.1")
+	}
+	if !lim.Locked("192.0.2.1|lock@example.com") {
+		t.Fatal("expected the case-folded key to hold the counter")
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected a case variant to be locked, got %d (%s)", w.Code, w.Body.String())
 	}
 }

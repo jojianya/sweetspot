@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { updateMyProfile } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
+import { checkUsername } from "@/lib/username";
 import { buildProfileEdit, strSocial } from "@/lib/utils/profile";
 import { useAuth } from "@/store/auth";
 import type { PublicProfile } from "@/lib/types";
@@ -52,6 +53,16 @@ export function useProfileEditor(
     setSaving(true);
     setSaveError(null);
     try {
+      // A rename is the only field with a character rule; check it here so the
+      // user is told before the upload rather than after (mirrors the server,
+      // see lib/username.ts).
+      if (editUsername.trim() !== profile.username) {
+        const usernameCheck = checkUsername(editUsername);
+        if (!usernameCheck.ok) {
+          setSaveError(usernameCheck.message);
+          return;
+        }
+      }
       const edit = buildProfileEdit(profile, {
         username: editUsername,
         instagram: editInstagram,

@@ -25,6 +25,15 @@ import (
 const defaultCORSAllowedOrigins = "http://localhost:3000,http://localhost:3001,http://localhost:3002," +
 	"http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002"
 
+// defaultCookieSameSite is the fallback for COOKIE_SAMESITE.
+//
+// Strict is the CSRF-safe mode and this service issues no anti-CSRF token, so
+// SameSite=Strict plus the same-origin /api rewrite is the whole defence. Lax is
+// reachable only by setting COOKIE_SAMESITE=lax, which exists for plain-HTTP
+// LAN development where a strict cookie is never sent. Keep this strict;
+// see docs/SECURITY.md.
+const defaultCookieSameSite = "strict"
+
 type Config struct {
 	Port               string
 	AppEnv             string
@@ -94,7 +103,7 @@ func Load() *Config {
 		SentryDSN:          getEnv("SENTRY_DSN", ""),
 		SentryEnv:          getEnv("SENTRY_ENV", "development"),
 		MaxSSEConnections:  getEnvInt("MAX_SSE_CONNECTIONS", 1000),
-		CookieSameSite:     strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", "strict"))),
+		CookieSameSite:     strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", defaultCookieSameSite))),
 		TrustedProxies:     mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
 		PublicBaseURL:      strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "http://localhost:3000")), "/"),
 		MailerWebhookURL:   strings.TrimSpace(getEnv("MAILER_WEBHOOK_URL", "")),

@@ -3,6 +3,7 @@ package realtime
 import (
 	"context"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -64,6 +65,49 @@ func TestRunStreamLoopRemovalBboxFilter(t *testing.T) {
 	}
 	if strings.Contains(body, "event: pin\n") {
 		t.Errorf("removal must not produce 'event: pin', got: %s", body)
+	}
+}
+
+// TestStreamSetsNoTransformCacheControl proves the SSE response opts out of
+// compression at every hop: proxies (Next rewrites, Caddy encode gzip) must
+// not buffer the stream, or browsers never receive events live.
+// Needs a reachable Redis (same bar as the DB-backed endpoint tests).
+func TestStreamSetsNoTransformCacheControl(t *testing.T) {
+	broker := NewBroker("127.0.0.1:6379", os.Getenv("REDIS_PASSWORD"))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := broker.Ping(ctx); err != nil {
+		t.Skipf("redis not reachable, skipping: %v", err)
+	}
+
+	h := NewHandler(broker, 0)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	reqCtx, stop := context.WithCancel(context.Background())
+	defer stop()
+	c.Request = httptest.NewRequest("GET", "/events?bbox=17.3,78.3,17.5,78.6", nil).WithContext(reqCtx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		h.Stream(c)
+	}()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for rec.Header().Get("Cache-Control") == "" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	stop()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stream did not return after context cancel")
+	}
+
+	cc := rec.Header().Get("Cache-Control")
+	if !strings.Contains(cc, "no-transform") {
+		t.Errorf("expected Cache-Control to contain no-transform, got %q", cc)
 	}
 }
 

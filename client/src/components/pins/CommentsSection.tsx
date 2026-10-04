@@ -43,11 +43,16 @@ export default function CommentsSection({ pinId, compact = false }: CommentsSect
     }
   };
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const handleDelete = async (id: string) => {
+    // Report the failure instead of swallowing it: the comment is still
+    // there, and saying nothing left the user believing it was deleted.
+    setDeleteError(null);
     try {
       await remove(id);
-    } catch {
-      // removal errors surface through a re-fetch next mount; keep it quiet
+    } catch (e) {
+      setDeleteError(errorMessage(e));
     }
   };
 
@@ -185,6 +190,12 @@ export default function CommentsSection({ pinId, compact = false }: CommentsSect
             </p>
           )}
         </div>
+      )}
+
+      {deleteError && (
+        <p className="mt-2 text-xs text-rose-600 dark:text-rose-400" role="alert">
+          {deleteError}
+        </p>
       )}
     </section>
   );

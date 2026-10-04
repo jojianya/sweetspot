@@ -45,7 +45,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
-  const { saved, saving, handleSave } = useOptimisticSave(pin.id);
+  const { saved, saving, error: saveError, handleSave } = useOptimisticSave(pin.id);
   const view = usePinView(pin.id, pin.user_id);
 
   // Applies the counted total to local pin state once per fetch. The parent
@@ -163,6 +163,11 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
                 <BookmarkIcon filled={saved} />
               </button>
               <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{saved ? "Saved" : "Save"}</span>
+              {saveError && (
+                <span role="alert" className="max-w-20 text-center text-xs text-rose-600 dark:text-rose-400">
+                  {saveError}
+                </span>
+              )}
             </div>
             <div className="flex flex-col items-center gap-1.5">
               <button

@@ -35,7 +35,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const { saved, saving, handleSave } = useOptimisticSave(pin.id);
+  const { saved, saving, error: saveError, handleSave } = useOptimisticSave(pin.id);
   const view = usePinView(pin.id, pin.user_id);
 
   // Applies the counted total to local pin state once per fetch. The parent
@@ -157,6 +157,11 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
               <BookmarkIcon filled={saved} className="h-4 w-4" />
               {saved ? "Saved" : "Save"}
             </button>
+            {saveError && (
+              <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
+                {saveError}
+              </p>
+            )}
             <button
               type="button"
               onClick={handleShare}

@@ -31,6 +31,21 @@ export const API_BASE_URL = "/api";
 const MAX_EVENTS = 100;
 const DEDUPE_MS = 10_000;
 
+/**
+ * The page location with its query string and fragment removed.
+ *
+ * A URL can carry a token, an invite code or a signed link in those parts, and
+ * this payload is POSTed to the error ingest endpoint and then into logs and
+ * Sentry. Only the origin and path are needed to locate the failure.
+ * window.location is used rather than the URL constructor because a malformed
+ * href would throw inside the reporter; this is best-effort by design.
+ */
+function safePageUrl(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}`;
+}
+
 let sent = 0;
 const lastSeen = new Map<string, number>();
 
@@ -53,7 +68,7 @@ export function reportError(
   const payload = {
     message,
     stack: error instanceof Error ? error.stack : undefined,
-    url: typeof window !== "undefined" ? window.location.href : undefined,
+    url: safePageUrl(),
     extra: context ?? {},
   };
 

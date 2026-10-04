@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
@@ -30,6 +31,16 @@ func (h *Handler) isModerator(c *gin.Context) bool {
 }
 
 func (h *Handler) List(c *gin.Context) {
+	exists, err := h.repo.PinExistsVisible(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Internal(c, "comments: pin exists", err, "pin_id", c.Param("id"))
+		return
+	}
+	if !exists {
+		response.NotFound(c, "pin not found")
+		return
+	}
+
 	comments, err := h.repo.ListByPin(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		response.Internal(c, "comments: list", err, "pin_id", c.Param("id"))
@@ -55,8 +66,25 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
+	exists, err := h.repo.PinExistsVisible(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Internal(c, "comments: pin exists", err, "pin_id", c.Param("id"))
+		return
+	}
+	if !exists {
+		response.NotFound(c, "pin not found")
+		return
+	}
+
 	comment, err := h.repo.Create(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), body)
 	if err != nil {
+		// Safety net: the pin vanished between the visibility check and the
+		// insert (or raced a hide) — report it as a missing pin, not a 500.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			response.NotFound(c, "pin not found")
+			return
+		}
 		response.Internal(c, "comments: create", err, "pin_id", c.Param("id"))
 		return
 	}

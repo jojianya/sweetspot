@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jojianya/sweetspot247-backend/internal/modules/collections"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/comments"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/favorites"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 )
@@ -44,6 +45,10 @@ func TestDBHiddenPinIsInvisibleToSharedChecks(t *testing.T) {
 	colRepo := collections.NewRepository(pool)
 	if exists, err := colRepo.PinExists(ctx, pinID); err != nil || exists {
 		t.Errorf("collections.PinExists after hide = %v, %v; want false, nil", exists, err)
+	}
+	commentRepo := comments.NewRepository(pool)
+	if exists, err := commentRepo.PinExistsVisible(ctx, pinID); err != nil || exists {
+		t.Errorf("comments.PinExistsVisible after hide = %v, %v; want false, nil", exists, err)
 	}
 
 	ids, err := favRepo.ListIDs(ctx, reporter)

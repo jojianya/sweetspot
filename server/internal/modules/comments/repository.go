@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
 
 var ErrNotFound = errors.New("comment not found")
@@ -16,6 +17,9 @@ type Repository interface {
 	Get(ctx context.Context, id string) (Comment, error)
 	Hide(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
+	// PinExistsVisible reports whether the pin exists and is public; the
+	// handler 404s comments on hidden or nonexistent pins.
+	PinExistsVisible(ctx context.Context, pinID string) (bool, error)
 }
 
 type postgresRepository struct {
@@ -24,6 +28,10 @@ type postgresRepository struct {
 
 func NewRepository(pool *pgxpool.Pool) Repository {
 	return &postgresRepository{pool: pool}
+}
+
+func (r *postgresRepository) PinExistsVisible(ctx context.Context, pinID string) (bool, error) {
+	return pins.VisiblePinExists(ctx, r.pool, pinID)
 }
 
 func (r *postgresRepository) ListByPin(ctx context.Context, pinID string) ([]Comment, error) {

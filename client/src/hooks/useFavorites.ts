@@ -27,6 +27,18 @@ export function useFavorites() {
 export function useSavedStatus(pinId: string, enabled: boolean) {
   const [saved, setSaved] = useState(false);
 
+  // Reset during render when the identity changes, matching useAsyncData's
+  // derived-state pattern: the previous pin's saved badge must not linger on
+  // the new pin, and disabling the hook must not keep the last answer. Done in
+  // render (not an effect) so the very first paint for a new pin is already
+  // correct, with no one-frame flash of the old value.
+  const [prevKey, setPrevKey] = useState(`${pinId}:${enabled}`);
+  const key = `${pinId}:${enabled}`;
+  if (prevKey !== key) {
+    setPrevKey(key);
+    setSaved(false);
+  }
+
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;

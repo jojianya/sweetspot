@@ -13,6 +13,14 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/api", () => apiMocks);
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 function user(id: string, username: string, role = "user"): PublicProfile {
   return {
     id,
@@ -117,6 +125,40 @@ describe("useUsersAdmin", () => {
     });
     expect(apiMocks.fetchUsers).toHaveBeenLastCalledWith({ limit: USERS_PAGE_SIZE, offset: 1 });
     expect(state()).toContain(":3:3:");
+  });
+
+  // "show all" reloads the full list while a "load more" page can still be in
+  // flight. That page is stale the moment the reload starts: it must not
+  // append its rows to the fresh list or overwrite its total.
+  it("drops an in-flight load-more page when the list is reloaded", async () => {
+    const slowPage = deferred<{ users: PublicProfile[]; total: number }>();
+    apiMocks.fetchUsers
+      .mockResolvedValueOnce({ users: [user("u-1", "alice")], total: 3 })
+      .mockReturnValueOnce(slowPage.promise)
+      .mockResolvedValueOnce({ users: [user("u-2", "bob")], total: 1 });
+
+    await renderProbe();
+    expect(state()).toContain(":1:3:all:");
+
+    // Kick off "load more"; it will not resolve yet.
+    await act(async () => {
+      click("more");
+    });
+    expect(apiMocks.fetchUsers).toHaveBeenLastCalledWith({ limit: USERS_PAGE_SIZE, offset: 1 });
+
+    // "Show all" supersedes it.
+    await act(async () => {
+      click("showall");
+    });
+
+    // The stale page finally resolves: it must not append to, or resize, the
+    // freshly loaded list.
+    await act(async () => {
+      slowPage.resolve({ users: [user("u-9", "stale")], total: 99 });
+      await slowPage.promise;
+    });
+    expect(state()).toContain(":1:1:all:");
+    expect(state()).not.toContain("stale");
   });
 
   it("searches and restores the full list", async () => {

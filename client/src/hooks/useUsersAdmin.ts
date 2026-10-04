@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchUsers, searchUsers, updateUserRole } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 import type { PublicProfile } from "@/lib/types";
@@ -29,17 +29,36 @@ export function useUsersAdmin() {
   const isSearching = activeQuery !== null;
   const hasMore = !isSearching && results.length > 0 && results.length < total;
 
+  // Tag each run so a superseded page can neither overwrite a newer result set
+  // nor clear the newer request's loading flags. Without this a "load more"
+  // that is still in flight can land after a search and replace the matches
+  // with the full list.
+  const fetchRunRef = useRef(0);
+
   const fetchPage = useCallback((offset: number, append: boolean) => {
+    const runID = ++fetchRunRef.current;
+    const stale = () => runID !== fetchRunRef.current;
     fetchUsers({ limit: USERS_PAGE_SIZE, offset })
       .then((res) => {
+        if (stale()) return;
         setTotal(res.total);
         setResults((prev) => (append ? [...prev, ...res.users] : res.users));
       })
-      .catch((e: unknown) => setError(errorMessage(e)))
+      .catch((e: unknown) => {
+        if (stale()) return;
+        setError(errorMessage(e));
+      })
       .finally(() => {
+        if (stale()) return;
         setLoading(false);
         setLoadingMore(false);
       });
+  }, []);
+
+  // A search supersedes any page in flight: bump the tag so a late page
+  // response is dropped instead of overwriting the matches.
+  const supersedePendingPages = useCallback(() => {
+    fetchRunRef.current++;
   }, []);
 
   useEffect(() => {
@@ -50,6 +69,8 @@ export function useUsersAdmin() {
     e.preventDefault();
     const q = query.trim();
     if (!q || loading || loadingMore) return;
+    // Any page still in flight is now stale; drop it before starting the search.
+    supersedePendingPages();
     setLoading(true);
     setError(null);
     setNotice(null);
@@ -71,6 +92,7 @@ export function useUsersAdmin() {
     setError(null);
     setActiveQuery(null);
     setLoading(true);
+    // fetchPage bumps the tag itself, superseding any page in flight.
     fetchPage(0, false);
   };
 

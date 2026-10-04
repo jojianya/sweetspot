@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
+import LegalFooter from "@/components/LegalFooter";
 import { errorMessage } from "@/lib/utils";
 import { login } from "@/lib/api";
 import { useAuth } from "@/store/auth";
@@ -102,12 +103,19 @@ export default function LoginPage() {
           </button>
         </form>
 
+        <p className="mt-4 text-center text-sm">
+          <Link href="/forgot-password" className="font-medium text-zinc-500 hover:underline dark:text-zinc-400">
+            Forgot password?
+          </Link>
+        </p>
+
         <p className="mt-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
           No account?{" "}
           <Link href="/register" className="font-semibold text-rose-600 hover:underline">
             Sign up
           </Link>
         </p>
+        <LegalFooter />
       </div>
       </div>
     </>

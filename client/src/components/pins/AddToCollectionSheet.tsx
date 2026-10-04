@@ -20,6 +20,9 @@ export default function AddToCollectionSheet({ pinId, onClose }: AddToCollection
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // Success and failure share one slot, so track which it is: the message was
+  // styled as an error even when it reported a successful add.
+  const [messageIsError, setMessageIsError] = useState(false);
   const [addedIds, setAddedIds] = useState<string[]>([]);
 
   if (!user) {
@@ -56,8 +59,10 @@ export default function AddToCollectionSheet({ pinId, onClose }: AddToCollection
       await addPin(collection.id, pinId);
       setAddedIds((prev) => [...prev, collection.id]);
       setName("");
+      setMessageIsError(false);
       setMessage(`Created "${trimmed}" and added the pin.`);
     } catch (e) {
+      setMessageIsError(true);
       setMessage(errorMessage(e));
     } finally {
       setBusy(null);
@@ -72,6 +77,7 @@ export default function AddToCollectionSheet({ pinId, onClose }: AddToCollection
       await addPin(collectionId, pinId);
       setAddedIds((prev) => [...prev, collectionId]);
     } catch (e) {
+      setMessageIsError(true);
       setMessage(errorMessage(e));
     } finally {
       setBusy(null);
@@ -111,7 +117,10 @@ export default function AddToCollectionSheet({ pinId, onClose }: AddToCollection
         </div>
 
         {message && (
-          <p className="mt-3 text-sm text-rose-600 dark:text-rose-400" role="status">
+          <p
+            className={`mt-3 text-sm ${messageIsError ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}
+            role="status"
+          >
             {message}
           </p>
         )}

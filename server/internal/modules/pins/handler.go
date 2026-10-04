@@ -16,8 +16,8 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
-	"github.com/jojianya/sweetspot247-backend/internal/modules/pins/imaging"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/imaging"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/pkg/geohash"
 )
@@ -69,7 +69,8 @@ func NewHandler(repo Repository, store *storage.Local, events Events, roles user
 // nopEvents is the zero-value event publisher used when realtime is disabled.
 type nopEvents struct{}
 
-func (nopEvents) PinCreated(context.Context, Event) {}
+func (nopEvents) PinCreated(context.Context, Event)      {}
+func (nopEvents) PinRemoved(context.Context, PinRemoved) {}
 
 func (h *Handler) ListCategories(c *gin.Context) {
 	categories, err := h.repo.ListCategories(c.Request.Context())
@@ -179,11 +180,11 @@ func (h *Handler) canViewHidden(c *gin.Context, pin PinDetail) bool {
 	return users.IsModerator(h.roles, c)
 }
 
-// RegisterView counts a view of a pin. It is public: anyone who opens a pin
-// counts, so SSR fetches and crawlers calling GET /pins/:id do not inflate the
-// number — the client registers views explicitly when a detail is opened.
+// RegisterView counts a unique per-account view. It is read-safe for
+// anonymous visitors: without a session it returns the current count
+// unchanged, so opening a pin logged out never errors and never counts.
 func (h *Handler) RegisterView(c *gin.Context) {
-	views, err := h.repo.RegisterView(c.Request.Context(), c.Param("id"))
+	views, err := h.repo.RegisterView(c.Request.Context(), c.Param("id"), middleware.GetUserID(c))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
@@ -203,23 +204,18 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		return
 	}
 
-	// Read the pin before deleting it. pin_photos rows are removed with the pin
-	// (ON DELETE CASCADE), so afterwards there is no way to learn which files
-	// belonged to it and they would sit on disk forever, still publicly served
-	// under their original URL. GetPin reads the same data the public
-	// GET /pins/:id returns, so this is not a privileged read.
 	id := c.Param("id")
-	existing, err := h.repo.GetPin(c.Request.Context(), id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.NotFound(c, "pin not found")
-			return
-		}
-		response.Internal(c, "delete pin: load pin", err, "pin_id", id, "user_id", userID)
-		return
+
+	// Moderation check reuses the same live-DB IsModerator as UpdatePin, so a
+	// demotion takes effect immediately. It is computed unconditionally (not
+	// from a pre-loaded owner) because authorization lives in the repository
+	// UPDATE predicate below — the pre-delete read is only for photo cleanup.
+	isModerator := false
+	if h.roles != nil {
+		isModerator = users.IsModerator(h.roles, c)
 	}
 
-	if err := h.repo.DeletePin(c.Request.Context(), id, userID); err != nil {
+	if err := h.repo.DeletePin(c.Request.Context(), id, userID, isModerator); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
 			return
@@ -232,6 +228,21 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		return
 	}
 
+	// Load the (now hidden) pin for photo cleanup and moderator audit logging.
+	// pin_photos rows survive the soft-hide, so this read sees the
+	// authoritative set. A read failure here must not fail the delete; files
+	// are unreferenced either way and the miss is logged for a sweep.
+	existing, err := h.repo.GetPin(c.Request.Context(), id)
+	if err != nil {
+		slog.Warn("delete pin: load for cleanup", "error", err.Error(), "pin_id", id, "user_id", userID)
+		response.NoContent(c)
+		return
+	}
+
+	if existing.UserID.String() != userID {
+		slog.Info("moderator deleted pin", "moderator_id", userID, "pin_id", id, "owner_id", existing.UserID.String())
+	}
+
 	// Best-effort cleanup, matching what UpdatePin does for replaced photos. The
 	// pin is already gone, so a storage failure must not fail the request; the
 	// files are unreferenced either way. Logged so an operator can sweep them.
@@ -242,6 +253,14 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		if err := h.store.Delete(ph.ThumbnailURL); err != nil {
 			slog.Warn("delete pin: remove thumbnail", "error", err.Error(), "url", ph.ThumbnailURL, "pin_id", id)
 		}
+	}
+
+	// Publish pin_removed event for realtime updates (best-effort; failure logged but not fatal).
+	if h.events != nil {
+		h.events.PinRemoved(c.Request.Context(), PinRemoved{
+			ID:       id,
+			Location: existing.Location,
+		})
 	}
 
 	response.NoContent(c)
@@ -265,45 +284,13 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		return
 	}
 
-	lat, err := strconv.ParseFloat(c.PostForm("lat"), 64)
-	if err != nil {
-		response.BadRequest(c, "lat must be a number")
-		return
-	}
-	lng, err := strconv.ParseFloat(c.PostForm("lng"), 64)
-	if err != nil {
-		response.BadRequest(c, "lng must be a number")
-		return
-	}
-	if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
-		response.BadRequest(c, "latitude or longitude out of range")
-		return
-	}
-
-	categoryID, err := strconv.Atoi(c.PostForm("category_id"))
-	if err != nil {
-		response.BadRequest(c, "category_id must be an integer")
-		return
-	}
-
-	var caption *string
-	if v := c.PostForm("caption"); v != "" {
-		if len([]rune(v)) > 500 {
-			response.BadRequest(c, "caption must be at most 500 characters")
-			return
-		}
-		caption = &v
-	}
-
 	files := form.File["photos"]
-	if len(files) < 1 {
-		response.BadRequest(c, "at least one photo is required")
+	input, verr := validateCreateFields(c.PostForm("lat"), c.PostForm("lng"), c.PostForm("category_id"), c.PostForm("caption"), len(files))
+	if verr != nil {
+		response.Error(c, verr.status, verr.msg)
 		return
 	}
-	if len(files) > maxPhotosPerPin {
-		response.BadRequest(c, "photo count exceeds maximum")
-		return
-	}
+	lat, lng, categoryID, caption := input.lat, input.lng, input.categoryID, input.caption
 
 	validated, perr := processPhotos(files)
 	if perr != nil {
@@ -518,6 +505,10 @@ func (h *Handler) ListByUser(c *gin.Context) {
 //   - caption:     present string; "" clears the caption
 //   - category_id: optional; when present it replaces the category
 //   - photos[]:    optional; when present it replaces the whole photo set
+//
+// The response carries the pin's photo set after the change, matching
+// CreatePin's {"pin", "photos"} envelope, so the client can adopt the new photo
+// URLs without refetching the pin.
 func (h *Handler) UpdatePin(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	id := c.Param("id")
@@ -532,10 +523,27 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		return
 	}
 
-	// Only non-owners reach the role lookup, keeping it off the common path.
-	if existing.UserID.String() != userID && !users.IsModerator(h.roles, c) {
-		response.Forbidden(c, "you can only edit your own pins")
+	// Hidden pins do not exist for edits. Checked before any work is done so a
+	// hidden pin answers 404 rather than revealing that it exists, the same rule
+	// DeletePin, comments, favorites, reports and collections follow. The UPDATE
+	// predicate repeats the check; this one just avoids staging uploads for a pin
+	// that cannot be edited.
+	visible, err := h.repo.PinVisible(c.Request.Context(), id)
+	if err != nil {
+		response.Internal(c, "update pin: visibility check", err, "pin_id", id)
 		return
+	}
+	if !visible {
+		response.NotFound(c, "pin not found")
+		return
+	}
+
+	// Without a wired RoleReader nobody is a moderator (same as DeletePin).
+	// Ownership itself is enforced by the UPDATE predicate, so there is no
+	// load-then-decide window between this read and the write.
+	isModerator := false
+	if h.roles != nil {
+		isModerator = users.IsModerator(h.roles, c)
 	}
 
 	form, err := c.MultipartForm()
@@ -544,29 +552,27 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		return
 	}
 
-	caption := strings.TrimSpace(c.PostForm("caption"))
-	if utf8.RuneCountInString(caption) > 500 {
-		response.BadRequest(c, "caption must be at most 500 characters")
+	fields, verr := validateUpdateFields(
+		strings.TrimSpace(c.PostForm("caption")),
+		strings.TrimSpace(c.PostForm("category_id")),
+		len(form.File["photos"]),
+	)
+	if verr != nil {
+		response.Error(c, verr.status, verr.msg)
 		return
 	}
+	caption, categoryID := fields.caption, fields.categoryID
 
-	var categoryID *int
-	if catStr := strings.TrimSpace(c.PostForm("category_id")); catStr != "" {
-		idv, err := strconv.Atoi(catStr)
+	if categoryID != nil {
+		exists, err := h.repo.CategoryExists(c.Request.Context(), *categoryID)
 		if err != nil {
-			response.BadRequest(c, "category_id must be an integer")
-			return
-		}
-		exists, err := h.repo.CategoryExists(c.Request.Context(), idv)
-		if err != nil {
-			response.Internal(c, "update pin: category exists", err, "category_id", idv)
+			response.Internal(c, "update pin: category exists", err, "category_id", *categoryID)
 			return
 		}
 		if !exists {
 			response.BadRequest(c, "category not found")
 			return
 		}
-		categoryID = &idv
 	}
 
 	patch := UpdatePinPatch{
@@ -575,10 +581,6 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 	}
 
 	files := form.File["photos"]
-	if len(files) > maxPhotosPerPin {
-		response.BadRequest(c, "photo count exceeds maximum")
-		return
-	}
 	if len(files) > 0 {
 		validated, perr := processPhotos(files)
 		if perr != nil {
@@ -602,7 +604,7 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		}
 	}
 
-	updated, err := h.repo.UpdatePin(c.Request.Context(), id, patch)
+	updated, photos, err := h.repo.UpdatePin(c.Request.Context(), id, userID, isModerator, patch)
 	if err != nil {
 		// The new photos are already on disk; remove them so a failed update
 		// cannot orphan files.
@@ -612,6 +614,10 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		}
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
+			return
+		}
+		if errors.Is(err, ErrForbidden) {
+			response.Forbidden(c, "you can only edit your own pins")
 			return
 		}
 		response.Internal(c, "update pin: database update", err, "pin_id", id)
@@ -626,5 +632,5 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		}
 	}
 
-	response.OK(c, gin.H{"pin": updated})
+	response.OK(c, gin.H{"pin": updated, "photos": photos})
 }

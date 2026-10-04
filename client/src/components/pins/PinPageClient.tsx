@@ -9,11 +9,13 @@ import CommentsSection from "@/components/pins/CommentsSection";
 import PinEditSheet from "@/components/pins/PinEditSheet";
 import AddToCollectionSheet from "@/components/pins/AddToCollectionSheet";
 import ReportSheet from "@/components/pins/ReportSheet";
-import { BookmarkIcon } from "@/components/icons";
-import { fetchPin, removeFavorite, saveFavorite } from "@/lib/api";
-import { reverseGeocode } from "@/lib/api/geocoding";
+import PinViews from "./PinViews";
+import { BookmarkIcon, PersonIcon, PinIcon } from "@/components/icons";
 import { useCategories } from "@/hooks/useCategories";
-import { useSavedStatus } from "@/hooks/useFavorites";
+import { usePinAddress } from "@/hooks/usePinAddress";
+import { useOptimisticSave } from "@/hooks/useOptimisticSave";
+import { usePinView } from "@/hooks/usePinView";
+import { usePinShare } from "@/hooks/usePinShare";
 import { formatTime, parsePoint } from "@/lib/utils";
 import { categorySlug } from "@/lib/utils/category";
 import { useAuth } from "@/store/auth";
@@ -23,24 +25,6 @@ interface PinPageClientProps {
   initialPin: PinDetail;
 }
 
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  viewBox: "0 0 24 24",
-};
-
-function PersonIcon() {
-  return (
-    <svg className="h-4 w-4" {...stroke} aria-hidden>
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" />
-    </svg>
-  );
-}
-
 export default function PinPageClient({ initialPin }: PinPageClientProps) {
   const router = useRouter();
   const { user } = useAuth();
@@ -48,13 +32,20 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
   const [pin, setPin] = useState<PinDetail>(initialPin);
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [address, setAddress] = useState<string | null>(null);
-  const { saved, setSaved } = useSavedStatus(pin.id, user !== null);
+  const { saved, saving, error: saveError, handleSave } = useOptimisticSave(pin.id);
+  const view = usePinView(pin.id, pin.user_id);
+
+  // Applies the counted total to local pin state once per fetch. The parent
+  // remounts via route change on the permalink page, so no pinId guard is
+  // needed here.
+  useEffect(() => {
+    if (!view) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- merge the freshly counted total into local pin state once per fetch
+    setPin((prev) => ({ ...prev, views: view.views }));
+  }, [view]);
 
   const photo = pin.photos[index];
   const count = pin.photos.length;
@@ -63,72 +54,13 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
   const isOwner =
     user !== null && (user.id === pin.user_id || user.role === "admin" || user.role === "owner");
 
-  useEffect(() => {
-    if (!point) return;
-    const controller = new AbortController();
-    reverseGeocode(point, controller.signal)
-      .then((text) => {
-        if (!controller.signal.aborted) setAddress(text);
-      })
-      .catch(() => {
-        // address lookup is best-effort
-      });
-    return () => controller.abort();
-  }, [point]);
+  const address = usePinAddress(point);
 
-  const handleSave = () => {
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-    if (saving) return;
-    setSaving(true);
-    const next = !saved;
-    setSaved(next);
-    const op = next ? saveFavorite(pin.id) : removeFavorite(pin.id);
-    op.then(() => setSaving(false)).catch(() => {
-      setSaved(!next);
-      setSaving(false);
-    });
-  };
+  const { copied, handleShare, goDirections } = usePinShare(pin.caption, pin.id, point);
 
-  const handleShare = async () => {
-    const text = `Check out ${pin.caption ?? "this place"} on GoodSpot`;
-    const url = `${window.location.origin}/pin/${pin.id}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: text, text, url });
-        return;
-      } catch {
-        // user dismissed the native sheet; fall through to clipboard
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(`${text} ${url}`);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore clipboard failures
-    }
-  };
-
-  const goDirections = () => {
-    if (!point) return;
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}`,
-      "_blank",
-      "noopener,noreferrer"
-    );
-  };
-
-  const handleUpdated = async () => {
-    try {
-      const refreshed = await fetchPin(pin.id);
-      setPin(refreshed);
-    } catch {
-      // the edit sheet already confirmed the update server-side
-    }
-  };
+  // The edit sheet hands back the updated pin (its response carries the
+  // current photos), so there is nothing left to refetch.
+  const handleUpdated = (updated: PinDetail) => setPin(updated);
 
   const name = pin.caption?.trim();
 
@@ -154,10 +86,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
             </button>
           ) : (
             <div className="flex aspect-[16/10] items-center justify-center text-zinc-300 dark:text-zinc-600">
-              <svg className="h-10 w-10" {...stroke} aria-hidden>
-                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-                <circle cx="12" cy="10" r="3" />
-              </svg>
+              <PinIcon className="h-10 w-10" />
             </div>
           )}
 
@@ -212,6 +141,8 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
               )}
               <span className="text-zinc-300 dark:text-zinc-600">·</span>
               <time dateTime={pin.created_at}>{formatTime(pin.created_at)}</time>
+              <span className="text-zinc-300 dark:text-zinc-600">·</span>
+              <PinViews views={pin.views} />
             </div>
           </div>
 
@@ -226,6 +157,11 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
               <BookmarkIcon filled={saved} className="h-4 w-4" />
               {saved ? "Saved" : "Save"}
             </button>
+            {saveError && (
+              <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
+                {saveError}
+              </p>
+            )}
             <button
               type="button"
               onClick={handleShare}
@@ -322,6 +258,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
           }
           onClose={() => setEditOpen(false)}
           onUpdated={handleUpdated}
+          onDeleted={() => router.push("/")}
         />
       )}
 

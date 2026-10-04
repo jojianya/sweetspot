@@ -79,24 +79,10 @@ func (h *Handler) Stats(c *gin.Context) {
 	}
 
 	viewerID := middleware.GetUserID(c)
-	stats := Stats{}
-	if stats.Followers, err = h.repo.CountFollowers(c.Request.Context(), userID); err != nil {
-		response.Internal(c, "social: count followers", err, "user_id", userID)
+	stats, fail := collectStats(c.Request.Context(), h.repo, viewerID, userID)
+	if fail != nil {
+		response.Internal(c, fail.log, fail.err, fail.args...)
 		return
-	}
-	if stats.Following, err = h.repo.CountFollowing(c.Request.Context(), userID); err != nil {
-		response.Internal(c, "social: count following", err, "user_id", userID)
-		return
-	}
-	if stats.PinsCount, err = h.repo.CountPins(c.Request.Context(), userID); err != nil {
-		response.Internal(c, "social: count pins", err, "user_id", userID)
-		return
-	}
-	if viewerID != "" && viewerID != userID {
-		if stats.IsFollowing, err = h.repo.IsFollowing(c.Request.Context(), viewerID, userID); err != nil {
-			response.Internal(c, "social: is following", err, "user_id", viewerID, "target", userID)
-			return
-		}
 	}
 
 	response.OK(c, stats)

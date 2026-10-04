@@ -7,20 +7,30 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 )
 
 type Repository interface {
 	CategoryExists(ctx context.Context, id int) (bool, error)
 	CreatePin(ctx context.Context, pin NewPin) (Pin, error)
-	DeletePin(ctx context.Context, id, userID string) error
+	DeletePin(ctx context.Context, id, userID string, isModerator bool) error
 	ListCategories(ctx context.Context) ([]Category, error)
 	GetPin(ctx context.Context, id string) (PinDetail, error)
 	ListPins(ctx context.Context, bbox [4]float64, categoryID *int, limit int) ([]PinListEntry, error)
 	ListTrending(ctx context.Context, bbox [4]float64, limit int) ([]TrendingPin, error)
 	ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error)
 	SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error)
-	UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error)
-	RegisterView(ctx context.Context, id string) (int64, error)
+	// UpdatePin applies the patch and returns the pin plus its photo set after
+	// the change, so the handler can answer with the pin's current photos
+	// instead of leaving the client to refetch them. Authorization lives in
+	// the UPDATE predicate (owner or moderator, visible pins only), so there is
+	// no TOCTOU between an ownership read and the write.
+	UpdatePin(ctx context.Context, id, userID string, isModerator bool, patch UpdatePinPatch) (Pin, []PinPhoto, error)
+	// PinVisible reports whether the pin exists and is not soft-hidden. It
+	// delegates to the shared VisiblePinExists helper so the "hidden pins do
+	// not exist" rule stays in one place.
+	PinVisible(ctx context.Context, id string) (bool, error)
+	RegisterView(ctx context.Context, id, viewerID string) (int64, error)
 	UserExists(ctx context.Context, id string) (bool, error)
 }
 
@@ -101,8 +111,13 @@ func (r *postgresRepository) CreatePin(ctx context.Context, pin NewPin) (Pin, er
 	return p, nil
 }
 
-func (r *postgresRepository) DeletePin(ctx context.Context, id, userID string) error {
-	tag, err := r.pool.Exec(ctx, `UPDATE pins SET is_hidden = true WHERE id = $1 AND user_id = $2`, id, userID)
+func (r *postgresRepository) DeletePin(ctx context.Context, id, userID string, isModerator bool) error {
+	// Single mutating path for authorization: the owner-or-moderator check
+	// lives in the UPDATE predicate, not in a handler-side load-then-decide,
+	// so there is no TOCTOU between an ownership read and the hide. Only
+	// visible pins are matched, so deleting a missing or already-hidden pin
+	// reports NotFound (consistent with the hidden-pin 404 convention).
+	tag, err := r.pool.Exec(ctx, `UPDATE pins SET is_hidden = true WHERE id = $1 AND is_hidden = false AND (user_id = $2 OR $3)`, id, userID, isModerator)
 	if err != nil {
 		return err
 	}
@@ -110,14 +125,19 @@ func (r *postgresRepository) DeletePin(ctx context.Context, id, userID string) e
 		return nil
 	}
 
-	var exists bool
-	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pins WHERE id = $1)`, id).Scan(&exists); err != nil {
-		return err
+	// Classify the miss for a truthful status: missing/already-hidden → 404,
+	// visible-but-not-owned (and not a moderator) → 403. This SELECT only
+	// decides the error code; the hide itself already happened atomically.
+	var ownerID string
+	var hidden bool
+	err = r.pool.QueryRow(ctx, `SELECT user_id::text, is_hidden FROM pins WHERE id = $1`, id).Scan(&ownerID, &hidden)
+	if err != nil {
+		return ErrNotFound
 	}
-	if exists {
-		return ErrForbidden
+	if hidden {
+		return ErrNotFound
 	}
-	return ErrNotFound
+	return ErrForbidden
 }
 
 func (r *postgresRepository) ListCategories(ctx context.Context) ([]Category, error) {
@@ -162,44 +182,54 @@ func (r *postgresRepository) GetPin(ctx context.Context, id string) (PinDetail, 
 		return PinDetail{}, err
 	}
 
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, pin_id, photo_url, thumbnail_url, position, created_at
-		FROM pin_photos
-		WHERE pin_id = $1
-		ORDER BY position
-	`, id)
+	d.Photos, err = scanPinPhotos(ctx, r.pool, id)
 	if err != nil {
-		return PinDetail{}, err
-	}
-	defer rows.Close()
-
-	d.Photos = []PinPhoto{}
-	for rows.Next() {
-		var ph PinPhoto
-		if err := rows.Scan(&ph.ID, &ph.PinID, &ph.PhotoURL, &ph.ThumbnailURL, &ph.Position, &ph.CreatedAt); err != nil {
-			return PinDetail{}, err
-		}
-		d.Photos = append(d.Photos, ph)
-	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
 		return PinDetail{}, err
 	}
 
 	return d, nil
 }
 
+// rowQuerier is the shared subset of *pgxpool.Pool and pgx.Tx that reads a pin's
+// photo rows.
+type rowQuerier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+// scanPinPhotos reads a pin's photos in position order.
+func scanPinPhotos(ctx context.Context, q rowQuerier, pinID string) ([]PinPhoto, error) {
+	rows, err := q.Query(ctx, `
+		SELECT id, pin_id, photo_url, thumbnail_url, position, created_at
+		FROM pin_photos
+		WHERE pin_id = $1
+		ORDER BY position
+	`, pinID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	photos := []PinPhoto{}
+	for rows.Next() {
+		var ph PinPhoto
+		if err := rows.Scan(&ph.ID, &ph.PinID, &ph.PhotoURL, &ph.ThumbnailURL, &ph.Position, &ph.CreatedAt); err != nil {
+			return nil, err
+		}
+		photos = append(photos, ph)
+	}
+	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+		return nil, err
+	}
+	return photos, nil
+}
+
 // pinListEntrySelect is the shared SELECT shape for list/search results: the
 // pin columns plus the first photo's cover URL and the author's username.
 const pinListEntrySelect = `
 	SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
-	       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username
+	       ` + database.CoverPhotoCoalesce + `, u.username
 	FROM pins p
-	LEFT JOIN LATERAL (
-		SELECT photo_url, thumbnail_url FROM pin_photos
-		WHERE pin_id = p.id
-		ORDER BY position
-		LIMIT 1
-	) pp ON true
+	` + database.CoverPhotoLateral + `
 	LEFT JOIN users u ON u.id = p.user_id
 	WHERE p.is_hidden = false`
 
@@ -328,34 +358,43 @@ func (r *postgresRepository) ListByUser(ctx context.Context, userID string, limi
 }
 
 // UpdatePin applies a patch: caption (nil keeps, empty clears), category_id
-// (nil keeps), and optionally a full photo-set replacement.
-func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error) {
+// (nil keeps), and optionally a full photo-set replacement. It also returns the
+// pin's photo set as it stands after the update, read inside the same
+// transaction, so the response can carry the current photos.
+//
+// Ownership and visibility are decided by the UPDATE predicate rather than by a
+// handler-side load-then-decide, matching DeletePin: a missing or already-hidden
+// pin reports NotFound (the hidden-pin 404 convention) and a visible pin the
+// caller does not own reports Forbidden.
+func (r *postgresRepository) UpdatePin(ctx context.Context, id, userID string, isModerator bool, patch UpdatePinPatch) (Pin, []PinPhoto, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return Pin{}, err
+		return Pin{}, nil, err
 	}
 	defer tx.Rollback(ctx)
 
 	var p Pin
 	if err := tx.QueryRow(ctx, `
 		UPDATE pins
-		SET caption    = COALESCE($2, caption),
-		    category_id = COALESCE($3, category_id),
+		SET caption    = COALESCE($4, caption),
+		    category_id = COALESCE($5, category_id),
 		    updated_at  = now()
 		WHERE id = $1
+		  AND is_hidden = false
+		  AND (user_id = $2 OR $3)
 		RETURNING id, user_id, ST_AsText(location) AS location, geohash, caption, category_id, is_hidden, views, created_at
-	`, id, patch.Caption, patch.CategoryID).Scan(
+	`, id, userID, isModerator, patch.Caption, patch.CategoryID).Scan(
 		&p.ID, &p.UserID, &p.Location, &p.Geohash, &p.Caption, &p.CategoryID, &p.IsHidden, &p.Views, &p.CreatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return Pin{}, ErrNotFound
+			return Pin{}, nil, classifyPinMiss(ctx, tx, id)
 		}
-		return Pin{}, err
+		return Pin{}, nil, err
 	}
 
 	if patch.Photos != nil {
 		if _, err := tx.Exec(ctx, `DELETE FROM pin_photos WHERE pin_id = $1`, id); err != nil {
-			return Pin{}, err
+			return Pin{}, nil, err
 		}
 		for i, ph := range patch.Photos {
 			position := int16(i)
@@ -363,15 +402,38 @@ func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch Upd
 				INSERT INTO pin_photos (pin_id, photo_url, thumbnail_url, position)
 				VALUES ($1, $2, $3, $4)
 			`, id, ph.PhotoURL, ph.ThumbnailURL, position); err != nil {
-				return Pin{}, err
+				return Pin{}, nil, err
 			}
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return Pin{}, err
+	photos, err := scanPinPhotos(ctx, tx, id)
+	if err != nil {
+		return Pin{}, nil, err
 	}
-	return p, nil
+
+	if err := tx.Commit(ctx); err != nil {
+		return Pin{}, nil, err
+	}
+	return p, photos, nil
+}
+
+// PinVisible reports whether the pin exists and is not soft-hidden, delegating
+// to the shared VisiblePinExists helper.
+func (r *postgresRepository) PinVisible(ctx context.Context, id string) (bool, error) {
+	return VisiblePinExists(ctx, r.pool, id)
+}
+
+// classifyPinMiss turns a zero-row UPDATE into a truthful error. It runs only
+// after the predicate found nothing, and only decides the status code: a pin
+// that does not exist or is already hidden is NotFound, a pin that exists and
+// is visible but was not matched belongs to someone else.
+func classifyPinMiss(ctx context.Context, tx pgx.Tx, id string) error {
+	var hidden bool
+	if err := tx.QueryRow(ctx, `SELECT is_hidden FROM pins WHERE id = $1`, id).Scan(&hidden); err != nil || hidden {
+		return ErrNotFound
+	}
+	return ErrForbidden
 }
 
 // scanPinListEntries maps the shared list/search result rows into entries.
@@ -400,21 +462,53 @@ func (r *postgresRepository) UserExists(ctx context.Context, id string) (bool, e
 	return exists, nil
 }
 
-// RegisterView increments a pin's view counter and returns the new count.
-// Hidden (soft-deleted) pins are not counted, mirroring GetPin's behavior of
-// treating them as missing.
-func (r *postgresRepository) RegisterView(ctx context.Context, id string) (int64, error) {
-	var views int64
-	err := r.pool.QueryRow(ctx, `
-		UPDATE pins SET views = views + 1
-		WHERE id = $1 AND is_hidden = false
-		RETURNING views
-	`, id).Scan(&views)
+// RegisterView counts a unique per-account view and returns the current
+// count. Anonymous visitors and the pin's owner read the count without
+// changing it. Hidden (soft-deleted) pins read as missing, mirroring
+// GetPin. The insert and the conditional increment run in one transaction;
+// the pin_views primary key serializes concurrent first opens so the count
+// moves exactly once per account. Only `views` changes, so the
+// pins_updated_at trigger keeps ignoring it.
+func (r *postgresRepository) RegisterView(ctx context.Context, id, viewerID string) (int64, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	var owner string
+	var count int64
+	err = tx.QueryRow(ctx, `
+		SELECT user_id::text, views FROM pins WHERE id = $1 AND is_hidden = false
+	`, id).Scan(&owner, &count)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, ErrNotFound
 	}
 	if err != nil {
 		return 0, err
 	}
-	return views, nil
+	if viewerID == "" || viewerID == owner {
+		if err := tx.Commit(ctx); err != nil {
+			return 0, err
+		}
+		return count, nil
+	}
+
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO pin_views (pin_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING
+	`, id, viewerID)
+	if err != nil {
+		return 0, err
+	}
+	if tag.RowsAffected() == 1 {
+		if err := tx.QueryRow(ctx, `
+			UPDATE pins SET views = views + 1 WHERE id = $1 RETURNING views
+		`, id).Scan(&count); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return count, nil
 }

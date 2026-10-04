@@ -15,12 +15,14 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/favorites"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/realtime"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
+	"github.com/redis/go-redis/v9"
 )
 
 // getSessionCookie extracts the session_token cookie from a response, or nil
@@ -129,6 +131,17 @@ func (m *mockUserService) GetByID(ctx context.Context, id string) (users.User, e
 	return u, nil
 }
 
+// CheckSession mirrors GetByID for the auth middleware: mock users carry no
+// revocation floor (zero ValidAfter, so any issued token passes) and their
+// stored role. Unknown users fail closed, like a deleted account.
+func (m *mockUserService) CheckSession(_ context.Context, id string) (middleware.SessionState, error) {
+	u, ok := m.users[id]
+	if !ok {
+		return middleware.SessionState{}, users.ErrNotFound
+	}
+	return middleware.SessionState{Role: u.Role}, nil
+}
+
 func (m *mockUserService) UpdateRole(ctx context.Context, actorID, userID, role string) (users.User, error) {
 	if actorID == userID {
 		return users.User{}, users.ErrCannotChangeOwnRole
@@ -153,7 +166,7 @@ func (m *mockUserService) UpdateRole(ctx context.Context, actorID, userID, role 
 	return u, nil
 }
 
-func (m *mockUserService) SearchUsers(_ context.Context, query string, _ int) ([]users.User, error) {
+func (m *mockUserService) SearchUsers(_ context.Context, query string, limit, offset int) ([]users.User, int, error) {
 	q := strings.ToLower(query)
 	out := []users.User{}
 	for _, u := range m.users {
@@ -161,7 +174,15 @@ func (m *mockUserService) SearchUsers(_ context.Context, query string, _ int) ([
 			out = append(out, u)
 		}
 	}
-	return out, nil
+	total := len(out)
+	if offset >= len(out) {
+		return []users.User{}, total, nil
+	}
+	end := offset + limit
+	if end > len(out) {
+		end = len(out)
+	}
+	return out[offset:end], total, nil
 }
 
 func (m *mockUserService) ListUsers(_ context.Context, limit, offset int) ([]users.User, int, error) {
@@ -238,8 +259,8 @@ func (m *mockReportRepo) CreateReport(ctx context.Context, pinID, reporterID, re
 	return m.created, m.createErr
 }
 
-func (m *mockReportRepo) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (reports.Report, error) {
-	return m.reviewed, m.reviewErr
+func (m *mockReportRepo) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (reports.Report, *string, error) {
+	return m.reviewed, nil, m.reviewErr
 }
 
 func (m *mockReportRepo) ListReports(ctx context.Context, status *string, limit, offset int) ([]reports.ReportListEntry, error) {
@@ -275,8 +296,19 @@ func (m *mockFavoriteRepo) PinExists(context.Context, string) (bool, error) {
 	return m.exists, m.existsErr
 }
 
-func (m *mockFavoriteRepo) List(context.Context, string) ([]favorites.Entry, error) {
-	return m.entries, m.listErr
+func (m *mockFavoriteRepo) List(_ context.Context, _ string, limit, offset int) ([]favorites.Entry, int, error) {
+	if m.listErr != nil {
+		return nil, 0, m.listErr
+	}
+	total := len(m.entries)
+	if offset >= len(m.entries) {
+		return []favorites.Entry{}, total, nil
+	}
+	end := offset + limit
+	if end > len(m.entries) {
+		end = len(m.entries)
+	}
+	return m.entries[offset:end], total, nil
 }
 
 func (m *mockFavoriteRepo) ListIDs(context.Context, string) ([]string, error) {
@@ -309,7 +341,7 @@ func setRole(svc *mockUserService, userID, role string) {
 	svc.users[userID] = u
 }
 
-func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo favorites.Repository, bl *cache.Blacklist, store *storage.Local) *gin.Engine {
+func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo favorites.Repository, bl *cache.Blacklist, store *storage.Local, sameSite auth.SameSiteMode) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.Recover(nil), middleware.SecurityHeaders())
@@ -318,13 +350,14 @@ func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo 
 	jsonRoutes.Use(middleware.BodyLimit(1 << 20))
 
 	authSvc := auth.NewService(usersSvc, testSecret)
-	authH := auth.NewHandler(authSvc, bl, middleware.New(1000, time.Minute))
-	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
+	authH := auth.NewHandler(authSvc, bl, middleware.New(1000, time.Minute), sameSite, nil)
+	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: bl, CookieSameSite: sameSite})
 
 	userH := users.NewHandler(usersSvc, store)
 	users.RegisterRoutes(jsonRoutes, userH, users.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
 
-	reportH := reports.NewHandler(reports.NewService(reportRepo))
+	events := realtime.NewBrokerWithClient(redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}))
+	reportH := reports.NewHandler(reports.NewService(reportRepo), events)
 	reports.RegisterRoutes(jsonRoutes, reportH, reports.RouteOptions{
 		JWTSecret:   testSecret,
 		Blacklist:   bl,
@@ -364,126 +397,133 @@ func decodeBody(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
 }
 
 func TestAuthEndpoints(t *testing.T) {
-	usersSvc := &mockUserService{
-		byEmail:    map[string]users.User{},
-		byUsername: map[string]users.User{},
-		users:      map[string]users.User{},
+	for _, mode := range []auth.SameSiteMode{auth.SameSiteStrict, auth.SameSiteLax} {
+		mode := mode
+		t.Run(string(mode), func(t *testing.T) {
+			usersSvc := &mockUserService{
+				byEmail:    map[string]users.User{},
+				byUsername: map[string]users.User{},
+				users:      map[string]users.User{},
+			}
+			r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"), mode)
+
+			t.Run("RegisterSuccess", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"new@example.com","password":"password123","username":"newbie"}`, nil)
+				if w.Code != http.StatusCreated {
+					t.Fatalf("expected 201, got %d (%s)", w.Code, w.Body.String())
+				}
+				body := decodeBody(t, w)
+				if _, ok := body["user"]; !ok {
+					t.Fatalf("expected user in response, got %v", body)
+				}
+				cookie := getSessionCookie(w)
+				if cookie == nil {
+					t.Fatal("expected session_token cookie in response")
+				}
+				if cookie.Value == "" {
+					t.Fatal("session cookie is empty")
+				}
+				expectedSameSite := http.SameSiteStrictMode
+				if mode == auth.SameSiteLax {
+					expectedSameSite = http.SameSiteLaxMode
+				}
+				if !cookie.HttpOnly || cookie.SameSite != expectedSameSite {
+					t.Fatalf("session cookie flags are not hardened: %+v (expected SameSite=%d)", cookie, expectedSameSite)
+				}
+				if cookie.Secure {
+					t.Fatalf("Secure flag should be false for HTTP requests, got %v", cookie.Secure)
+				}
+				if _, ok := body["token"]; ok {
+					t.Fatal("token must not be returned in the response body")
+				}
+			})
+
+			t.Run("RegisterDuplicateEmail", func(t *testing.T) {
+				usersSvc.byEmail["taken@example.com"] = users.User{ID: testUUID1, Email: "taken@example.com"}
+				w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"taken@example.com","password":"password123","username":"someone"}`, nil)
+				if w.Code != http.StatusConflict {
+					t.Fatalf("expected 409, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+
+			t.Run("RegisterInvalidBody", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"not-an-email","password":"123","username":"x"}`, nil)
+				if w.Code != http.StatusBadRequest {
+					t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+
+			t.Run("LoginSuccess", func(t *testing.T) {
+				hash, _ := passwordHash("password123")
+				usersSvc.byEmail["a@example.com"] = users.User{ID: testUUID1, Email: "a@example.com", PasswordHash: hash, Role: users.RoleUser}
+				w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com","password":"password123"}`, nil)
+				if w.Code != http.StatusOK {
+					t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+				}
+				cookie := getSessionCookie(w)
+				if cookie == nil || cookie.Value == "" {
+					t.Fatalf("expected session_token cookie, got %v", cookie)
+				}
+				body := decodeBody(t, w)
+				if _, ok := body["token"]; ok {
+					t.Fatal("token must not be returned in the response body")
+				}
+			})
+
+			t.Run("LoginByUsername", func(t *testing.T) {
+				hash, _ := passwordHash("password123")
+				usersSvc.byUsername["alice"] = users.User{ID: testUUID1, Email: "a@example.com", Username: "alice", PasswordHash: hash, Role: users.RoleUser}
+				w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"alice","password":"password123"}`, nil)
+				if w.Code != http.StatusOK {
+					t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+				}
+				cookie := getSessionCookie(w)
+				if cookie == nil || cookie.Value == "" {
+					t.Fatalf("expected session_token cookie, got %v", cookie)
+				}
+			})
+
+			t.Run("LoginWrongPassword", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com","password":"wrongpass"}`, nil)
+				if w.Code != http.StatusUnauthorized {
+					t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+
+			t.Run("LoginMalformedBody", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com"}`, nil)
+				if w.Code != http.StatusBadRequest {
+					t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+
+			t.Run("MeAuthenticated", func(t *testing.T) {
+				tok := newToken(t, testUUID1)
+				w := doJSON(t, r, http.MethodGet, "/me", "", map[string]string{"Authorization": "Bearer " + tok})
+				if w.Code != http.StatusOK {
+					t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+				}
+				body := decodeBody(t, w)
+				if body["user_id"] != testUUID1 {
+					t.Fatalf("expected user_id %s, got %v", testUUID1, body["user_id"])
+				}
+			})
+
+			t.Run("MeUnauthenticated", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodGet, "/me", "", nil)
+				if w.Code != http.StatusUnauthorized {
+					t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+
+			t.Run("MeInvalidToken", func(t *testing.T) {
+				w := doJSON(t, r, http.MethodGet, "/me", "", map[string]string{"Authorization": "Bearer garbage.token.here"})
+				if w.Code != http.StatusUnauthorized {
+					t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
+				}
+			})
+		})
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
-
-	t.Run("RegisterSuccess", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"new@example.com","password":"password123","username":"newbie"}`, nil)
-		if w.Code != http.StatusCreated {
-			t.Fatalf("expected 201, got %d (%s)", w.Code, w.Body.String())
-		}
-		body := decodeBody(t, w)
-		if _, ok := body["user"]; !ok {
-			t.Fatalf("expected user in response, got %v", body)
-		}
-		cookie := getSessionCookie(w)
-		if cookie == nil {
-			t.Fatal("expected session_token cookie in response")
-		}
-		if cookie.Value == "" {
-			t.Fatal("session cookie is empty")
-		}
-		if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
-			t.Fatalf("session cookie flags are not hardened: %+v", cookie)
-		}
-		// Secure must be true for HTTPS requests and false for HTTP.
-		// The test server uses HTTP, so Secure should be false.
-		if cookie.Secure {
-			t.Fatalf("Secure flag should be false for HTTP requests, got %v", cookie.Secure)
-		}
-		if _, ok := body["token"]; ok {
-			t.Fatal("token must not be returned in the response body")
-		}
-	})
-
-	t.Run("RegisterDuplicateEmail", func(t *testing.T) {
-		usersSvc.byEmail["taken@example.com"] = users.User{ID: testUUID1, Email: "taken@example.com"}
-		w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"taken@example.com","password":"password123","username":"someone"}`, nil)
-		if w.Code != http.StatusConflict {
-			t.Fatalf("expected 409, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("RegisterInvalidBody", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodPost, "/auth/register", `{"email":"not-an-email","password":"123","username":"x"}`, nil)
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("LoginSuccess", func(t *testing.T) {
-		hash, _ := passwordHash("password123")
-		usersSvc.byEmail["a@example.com"] = users.User{ID: testUUID1, Email: "a@example.com", PasswordHash: hash, Role: users.RoleUser}
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com","password":"password123"}`, nil)
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
-		}
-		cookie := getSessionCookie(w)
-		if cookie == nil || cookie.Value == "" {
-			t.Fatalf("expected session_token cookie, got %v", cookie)
-		}
-		body := decodeBody(t, w)
-		if _, ok := body["token"]; ok {
-			t.Fatal("token must not be returned in the response body")
-		}
-	})
-
-	t.Run("LoginByUsername", func(t *testing.T) {
-		hash, _ := passwordHash("password123")
-		usersSvc.byUsername["alice"] = users.User{ID: testUUID1, Email: "a@example.com", Username: "alice", PasswordHash: hash, Role: users.RoleUser}
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"alice","password":"password123"}`, nil)
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
-		}
-		cookie := getSessionCookie(w)
-		if cookie == nil || cookie.Value == "" {
-			t.Fatalf("expected session_token cookie, got %v", cookie)
-		}
-	})
-
-	t.Run("LoginWrongPassword", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com","password":"wrongpass"}`, nil)
-		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("LoginMalformedBody", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"a@example.com"}`, nil)
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("MeAuthenticated", func(t *testing.T) {
-		tok := newToken(t, testUUID1)
-		w := doJSON(t, r, http.MethodGet, "/me", "", map[string]string{"Authorization": "Bearer " + tok})
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
-		}
-		body := decodeBody(t, w)
-		if body["user_id"] != testUUID1 {
-			t.Fatalf("expected user_id %s, got %v", testUUID1, body["user_id"])
-		}
-	})
-
-	t.Run("MeUnauthenticated", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodGet, "/me", "", nil)
-		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
-
-	t.Run("MeInvalidToken", func(t *testing.T) {
-		w := doJSON(t, r, http.MethodGet, "/me", "", map[string]string{"Authorization": "Bearer garbage.token.here"})
-		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
-		}
-	})
 }
 
 func TestUserEndpoints(t *testing.T) {
@@ -499,7 +539,7 @@ func TestUserEndpoints(t *testing.T) {
 			},
 		},
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
+	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"), auth.SameSiteStrict)
 
 	t.Run("GetUserByID", func(t *testing.T) {
 		w := doJSON(t, r, http.MethodGet, "/users/"+testUUID2, "", nil)
@@ -604,7 +644,7 @@ func TestReportEndpoints(t *testing.T) {
 		list:     []reports.ReportListEntry{{PinCaption: strPtr("spam pin")}},
 		reviewed: reports.Report{Reason: "spam"},
 	}
-	r := setupRouter(usersSvc, reportRepo, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
+	r := setupRouter(usersSvc, reportRepo, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"), auth.SameSiteStrict)
 
 	t.Run("CreateReport", func(t *testing.T) {
 		tok := newToken(t, testUUID2)
@@ -704,7 +744,7 @@ func TestFavoriteEndpoints(t *testing.T) {
 		},
 	}
 	favRepo := &mockFavoriteRepo{exists: true}
-	r := setupRouter(usersSvc, &mockReportRepo{}, favRepo, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
+	r := setupRouter(usersSvc, &mockReportRepo{}, favRepo, nil, storage.NewLocal(t.TempDir(), "http://test.local"), auth.SameSiteStrict)
 
 	t.Run("SaveFavorite", func(t *testing.T) {
 		tok := newToken(t, testUUID1)
@@ -830,7 +870,7 @@ func TestSecurityHeadersPresent(t *testing.T) {
 		byEmail:    map[string]users.User{},
 		byUsername: map[string]users.User{},
 	}
-	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"))
+	r := setupRouter(usersSvc, &mockReportRepo{}, &mockFavoriteRepo{}, nil, storage.NewLocal(t.TempDir(), "http://test.local"), auth.SameSiteStrict)
 
 	w := doJSON(t, r, http.MethodGet, "/me", "", nil)
 	for _, h := range []string{"X-Content-Type-Options", "X-Frame-Options", "Content-Security-Policy", "Referrer-Policy", "Strict-Transport-Security"} {
@@ -867,7 +907,84 @@ func TestSpoofedHeaderCannotBypassRateLimit(t *testing.T) {
 	}
 }
 
-func TestLoginLockoutAfterFailures(t *testing.T) {
+func TestTrustedProxyClientIPIsHonored(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	if err := r.SetTrustedProxies([]string{"10.0.0.1"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+
+	lim := middleware.New(1, time.Minute)
+	r.POST("/limited", lim.Middleware(), func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ip": c.ClientIP()})
+	})
+
+	post := func(remoteAddr, xff string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/limited", strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = remoteAddr
+		if xff != "" {
+			req.Header.Set("X-Forwarded-For", xff)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	// Same proxy peer, distinct forwarded clients: separate limiter buckets.
+	if w := post("10.0.0.1:1111", "203.0.113.9"); w.Code != http.StatusOK {
+		t.Fatalf("first client: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w := post("10.0.0.1:2222", "198.51.100.7"); w.Code != http.StatusOK {
+		t.Fatalf("second client behind same proxy: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	// First client again: its bucket is spent.
+	if w := post("10.0.0.1:3333", "203.0.113.9"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("repeat client: expected 429, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestUntrustedPeerIgnoresForwardedForValue(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	_ = r.SetTrustedProxies(nil)
+	r.GET("/ip", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ip": c.ClientIP()})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ip", nil)
+	req.RemoteAddr = "192.0.2.1:1234"
+	req.Header.Set("X-Forwarded-For", "203.0.113.9")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ip"] != "192.0.2.1" {
+		t.Fatalf("untrusted peer: ClientIP=%q, want peer 192.0.2.1 (XFF must be ignored)", body["ip"])
+	}
+}
+
+// doLogin posts a login attempt as if it came from clientIP. Trusted proxies
+// are disabled on the test routers, so RemoteAddr is what c.ClientIP() reads.
+func doLogin(t *testing.T, r *gin.Engine, body, clientIP string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = clientIP + ":54321"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+// loginLockoutRouter wires a login route with the given failure budget and a
+// single known account, and returns the limiter so a test can inspect it.
+func loginLockoutRouter(t *testing.T, budget int) (*gin.Engine, *middleware.Limiter) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	_ = r.SetTrustedProxies(nil)
@@ -877,31 +994,152 @@ func TestLoginLockoutAfterFailures(t *testing.T) {
 	usersSvc := &mockUserService{
 		byEmail: map[string]users.User{"lock@example.com": {ID: testUUID1, Email: "lock@example.com", PasswordHash: hash, Role: users.RoleUser}},
 	}
-	authSvc := auth.NewService(usersSvc, testSecret)
-	emailLim := middleware.New(5, time.Minute)
-	authH := auth.NewHandler(authSvc, nil, emailLim)
-	auth.RegisterRoutes(r.Group(""), authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
+	lim := middleware.New(budget, time.Minute)
+	authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, lim, auth.SameSiteStrict, nil)
+	// Only the login route: the per-IP and global limiters registered by
+	// RegisterRoutes would otherwise mask the per-identifier budget under test.
+	r.POST("/auth/login", authH.Login)
+	return r, lim
+}
+
+func TestLoginLockoutAfterFailures(t *testing.T) {
+	r, _ := loginLockoutRouter(t, 5)
 
 	for i := 0; i < 5; i++ {
-		w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"wrong"}`, nil)
+		w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("attempt %d: expected 401, got %d (%s)", i+1, w.Code, w.Body.String())
 		}
 	}
 
-	w := doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"wrong"}`, nil)
+	w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 once locked, got %d (%s)", w.Code, w.Body.String())
 	}
 
-	w = doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"password123"}`, nil)
+	w = doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "192.0.2.1")
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 for correct password while locked, got %d (%s)", w.Code, w.Body.String())
 	}
+}
 
-	emailLim.Reset("lock@example.com")
-	w = doJSON(t, r, http.MethodPost, "/auth/login", `{"identifier":"lock@example.com","password":"password123"}`, nil)
+// The point of keying on IP+identifier: failures spent from one address must
+// not lock the real owner out when they log in from another.
+func TestLoginLockoutIsScopedToTheFailingIP(t *testing.T) {
+	r, _ := loginLockoutRouter(t, 5)
+
+	for i := 0; i < 5; i++ {
+		if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1"); w.Code != http.StatusUnauthorized {
+			t.Fatalf("attacker attempt %d: expected 401, got %d", i+1, w.Code)
+		}
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected the attacking IP to be locked, got %d", w.Code)
+	}
+
+	// The owner's own address is unaffected, and the correct password works.
+	w := doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "198.51.100.7")
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 after Reset, got %d (%s)", w.Code, w.Body.String())
+		t.Fatalf("victim locked out from another IP: %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+// One IP exhausting the budget on one identifier must not lock a second
+// identifier from that same IP.
+func TestLoginLockoutDoesNotBleedAcrossIdentifiers(t *testing.T) {
+	r, _ := loginLockoutRouter(t, 5)
+
+	for i := 0; i < 6; i++ {
+		doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "192.0.2.1"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected the locked identifier to stay locked, got %d", w.Code)
+	}
+
+	w := doLogin(t, r, `{"identifier":"other@example.com","password":"whatever"}`, "192.0.2.1")
+	if w.Code == http.StatusTooManyRequests {
+		t.Fatalf("a different identifier was locked out too: %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+// A successful login clears only its own IP+identifier counter, so it cannot be
+// used to release a lockout an attacker earned from their own address.
+func TestLoginSuccessClearsOnlyItsOwnCounter(t *testing.T) {
+	r, lim := loginLockoutRouter(t, 5)
+
+	for i := 0; i < 6; i++ {
+		doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected attacker locked, got %d", w.Code)
+	}
+
+	// A good password from the owner's address succeeds...
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "198.51.100.7"); w.Code != http.StatusOK {
+		t.Fatalf("owner login: %d (%s)", w.Code, w.Body.String())
+	}
+	// ...and that success must not have released the attacker's lockout.
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("owner's success released the attacker's lockout: %d (%s)", w.Code, w.Body.String())
+	}
+
+	if !lim.Locked("192.0.2.1|lock@example.com") {
+		t.Error("expected the attacker key to still be locked")
+	}
+	if lim.Locked("198.51.100.7|lock@example.com") {
+		t.Error("expected the owner key to have been cleared")
+	}
+}
+
+// An identifier nobody has must be indistinguishable from one that exists:
+// same status, same body. (Their timing is equalized inside service.Login.)
+func TestLoginDoesNotRevealAccountExistence(t *testing.T) {
+	r, _ := loginLockoutRouter(t, 100)
+
+	existing := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
+	absent := doLogin(t, r, `{"identifier":"nobody@example.com","password":"wrong"}`, "192.0.2.1")
+
+	if existing.Code != http.StatusUnauthorized || absent.Code != http.StatusUnauthorized {
+		t.Fatalf("status codes differ: existing=%d absent=%d", existing.Code, absent.Code)
+	}
+	if existing.Body.String() != absent.Body.String() {
+		t.Fatalf("bodies differ:\n existing=%s\n absent=%s", existing.Body.String(), absent.Body.String())
+	}
+}
+
+// A locked-out attempt must also look the same whether or not the account
+// exists: the 429 is emitted before any lookup.
+func TestLoginLockoutDoesNotRevealAccountExistence(t *testing.T) {
+	r, _ := loginLockoutRouter(t, 2)
+
+	for i := 0; i < 3; i++ {
+		doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1")
+		doLogin(t, r, `{"identifier":"ghost@example.com","password":"wrong"}`, "192.0.2.1")
+	}
+
+	existing := doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "192.0.2.1")
+	absent := doLogin(t, r, `{"identifier":"ghost@example.com","password":"password123"}`, "192.0.2.1")
+
+	if existing.Code != http.StatusTooManyRequests || absent.Code != http.StatusTooManyRequests {
+		t.Fatalf("status codes differ: existing=%d absent=%d", existing.Code, absent.Code)
+	}
+	if existing.Body.String() != absent.Body.String() {
+		t.Fatalf("bodies differ:\n existing=%s\n absent=%s", existing.Body.String(), absent.Body.String())
+	}
+}
+
+// The identifier is case-folded because the account lookup is: otherwise an
+// attacker mints a fresh counter per variant and never reaches the threshold.
+func TestLoginLockoutFoldsIdentifierCase(t *testing.T) {
+	r, lim := loginLockoutRouter(t, 3)
+
+	for i := 0; i < 4; i++ {
+		doLogin(t, r, `{"identifier":"LOCK@example.com","password":"wrong"}`, "192.0.2.1")
+	}
+	if !lim.Locked("192.0.2.1|lock@example.com") {
+		t.Fatal("expected the case-folded key to hold the counter")
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.1"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected a case variant to be locked, got %d (%s)", w.Code, w.Body.String())
 	}
 }

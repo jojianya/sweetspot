@@ -2,7 +2,6 @@ package reports
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
@@ -17,10 +16,11 @@ const (
 
 type Handler struct {
 	service Service
+	events  Publisher
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, events Publisher) *Handler {
+	return &Handler{service: service, events: events}
 }
 
 func (h *Handler) Create(c *gin.Context) {
@@ -72,14 +72,9 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	offset := 0
-	if oStr := c.Query("offset"); oStr != "" {
-		o, err := strconv.Atoi(oStr)
-		if err != nil || o < 0 {
-			response.BadRequest(c, "offset must be a non-negative integer")
-			return
-		}
-		offset = o
+	offset, ok := httpx.ParseOffset(c)
+	if !ok {
+		return
 	}
 
 	reports, err := h.service.ListReports(c.Request.Context(), status, limit, offset)
@@ -98,7 +93,7 @@ func (h *Handler) Review(c *gin.Context) {
 		return
 	}
 
-	report, err := h.service.ReviewReport(c.Request.Context(), c.Param("id"), req.Action, middleware.GetUserID(c))
+	report, pinLocation, err := h.service.ReviewReport(c.Request.Context(), c.Param("id"), req.Action, middleware.GetUserID(c))
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrReportNotFound):
@@ -109,6 +104,13 @@ func (h *Handler) Review(c *gin.Context) {
 			response.Internal(c, "report: review", err)
 		}
 		return
+	}
+
+	// If report was approved, publish pin_removed event for realtime updates.
+	// Best-effort: the review already committed; a publish failure is logged
+	// by the broker and never fails this request.
+	if req.Action == "approve" && h.events != nil && pinLocation != nil {
+		h.events.PublishRemoval(c.Request.Context(), report.PinID.String(), *pinLocation)
 	}
 
 	response.OK(c, gin.H{"report": report})

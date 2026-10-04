@@ -26,3 +26,8 @@ export function relativeTime(iso: string): string {
   if (weeks < 5) return `${weeks}w ago`;
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
+/** "1 view" / "N views" with thousands grouping for large counts. */
+export function formatViews(views: number): string {
+  const grouped = views.toLocaleString("en-US");
+  return views === 1 ? `${grouped} view` : `${grouped} views`;
+}

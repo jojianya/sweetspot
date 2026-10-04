@@ -9,20 +9,19 @@
                                 └──────────┬───────────┘
                                            │
                         ┌───────────────────┼───────────────────┐
-                        │                   │                   │
-                  REST API (HTTPS)   WebSocket (real-time)  Media (WebRTC)
-                        │              [Phase 5, planned]  [Phase 8, planned]
-                        ▼                   ▼                   ▼
-             ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-             │   Go API Server  │  │  Go Realtime Hub  │  │  LiveKit SFU      │
-             │  (Gin)           │  │  [scaffolded,     │  │ [Phase 8,        │
-             │                  │  │   not yet built]  │  │  planned]        │
-             └────────┬─────────┘  └─────────┬─────────┘  └─────────┬────────┘
-                      │                      │                      │
-                      │              ┌───────┴────────┐             │
-                      │              │  Redis Pub/Sub  │◄────────────┘
-                      │              │ [Phase 5,       │  (stream events,
-                      │              │  planned]       │   viewer presence)
+                        │                   │
+                  REST API (HTTPS)   SSE (`/events`, via Next rewrite)
+                        │              [implemented]
+                        ▼                   ▼
+             ┌─────────────────┐  ┌──────────────────┐
+             │   Go API Server  │  │  Go API Server    │
+             │  (Gin)           │  │  realtime handler │
+             │                  │  │  (SSE, Redis bus) │
+             └────────┬─────────┘  └─────────┬─────────┘
+                      │                      │
+                      │              ┌───────┴────────┐
+                      │              │  Redis Pub/Sub  │
+                      │              │  (used)         │
                       │              └────────────────┘
                       │
          ┌────────────┼─────────────────┐
@@ -52,7 +51,6 @@
 - **Web:** Next.js 16 (App Router) + MapLibre GL JS + React 19 + TypeScript
 - **Mobile:** React Native + MapLibre Native SDK — **future consideration, not yet started**
 - Client talks to the Go backend via REST + Zod schema validation on API responses
-- WebSocket (real-time) and WebRTC (LiveKit) planned for Phases 5 and 8
 
 ### 2.2 Go API Server (REST)
 
@@ -69,33 +67,21 @@ Handles standard CRUD + business logic:
 
 Framework: **Gin** (not Chi — the original plan was revised)
 
-### 2.3 Go Realtime Hub (WebSocket layer) — **Phase 5, scaffolded, not yet implemented**
+### 2.3 Realtime — Server-Sent Events over Redis
 
-Separate logical service (can run as its own goroutine pool within the same binary initially, split out later if needed):
+Implemented as `GET /events` in the same Go binary. One global stream per process, no rooms:
 
-- Manages WebSocket connections
-- Groups clients into **geohash-based rooms** (only broadcast to viewers actually watching that map cell)
-- **Batches** broadcasts (e.g., every 500ms–1s) instead of pushing every event instantly
-- Publishes/subscribes via **Redis Pub/Sub** so multiple Go instances stay in sync
+- `Broker.PinCreated` publishes `pins.Event` JSON to Redis channel `goodspot:pins` (`broker.go:9,36-51`).
+- Each connection subscribes; `runStreamLoop` (`realtime/handler.go:198`) filters by bbox (`matches`, handler.go:237-250) and category.
+- 20 s `: heartbeat` comment keeps intermediaries alive (`handler.go:65`); capped by `MAX_SSE_CONNECTIONS` (`handler.go:78-95`); Caddy sets `flush_interval -1` for `/events`.
 
 Used for:
 
 - New pin notifications in a viewport
-- Live event pin updates
-- Chat/reactions during livestreams
-- Viewer count updates
 
-**Current status:** `internal/modules/realtime/` contains empty placeholder files (`package realtime` only). No WebSocket library is in `go.mod`. No `/ws` route is registered. Redis is currently used only as a JWT blacklist. The geohash encoding utility (`pkg/geohash/`) is implemented and ready for room assignment.
+Deferred designs: no WebSocket, no geohash-cell rooms, no batching, no outbox. The previously planned hub/rooms/ws shapes are obsolete.
 
-### 2.4 Livestreaming (WebRTC + SFU) — **Phase 8, scaffolded, not yet implemented**
-
-- **LiveKit** (Go-based, open source) — managed via LiveKit Cloud to start, self-hostable later
-- Go API server creates "rooms" via LiveKit's API, issues join tokens
-- Actual video routing handled entirely by LiveKit — your backend never touches raw video
-
-**Current status:** `internal/modules/streams/` contains empty placeholder files (`package streams` only). DB migration `0005_streams.sql` exists with the schema. No LiveKit SDK is in `go.mod`. No stream routes are registered.
-
-### 2.5 Database — PostgreSQL + PostGIS
+### 2.4 Database — PostgreSQL + PostGIS
 
 - Single source of truth: users, pins, pin photos, categories, streams, reports, (later) likes/comments
 - Pins support multiple photos via a separate `pin_photos` table (one row per photo, ordered, with `thumbnail_url` for map/list views) rather than a single `photo_url` column
@@ -103,7 +89,7 @@ Used for:
 - Scales via read replicas later if needed
 - Migrations: `0001` PostGIS extension, `0002` users, `0003` categories+pins+pin_photos, `0004` reports, `0005` streams (scaffold), `0006` pin_photos.thumbnail_url
 
-### 2.6 Storage — Local Filesystem (dev) / Cloudflare R2 (planned for production)
+### 2.5 Storage — Local Filesystem (dev) / Cloudflare R2 (planned for production)
 
 - **Currently:** Local filesystem storage (`internal/platform/storage/local.go`) — saves processed photos to `./uploads/`, served via `GET /uploads/*`
 - **Planned (Phase 6):** Cloudflare R2 — chosen over AWS S3 specifically for zero egress fees — GoodSpot247's usage pattern (many views per photo upload) is egress-heavy, so this avoids costs scaling with popularity
@@ -111,13 +97,13 @@ Used for:
 - Cloudflare CDN delivery planned for production
 - **R2 config env vars are documented but not yet wired** (`STORAGE_BACKEND`, `R2_*` in `.env.example` are aspirational)
 
-### 2.7 Redis
+### 2.6 Redis
 
 **Currently:** JWT blacklist only — logout revokes the token's `jti` in Redis for the token's remaining TTL
 
 **Planned:**
 
-- **Pub/Sub** — coordinates real-time broadcasts across multiple Go instances (Phase 5)
+- **Pub/Sub** — coordinates real-time broadcasts across multiple Go instances
 - Optional: cache hot queries (e.g., trending spots) later
 
 ---
@@ -133,20 +119,10 @@ Client → (must have valid JWT) → POST /pins (Go API) → validate → save p
                                        → save processed files to local filesystem
                                        → return pin + photos to client
 
-[Phase 5, planned] → publish event to Redis
-                         → Realtime Hub picks up
-                         → broadcasts to geohash room
+[done] → publish event to Redis
+                         → Broker subscribers pick up
+                         → filter (bbox/category) per connection
                          → connected viewers see it live
-```
-
-### B) User goes live at a location — **Phase 8, not yet implemented**
-
-```
-Client → POST /streams (Go API) → create LiveKit room → return join token
-Broadcaster → connects to LiveKit via WebRTC (video/audio)
-Viewers → GET /streams/:id → get token → connect to LiveKit → watch
-Chat/reactions → WebSocket → Realtime Hub → geohash/room-based fan-out
-Viewer join/leave webhooks → update viewer_count and streams.peak_viewer_count
 ```
 
 ### C) User browses the map (no login required)
@@ -154,9 +130,8 @@ Viewer join/leave webhooks → update viewer_count and streams.peak_viewer_count
 ```
 Client → GET /pins?bbox=...&category=... (Go API, public endpoint) → PostGIS bounding-box query (excludes is_hidden pins) → return pins
 
-[Phase 5, planned]
-Client → opens WebSocket → subscribes to visible geohash cells
-       → receives live updates as new pins appear in view
+Client → opens EventSource GET /events?bbox=&category= → server filters by viewport bbox + category live
+       → receives new pins as they appear in view
 ```
 
 ### D) Admin reviews a report
@@ -181,10 +156,9 @@ Owner client → (valid JWT, role = owner) → PATCH /users/:id/role { role: "ad
 ## 4. Scaling Path (as traffic grows)
 
 1. **Single Go instance** — current state, fine for MVP and early growth
-2. **Horizontal scaling** — run multiple Go API/Realtime instances behind a load balancer, coordinated via Redis Pub/Sub (requires Phase 5)
+2. **Horizontal scaling** — run multiple Go API/Realtime instances behind a load balancer, coordinated via Redis Pub/Sub
 3. **Read replicas** for Postgres if read load grows
-4. **Self-host LiveKit** if managed pricing becomes a bottleneck at scale
-5. Only if a genuine, measured bottleneck appears in the WebSocket layer specifically (rare) — consider splitting Realtime Hub into its own dedicated service/cluster
+5. (No planned split; realtime is in-process SSE over Redis — split only if profiling proves it.)
 
 ---
 
@@ -222,6 +196,8 @@ sweetspot/
 │   │   │   └── response/
 │   │   │       ├── response.go      # JSON response helpers
 │   │   │       └── errors.go        # error response helpers
+│   │   │   └── validid/
+│   │   │       └── validid.go       # UUID format validation middleware
 │   │   ├── modules/
 │   │   │   ├── auth/
 │   │   │   │   ├── handler.go       # Register, Login, Logout, Me handlers
@@ -238,9 +214,7 @@ sweetspot/
 │   │   │   │   ├── model.go         # Pin, PinPhoto, PinDetail, PinListEntry, Category
 │   │   │   │   ├── repository.go    # PostGIS queries
 │   │   │   │   ├── errors.go        # ErrNotFound
-│   │   │   │   ├── pins_test.go
-│   │   │   │   └── imaging/
-│   │   │   │       └── imaging.go   # image validation + processing (libvips via bimg)
+│   │   │   │   └── pins_test.go
 │   │   │   ├── reports/
 │   │   │   │   ├── handler.go       # Create, List, Review handlers
 │   │   │   │   ├── service.go       # business logic
@@ -258,17 +232,12 @@ sweetspot/
 │   │   │   │   ├── repository.go
 │   │   │   │   ├── errors.go        # ErrNotFound, ErrCannotChangeOwnRole, ErrCannotDemoteLastOwner
 │   │   │   │   └── user_test.go
-│   │   │   ├── realtime/            # Phase 5 — scaffolded, not yet built
-│   │   │   │   ├── handler.go       # (empty)
-│   │   │   │   ├── hub.go           # (empty)
-│   │   │   │   ├── rooms.go         # (empty)
-│   │   │   │   ├── broadcast.go     # (empty)
-│   │   │   │   ├── pubsub.go        # (empty)
-│   │   │   │   └── dto.go           # (empty)
+│   │   │   ├── realtime/            # Phase 5 — implemented as SSE broker + handler
+│   │   │   │   ├── broker.go        # Redis pub/sub bridge for pin events
+│   │   │   │   └── handler.go       # GET /events SSE stream + limiter + runStreamLoop
 │   │   │   └── streams/             # Phase 8 — scaffolded, not yet built
 │   │   │       ├── handler.go       # (empty)
 │   │   │       ├── service.go       # (empty)
-│   │   │       ├── livekit_client.go# (empty)
 │   │   │       ├── webhook.go       # (empty)
 │   │   │       ├── dto.go           # (empty)
 │   │   │       ├── model.go         # (empty)
@@ -294,6 +263,10 @@ sweetspot/
 │   │   │       ├── local.go         # local filesystem storage
 │   │   │       ├── local_test.go
 │   │   │       └── fileid.go        # server-generated random hex file IDs
+│   │   └── imaging/
+│   │       ├── imaging.go       # image validation + processing (libvips via bimg)
+│   │       ├── strip.go         # EXIF stripping
+│   │       └── testdata/        # GPS/orientation fixtures
 │   │   └── endpointtest/
 │   │       └── endpoints_test.go    # security regression tests (546 lines)
 │   ├── pkg/
@@ -303,8 +276,6 @@ sweetspot/
 │   │   │   └── jwt.go               # generate + validate HS256 tokens with jti
 │   │   ├── password/
 │   │   │   └── password.go          # bcrypt hash (cost 12) + verify
-│   │   └── validid/
-│   │       └── validid.go           # UUID format validation middleware
 │   ├── deployments/
 │   │   ├── docker/
 │   │   │   └── server.Dockerfile    # multi-stage: golang:1.27-alpine → alpine:3.20
@@ -373,7 +344,6 @@ sweetspot/
 4. ✅ Reports: create (any logged-in user) + admin review endpoint (hide pin on action, FOR UPDATE locking)
 5. ✅ Photo upload with processing: validation (JPG/PNG, ≤8000×8000px), WebP conversion (≤1600px, q80), 400px square thumbnails (libvips via bimg)
 6. ✅ Frontend map view: MapLibre GL, category filter chips, pin detail panel, create-pin flow, auth screens
-7. ⬜ WebSocket layer: geohash rooms + batching for live pin updates (Phase 5)
+7. ✅ SSE real-time layer: one `GET /events` stream, Redis pub/sub bus; batching and outbox are deferred (documented).
 8. ⬜ Production storage swap: Cloudflare R2 (Phase 6)
 9. ⬜ Deploy MVP (Phase 7)
-10. ⬜ Livestreaming integration (LiveKit) (Phase 8)

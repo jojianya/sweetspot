@@ -1,13 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Avatar from "@/components/Avatar";
-import { fetchUsers, searchUsers, updateUserRole } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
+import { useAdminSession } from "@/hooks/useAdminSession";
+import { useUsersAdmin } from "@/hooks/useUsersAdmin";
 import { useAuth } from "@/store/auth";
-import type { PublicProfile } from "@/lib/types";
 
 const ROLE_OPTIONS = ["user", "admin", "owner"] as const;
 
@@ -17,100 +15,13 @@ const ROLE_STYLES: Record<string, string> = {
   user: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
 };
 
-/** Users per page when listing all users. */
-const PAGE_SIZE = 50;
-
 export default function RolesPage() {
   const { user } = useAuth();
-  const isOwner = user?.role === "owner";
-
-  const [query, setQuery] = useState("");
-  /** null = showing the full user list; a string = showing search matches. */
-  const [activeQuery, setActiveQuery] = useState<string | null>(null);
-  const [results, setResults] = useState<PublicProfile[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-
-  const isSearching = activeQuery !== null;
-  const hasMore = !isSearching && results.length > 0 && results.length < total;
-
-  const fetchPage = useCallback((offset: number, append: boolean) => {
-    fetchUsers({ limit: PAGE_SIZE, offset })
-      .then((res) => {
-        setTotal(res.total);
-        setResults((prev) => (append ? [...prev, ...res.users] : res.users));
-      })
-      .catch((e: unknown) => setError(errorMessage(e)))
-      .finally(() => {
-        setLoading(false);
-        setLoadingMore(false);
-      });
-  }, []);
-
-  useEffect(() => {
-    fetchPage(0, false);
-  }, [attempt, fetchPage]);
-
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = query.trim();
-    if (!q || loading || loadingMore) return;
-    setLoading(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await searchUsers(q);
-      setResults(res.users);
-      setTotal(res.total);
-      setActiveQuery(q);
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const showAll = () => {
-    setQuery("");
-    setNotice(null);
-    setError(null);
-    setActiveQuery(null);
-    setLoading(true);
-    fetchPage(0, false);
-  };
-
-  const loadMore = () => {
-    if (loading || loadingMore) return;
-    setLoadingMore(true);
-    fetchPage(results.length, true);
-  };
-
-  const retryLoad = () => {
-    setError(null);
-    setLoading(true);
-    setAttempt((n) => n + 1);
-  };
-
-  const handleRoleChange = async (profile: PublicProfile, role: string) => {
-    if (busyId) return;
-    setBusyId(profile.id);
-    setError(null);
-    setNotice(null);
-    try {
-      const updated = await updateUserRole(profile.id, role);
-      setResults((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-      setNotice(`@${profile.username} is now ${role}.`);
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusyId(null);
-    }
-  };
+  // The cached role in localStorage is not a credential, so /me decides
+  // whether the admin shell renders at all. Until it answers, authorized is
+  // false and the admin tree below is never mounted, so no admin request is
+  // made on the strength of a cache the caller could have edited.
+  const { authorized, checked } = useAdminSession("owner");
 
   if (!user) {
     return (
@@ -131,7 +42,9 @@ export default function RolesPage() {
     );
   }
 
-  if (!isOwner) {
+  if (!authorized) {
+    // While the check is in flight there is nothing to conclude yet, so show
+    // the same gate rather than flashing the admin shell.
     return (
       <>
         <Navbar backHref="/" backLabel="Back to map" />
@@ -140,7 +53,9 @@ export default function RolesPage() {
             Owners only
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Only the account owner can change roles.
+            {checked
+              ? "Only the account owner can change roles."
+              : "Checking your access…"}
           </p>
           <Link
             href="/"
@@ -153,9 +68,38 @@ export default function RolesPage() {
     );
   }
 
+  return <RolesAdminShell />;
+}
+
+/**
+ * The role console. Split out so useUsersAdmin — which fetches the user list on
+ * mount — only ever runs for a caller /me has confirmed is an owner.
+ */
+function RolesAdminShell() {
+  const { user } = useAuth();
+  const {
+    query,
+    setQuery,
+    activeQuery,
+    results,
+    total,
+    loading,
+    loadingMore,
+    error,
+    notice,
+    busyId,
+    isSearching,
+    hasMore,
+    handleSearch,
+    showAll,
+    loadMore,
+    retryLoad,
+    handleRoleChange,
+  } = useUsersAdmin();
+
   return (
     <>
-      <Navbar backHref="/reports" backLabel="Back to reports" />
+      <Navbar backHref="/" backLabel="Back to map" hideAccountNav />
 
       <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-16 pt-20">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -267,7 +211,7 @@ export default function RolesPage() {
           <>
             <ul className="mt-4 space-y-2.5">
               {results.map((profile) => {
-                const isSelf = profile.id === user.id;
+                const isSelf = user !== null && profile.id === user.id;
                 return (
                   <li
                     key={profile.id}

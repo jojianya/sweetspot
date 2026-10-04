@@ -40,7 +40,8 @@ function parseUserList(data: { users: unknown; total?: unknown }): UserListResul
 /**
  * GET /users — owner-only user listing for role management. With `q`, filters
  * to usernames containing the query; without, returns all users (paginated).
- * Always includes the total number of registered users.
+ * Always includes a total: the number of registered users when listing, the
+ * number of matches when searching.
  */
 export async function fetchUsers(options: {
   q?: string;

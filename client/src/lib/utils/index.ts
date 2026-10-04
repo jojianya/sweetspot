@@ -1,8 +1,9 @@
 export { errorMessage } from "./errorMessage";
-export { formatTime, relativeTime } from "./format";
+export { formatTime, formatViews, relativeTime } from "./format";
 export {
   boundsToValidBbox,
   distanceMeters,
+  formatBbox,
   getCurrentPosition,
   geolocationAvailable,
   parsePoint,

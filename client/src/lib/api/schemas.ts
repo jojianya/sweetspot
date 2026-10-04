@@ -25,6 +25,14 @@ export const pinEventSchema = z.object({
 
 export type PinEvent = z.infer<typeof pinEventSchema>;
 
+/** Payload emitted as `event: pin_removed` on the same /events stream. */
+export const pinRemovedEventSchema = z.object({
+  id: z.string().uuid(),
+  location: z.string(),
+});
+
+export type PinRemovedEvent = z.infer<typeof pinRemovedEventSchema>;
+
 export const pinListEntrySchema = pinBaseSchema.extend({
   cover_url: z.string(),
   username: z.string().nullable(),
@@ -75,6 +83,7 @@ export const collectionEntrySchema = z.object({
   user_id: z.string(),
   name: z.string(),
   description: z.string().nullable(),
+  is_private: z.boolean(),
   created_at: z.string(),
   pin_count: z.number(),
   cover_url: z.string(),
@@ -82,6 +91,8 @@ export const collectionEntrySchema = z.object({
 
 export const collectionDetailSchema = collectionEntrySchema.extend({
   pins: z.array(pinListEntrySchema),
+  // Number of pins in the whole collection; `pins` is one page of them.
+  pin_total: z.number().optional(),
 });
 
 export const userStatsSchema = z.object({

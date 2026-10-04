@@ -6,16 +6,22 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
 
 var ErrNotFound = errors.New("comment not found")
 
 type Repository interface {
-	ListByPin(ctx context.Context, pinID string) ([]Comment, error)
+	// ListByPin returns a page of comments on the pin plus the total number of
+	// visible comments.
+	ListByPin(ctx context.Context, pinID string, limit, offset int) ([]Comment, int, error)
 	Create(ctx context.Context, pinID, userID, body string) (Comment, error)
 	Get(ctx context.Context, id string) (Comment, error)
 	Hide(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
+	// PinExistsVisible reports whether the pin exists and is public; the
+	// handler 404s comments on hidden or nonexistent pins.
+	PinExistsVisible(ctx context.Context, pinID string) (bool, error)
 }
 
 type postgresRepository struct {
@@ -26,31 +32,49 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 	return &postgresRepository{pool: pool}
 }
 
-func (r *postgresRepository) ListByPin(ctx context.Context, pinID string) ([]Comment, error) {
+func (r *postgresRepository) PinExistsVisible(ctx context.Context, pinID string) (bool, error) {
+	return pins.VisiblePinExists(ctx, r.pool, pinID)
+}
+
+// ListByPin returns a page of comments on the pin plus the total number of
+// visible comments, from COUNT(*) OVER () in the same query. Comments read
+// oldest-first, so the ordering column is stable across pages.
+func (r *postgresRepository) ListByPin(ctx context.Context, pinID string, limit, offset int) ([]Comment, int, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT c.id, c.pin_id, c.user_id, c.body, c.is_hidden, c.created_at, u.username, u.avatar_url
+		SELECT c.id, c.pin_id, c.user_id, c.body, c.is_hidden, c.created_at, u.username, u.avatar_url,
+		       COUNT(*) OVER () AS total
 		FROM comments c
 		LEFT JOIN users u ON u.id = c.user_id
 		WHERE c.pin_id = $1 AND c.is_hidden = false
 		ORDER BY c.created_at ASC
-	`, pinID)
+		LIMIT $2 OFFSET $3
+	`, pinID, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	comments := []Comment{}
+	var total int
 	for rows.Next() {
 		var c Comment
-		if err := rows.Scan(&c.ID, &c.PinID, &c.UserID, &c.Body, &c.IsHidden, &c.CreatedAt, &c.Username, &c.AvatarURL); err != nil {
-			return nil, err
+		if err := rows.Scan(&c.ID, &c.PinID, &c.UserID, &c.Body, &c.IsHidden, &c.CreatedAt, &c.Username, &c.AvatarURL, &total); err != nil {
+			return nil, 0, err
 		}
 		comments = append(comments, c)
 	}
 	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
-		return nil, err
+		return nil, 0, err
 	}
-	return comments, nil
+	// Empty page: the window function has no row to read, so count separately.
+	if len(comments) == 0 {
+		if err := r.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM comments WHERE pin_id = $1 AND is_hidden = false
+		`, pinID).Scan(&total); err != nil {
+			return nil, 0, err
+		}
+	}
+	return comments, total, nil
 }
 
 func (r *postgresRepository) Create(ctx context.Context, pinID, userID, body string) (Comment, error) {

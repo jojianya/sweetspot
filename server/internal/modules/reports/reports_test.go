@@ -27,8 +27,8 @@ func (m *mockReportRepository) CreateReport(context.Context, string, string, str
 	return m.created, m.createErr
 }
 
-func (m *mockReportRepository) ReviewReport(context.Context, string, string, string) (Report, error) {
-	return m.reviewed, m.reviewErr
+func (m *mockReportRepository) ReviewReport(context.Context, string, string, string) (Report, *string, error) {
+	return m.reviewed, nil, m.reviewErr
 }
 
 func (m *mockReportRepository) ListReports(context.Context, *string, int, int) ([]ReportListEntry, error) {
@@ -45,7 +45,7 @@ func TestCreateReportDuplicate(t *testing.T) {
 
 func TestReviewReportPropagatesNotFound(t *testing.T) {
 	svc := NewService(&mockReportRepository{reviewErr: ErrReportNotFound})
-	_, err := svc.ReviewReport(context.Background(), "r1", "dismiss", "u1")
+	_, _, err := svc.ReviewReport(context.Background(), "r1", "dismiss", "u1")
 	if !errors.Is(err, ErrReportNotFound) {
 		t.Fatalf("expected ErrReportNotFound, got %v", err)
 	}

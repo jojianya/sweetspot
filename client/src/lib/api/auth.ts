@@ -26,6 +26,21 @@ export async function logout(): Promise<void> {
   await api.post("/auth/logout");
 }
 
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  const { data } = await api.post<{ message: string }>("/auth/password/request", {
+    email,
+  });
+  return data;
+}
+
+export async function confirmPasswordReset(token: string, password: string): Promise<{ message: string }> {
+  const { data } = await api.post<{ message: string }>("/auth/password/reset", {
+    token,
+    password,
+  });
+  return data;
+}
+
 /** The authoritative answer to "is this browser still signed in?". */
 export interface Session {
   user_id: string;

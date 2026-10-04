@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
 import { BookmarkIcon, CloseIcon } from "@/components/icons";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useCollections } from "@/hooks/useCollections";
-import { fetchCollection, removePinFromCollection } from "@/lib/api";
+import { useCollectionDetail } from "@/hooks/useCollectionDetail";
 import { errorMessage } from "@/lib/utils";
+import { useAuth } from "@/store/auth";
 import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
-import type { CollectionDetail, PinListEntry } from "@/lib/types";
+import type { PinListEntry } from "@/lib/types";
 
 interface SavedPinsPanelProps {
   onClose: () => void;
@@ -24,9 +25,17 @@ export default function SavedPinsPanel({
   activeId,
 }: SavedPinsPanelProps) {
   const [tab, setTab] = useState<Tab>("saved");
-  const [openCollection, setOpenCollection] = useState<CollectionDetail | null>(null);
-  const [openingId, setOpeningId] = useState<string | null>(null);
-  const [collectionError, setCollectionError] = useState<string | null>(null);
+  const {
+    openCollection,
+    setOpenCollection,
+    openingId,
+    collectionError,
+    setCollectionError,
+    togglingPrivate,
+    openCollectionDetail,
+    handleRemovePin,
+    handleTogglePrivate,
+  } = useCollectionDetail();
 
   const favorites = useFavorites();
   const collections = useCollections();
@@ -37,46 +46,17 @@ export default function SavedPinsPanel({
     error: collectionsError,
     retry: collectionsRetry,
     create,
-    removePin,
   } = collections;
 
   const [newName, setNewName] = useState("");
+  const [newPrivate, setNewPrivate] = useState(false);
   const [creating, setCreating] = useState(false);
+  const { user } = useAuth();
 
   const title = (e: PinListEntry) =>
     e.caption?.trim() || (e.username ? `@${e.username}` : "Untitled");
 
   const subtitle = (e: PinListEntry) => (e.username ? `@${e.username}` : "Pin");
-
-  const openCollectionDetail = useCallback(async (id: string) => {
-    setOpeningId(id);
-    setCollectionError(null);
-    try {
-      const detail = await fetchCollection(id);
-      setOpenCollection(detail);
-    } catch (e) {
-      setCollectionError(errorMessage(e));
-    } finally {
-      setOpeningId(null);
-    }
-  }, []);
-
-  const handleRemovePin = useCallback(
-    async (collectionId: string, pinId: string) => {
-      setOpenCollection((prev) => {
-        if (!prev) return prev;
-        const removed = prev.pins.filter((p) => p.id !== pinId);
-        return { ...prev, pins: removed, pin_count: Math.max(0, prev.pin_count - 1) };
-      });
-      try {
-        await removePin(collectionId, pinId);
-      } catch (e) {
-        setCollectionError(errorMessage(e));
-        await openCollectionDetail(collectionId);
-      }
-    },
-    [removePin, openCollectionDetail]
-  );
 
   const handleCreate = async () => {
     const name = newName.trim();
@@ -84,14 +64,17 @@ export default function SavedPinsPanel({
     setCreating(true);
     setCollectionError(null);
     try {
-      await create(name);
+      await create(name, null, newPrivate);
       setNewName("");
+      setNewPrivate(false);
     } catch (e) {
       setCollectionError(errorMessage(e));
     } finally {
       setCreating(false);
     }
   };
+
+  const ownDetail = openCollection !== null && user !== null && openCollection.user_id === user.id;
 
   return (
     <PanelSheet role="dialog" aria-modal="true" aria-label="Saved pins" onClose={onClose}>
@@ -177,10 +160,30 @@ export default function SavedPinsPanel({
                 </p>
               )}
             </div>
+            {ownDetail && (
+              <label className="mb-2 flex cursor-pointer items-center gap-2 px-1 text-xs text-zinc-500 dark:text-zinc-400">
+                <input
+                  type="checkbox"
+                  checked={openCollection.is_private}
+                  disabled={togglingPrivate}
+                  onChange={(e) => void handleTogglePrivate(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded accent-rose-600 disabled:opacity-50"
+                />
+                Private — only you can see this collection
+              </label>
+            )}
 
             {collectionError && (
               <p className="mb-2 text-xs text-rose-600 dark:text-rose-400" role="alert">
-                {collectionError}
+                {collectionError}{" "}
+                <button
+                  type="button"
+                  onClick={() => setCollectionError(null)}
+                  className="font-medium underline"
+                  aria-label="Dismiss error"
+                >
+                  Dismiss
+                </button>
               </p>
             )}
 
@@ -274,7 +277,7 @@ export default function SavedPinsPanel({
 
             {!loading && error && (
               <div className="px-3 py-8 text-center">
-                <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+                <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{error}</p>
                 <button
                   type="button"
                   onClick={retry}
@@ -335,7 +338,7 @@ export default function SavedPinsPanel({
         ) : (
           <>
             {/* Collections tab */}
-            <div className="mb-3 flex gap-2 px-1">
+            <div className="mb-2 flex gap-2 px-1">
               <input
                 type="text"
                 value={newName}
@@ -354,10 +357,27 @@ export default function SavedPinsPanel({
                 {creating ? "…" : "Create"}
               </button>
             </div>
+            <label className="mb-3 flex cursor-pointer items-center gap-2 px-1 text-xs text-zinc-500 dark:text-zinc-400">
+              <input
+                type="checkbox"
+                checked={newPrivate}
+                onChange={(e) => setNewPrivate(e.target.checked)}
+                className="h-3.5 w-3.5 rounded accent-rose-600"
+              />
+              Private — only you can see it
+            </label>
 
             {collectionError && !openCollection && (
               <p className="mb-2 px-1 text-xs text-rose-600 dark:text-rose-400" role="alert">
-                {collectionError}
+                {collectionError}{" "}
+                <button
+                  type="button"
+                  onClick={() => setCollectionError(null)}
+                  className="font-medium underline"
+                  aria-label="Dismiss error"
+                >
+                  Dismiss
+                </button>
               </p>
             )}
 
@@ -379,7 +399,7 @@ export default function SavedPinsPanel({
 
             {!collectionsLoading && collectionsError && (
               <div className="px-3 py-8 text-center">
-                <p className="text-sm text-rose-600 dark:text-rose-400">{collectionsError}</p>
+                <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{collectionsError}</p>
                 <button
                   type="button"
                   onClick={collectionsRetry}
@@ -421,6 +441,11 @@ export default function SavedPinsPanel({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {c.name}
+                        {c.is_private && (
+                          <span className="ml-1.5 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                            Private
+                          </span>
+                        )}
                       </span>
                       <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
                         {c.pin_count} pin{c.pin_count === 1 ? "" : "s"}

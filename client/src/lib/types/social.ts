@@ -16,6 +16,7 @@ export interface CollectionEntry {
   user_id: string;
   name: string;
   description: string | null;
+  is_private: boolean;
   created_at: string;
   pin_count: number;
   cover_url: string;

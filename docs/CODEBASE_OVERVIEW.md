@@ -62,9 +62,8 @@ A user can:
 - **See live pins appear** while someone else creates one, via an SSE stream (see [§8](#8-real-time-sse)).
 - **Manage roles** as the `owner`: `/roles` promotes/demotes `user` / `admin` / `owner`.
 
-Non-features that are easy to assume exist but don't: there is no messaging, no live video (the `streams/`
-package is empty scaffolding), no search-by-location-bbox on the feed, and **no reverse geocoding stored on
-the pin** (see [§9.4](#94-reverse-geocoding-at-creation-is-not-done)).
+Non-features that are easy to assume exist but don't: there is no messaging, no live video, no search-by-location-bbox on the feed, and **no reverse geocoding stored on
+the pin** (see [§9.4](#94-reverse-geocoding-at-creation-is-not-done)). The stub `streams/` package was deleted in B1; only its orphan `streams` DB table (from `0005_streams.sql`) remains.
 
 Domain: the app's default map centre and the self-hosted tileset both point at **different countries** —
 the client defaults to Hyderabad, India (`17.385, 78.4867` in `MapApp.tsx`) while `maps/` is built for the
@@ -147,7 +146,7 @@ this branch**. Both are stale; see [§9.2](#92-stale-env-example--documentation-
 ## 3. Client structure (`client/`)
 
 Next.js **16.3.4**, React **19.2.8**, TypeScript, Tailwind v4, `output: "standalone"`, pnpm 10.28.0, Node 20.
-Packages: `axios`, `maplibre-gl` ^6.9, `react-icons`, `zod` ^4.5, `zustand` ^5.
+Packages: `axios`, `maplibre-gl` ^6.9, `zod` ^4.5, `zustand` ^5. (`react-icons` removed in B1 — no importers.)
 
 House rule from `client/AGENTS.md`: **never use `dangerouslySetInnerHTML`** (or any raw-HTML rendering) on
 user-generated content — captions, usernames, socials JSON. React escapes by default; only break that
@@ -211,9 +210,11 @@ so `generateMetadata` and the page share one API read per SSR request.
   the keyboard route to canvas-drawn markers.
 - If `MAPTILER_KEY` is empty it renders a "Map unavailable" panel naming the env var, instead of the map.
 
-**`pinLayers.ts`** — `ensurePinLayers(map, isActive)` builds **18 images** (`pin-cat-1..8`,
-`pin-cat-N-selected`, `pin-default`, `pin-selected`) by rendering `IoPinSharp` from `react-icons/io5` via
-`renderToStaticMarkup` → Blob → `Image` → 54px canvas → `ImageData`, then `map.addImage`. Exports `GeoFeature`,
+**`pinLayers.ts`** — `ensurePinLayers(map, isActive)` builds **2 images** (`pin-post`,
+`pin-post-selected`) from an inline SVG teardrop (`pinSvg(fill)` → Blob → `Image` → 28x40 canvas →
+`ImageData`, `PIN_FILL = #EA4335`), then `map.addImage`. The per-category ids (`pin-cat-1..8`,
+`pin-cat-N-selected`, `pin-default`, `pin-selected`) are stale ids released on hot-reload only; nothing
+references them. Exports `GeoFeature`,
 `EMPTY_GEOJSON`, `CLUSTER_MAX_ZOOM = 8`, `CLUSTERING_ENABLED = true`, `notCluster`. Existing layers are
 reconfigured with `setLayoutProperty` rather than re-added.
 
@@ -256,7 +257,7 @@ address line, comments, and the `PhotoLightbox`/`PinEditSheet`/`AddToCollectionS
 dialog; `MAX_PHOTOS = 5`, `MAX_PHOTO_SIZE = 10MB`, JPG/PNG only, "Use current location"),
 `PinEditSheet.tsx`, `SavedPinsPanel.tsx` (saved/collections tabs + collection drill-in),
 `TrendingList.tsx`, `CommentsSection.tsx`, `PhotoLightbox.tsx`, `AddToCollectionSheet.tsx`,
-`ReportSheet.tsx` (reason 3–1000 chars, `QUICK_REASONS` chips), `CategoryDropdown.tsx` (**no importers** — dead).
+`ReportSheet.tsx` (reason 3–1000 chars, `QUICK_REASONS` chips). (`CategoryDropdown.tsx` removed in B1 — had no importers.)
 
 Shared: `components/PanelSheet.tsx` (bottom sheet + `useDialogFocus`), `Avatar.tsx`, `SessionSync.tsx`,
 `RuntimeErrorReporter.tsx`, `icons.tsx` (16 inline SVGs), `layout/Navbar.tsx`, `ui/Skeleton.tsx`
@@ -277,9 +278,9 @@ Shared: `components/PanelSheet.tsx` (bottom sheet + `useDialogFocus`), `Avatar.t
 `es.close()`. **No manual reconnect** — it relies on `EventSource`'s own retry, so `onPin` must be referentially
 stable (`MapApp` uses `useCallback`). Skipped entirely while `bbox === null`.
 `useGeolocation()`, `useDialogFocus(ref, onClose?)`, `useFavorites()` / `useSavedStatus(pinId, enabled)`,
-`useCollections()`, `useComments(pinId)`, `useTrending(bbox)`, `usePinView(pinId)` (**no callers** — dead),
+`useCollections()`, `useComments(pinId)`, `useTrending(bbox)`,
 `useFollow(userId)`, `useCategories()`, `usePinDetail(id)`, `useLogout()`, `useSessionSync()`,
-`useSessionRefresh()`.
+`useSessionRefresh()`. (`usePinView(pinId)` removed in B1 — had no callers.)
 
 ### 3.5 The API layer (`client/src/lib/api/`)
 
@@ -347,13 +348,13 @@ server/
 │   ├── app/                   app.go (timeouts), graceful_shutdown.go (serve/signal)
 │   ├── config/                env → Config, with hard validations
 │   ├── di/container.go        Build(cfg, pool) *Container
-│   ├── http/                  router.go + middleware/ + response/ + params/
+│   ├── http/                  router.go + middleware/ + response/ + params/ + validid/
 │   ├── modules/               auth, pins, collections, comments, favorites,
-│   │                          realtime, reports, social, user, streams(empty)
+│   │                          realtime, reports, social, user
 │   ├── observability/         logger/ (slog + request logger), report/ (slog + Sentry)
 │   └── platform/              cache/ (Redis blacklist), database/ (pool + migrations),
 │                              storage/ (local disk)
-├── pkg/                       geohash, jwt, password, validid
+├── pkg/                       geohash, jwt, password
 ├── deployments/docker/        server.Dockerfile(.dev)
 ├── .air.toml                  hot reload: go build -p 1 -o ./tmp/server ./cmd/api
 └── Makefile                   build/run/test/vet/fmt/lint/tidy + docker-*/backup/restore
@@ -474,12 +475,8 @@ Notable per-module behaviour:
   number only) / `avatar` (≤5 MB → `imaging.Avatar` → 256 px WEBP); deletes the new avatar on failure and the
   old avatar on success. `User.PasswordHash` is `json:"-"`, and `ToPrivate()` (which includes `email`) is used
   only when the viewer *is* the subject.
-- **`realtime`** — see [§8](#8-real-time-sse). Note that `hub.go`, `pubsub.go`, `rooms.go`, `dto.go` and
-  `broadcast.go` each contain exactly one line, `package realtime`. They are empty placeholders.
-- **`streams`** — **not wired into the router at all.** All seven files (`handler.go`, `service.go`,
-  `repository.go`, `model.go`, `dto.go`, `webhook.go`, `livekit_client.go`) contain only `package streams`.
-  Migration `0005_streams.sql` creates a `streams` table with `livekit_room_name`, but there is no code behind
-  it. Don't go looking for LiveKit code; there isn't any.
+- **`realtime`** — see [§8](#8-real-time-sse). Live files are `broker.go` + `handler.go` (+ tests); the old one-line placeholder stubs were deleted in B1.
+  Migration `0005_streams.sql` creates a `streams` table, but there is no code behind it.
 
 ### 4.6 Platform layer (`internal/platform/`)
 
@@ -512,7 +509,7 @@ Notable per-module behaviour:
 
 ### 4.8 `pkg/`
 
-- **`jwt`** — HS256 only; `Validate` pins the method family to `*jwt.SigningMethodHMAC`, rejecting `none`/RSA.
+- **`jwt`** — `Generate` signs HS256; `Validate` pins the exact method (`SigningMethodHS256`), rejecting HS384/512, `none` and RSA.
   `Claims` = `{ UserID, RegisteredClaims }` with a UUID-v4-shaped `jti` (`newJTI()`). **No `Role` field.**
 - **`password`** — owns bcrypt's 72-**byte** limit so it cannot drift from validation: `MinRunes = 8`,
   `MaxLen = 72`, `Validate(p)` checks both bounds in the units that matter, `ErrTooLong.Is()` satisfies
@@ -520,7 +517,7 @@ Notable per-module behaviour:
 - **`validid`** — `IsUUID` (length 36, dashes at 8/13/18/23, hex elsewhere), `Middleware()` (checks `:id`),
   `MiddlewareParam(name)`. Route ordering matters: on `/collections/:id/pins/:pinId`, `id` is the collection,
   so the pin needs `MiddlewareParam("pinId")`.
-- **`geohash`** — `Encode(lat, lng)` at precision 7 (used on pin create) and `Neighbors` (**no callers**).
+- **`geohash`** — `Encode(lat, lng)` at precision 7 (used on pin create). (`Neighbors` removed in B1 — had no callers.)
 
 ---
 
@@ -544,6 +541,9 @@ From `server/internal/platform/database/migrations/`, in order:
 | `0012_pin_views.sql` | `pins.views` |
 | `0013_category_slug.sql` | `categories.slug` (derived from name, then NOT NULL + UNIQUE) |
 | `0014_pins_indexes.sql` | `pins_created_at_idx`, and a partial `pins_visible_created_idx ... WHERE is_hidden = false`, both `CONCURRENTLY` |
+| `0015_pin_photo_thumbnail_not_null.sql` | backfills `pin_photos.thumbnail_url` from its own `photo_url`, then `NOT NULL` |
+| `0016_pins_updated_at_trigger.sql` | `set_pins_updated_at()` + `BEFORE UPDATE` trigger on `pins`, exempting `views` |
+| `0017_streams_drop_room_name.sql` | drops the vendor-specific identifier column 0005 added to `streams`, plus its UNIQUE constraint |
 
 ### 5.1 Entities and relationships
 
@@ -1039,11 +1039,11 @@ Verified still present in the tree:
 | **`MapNavBar` account menu is `role="menu"` with no keyboard handling** — no Escape, no click-outside, no arrow navigation. `useDialogFocus` exists and is used by `PanelSheet`. | `MapNavBar.tsx:67` onward |
 | **`CreatePinButton` hand-rolls its dialog** — its own `window` keydown listener, own `role="dialog"`, no focus trap/restore/`aria-modal`. Every other sheet goes through `PanelSheet`. | `CreatePinButton.tsx:72-73, 159` |
 | **Stale draft on map-click dismissal** — `MapApp.handleMapClick` does `setCreateOpen(false)` directly instead of the child's `handleClose`, so `files`/`caption` survive into the next open. | `MapApp.tsx:156-167` |
-| **`usePinView` has no callers** — pin views are never registered from the UI, so `pins.views` only moves when something external hits `POST /pins/:id/view`. This undercuts trending's main input. | `hooks/usePinView.ts` |
-| **`CategoryDropdown.tsx` has no importers**; `pin-default` icon is unreachable (`CATEGORY_IDS` hardcoded 1–8). | |
+| **Pin views never registered from the UI** — `usePinView` was removed in B1 (had no callers), so `pins.views` only moves when something external hits `POST /pins/:id/view`. This undercuts trending's main input. | `POST /pins/:id/view` (server route kept; client hook removed) |
+| **`CategoryDropdown.tsx` removed in B1** (had no importers); `pin-default` icon is unreachable (`CATEGORY_IDS` hardcoded 1–8). | |
 | **`useSessionRefresh` fires on every navigation** from both navbars, no TTL. | `Navbar.tsx:28`, `MapNavBar.tsx:40` |
 | **`roles/page.tsx` has no skeleton** — the only loading page left without `SkeletonRegion`. | |
-| **Unused exports** — `geohash.Neighbors`, `CategoryDropdown`, `usePinView`, the 5 stub `realtime/*.go` files, all 7 `streams/*.go` files, `storage.ErrUnsupportedContentType`, `server/deployments/k8s/` (empty tracked dir). | |
+| **Unused exports (remaining)** — `storage.ErrUnsupportedContentType`, `server/deployments/k8s/` (empty tracked dir). Removed in B1: `geohash.Neighbors`, `CategoryDropdown`, `usePinView`, the 5 stub `realtime/*.go` files, all `streams/*.go` files. | |
 | **Vendored MapLibre in `client/public/`** defeats tree-shaking and hand-pins a dependency `pnpm` also installs. The lint-noise half of this was fixed (`public/**` in `globalIgnores`); the vendoring itself was not. | `client/eslint.config.mjs` |
 | **New engineer trap: `client/AGENTS.md`** tells agents to read `node_modules/next/dist/docs/` because Next 16 has breaking changes vs. training data. Take it seriously. | |
 

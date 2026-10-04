@@ -38,6 +38,7 @@ type stubPinRepo struct {
 	pinDetailErr  error
 	updated       pins.Pin
 	updateErr     error
+	updatedPhotos []pins.PinPhoto
 	userPins      []pins.PinListEntry
 	userPinsErr   error
 	trending      []pins.TrendingPin
@@ -48,7 +49,7 @@ type stubPinRepo struct {
 	viewErr       error
 }
 
-func (s *stubPinRepo) RegisterView(context.Context, string) (int64, error) {
+func (s *stubPinRepo) RegisterView(context.Context, string, string) (int64, error) {
 	return s.views, s.viewErr
 }
 
@@ -56,8 +57,21 @@ func (s *stubPinRepo) GetPin(context.Context, string) (pins.PinDetail, error) {
 	return s.pinDetail, s.pinDetailErr
 }
 
-func (s *stubPinRepo) UpdatePin(context.Context, string, pins.UpdatePinPatch) (pins.Pin, error) {
-	return s.updated, s.updateErr
+// UpdatePin mirrors the repository's UPDATE predicate: the pin detail carries
+// the owner, so a caller who is neither the owner nor a moderator is Forbidden
+// rather than silently allowed.
+func (s *stubPinRepo) UpdatePin(_ context.Context, _ string, userID string, isModerator bool, _ pins.UpdatePinPatch) (pins.Pin, []pins.PinPhoto, error) {
+	if s.updateErr != nil {
+		return pins.Pin{}, nil, s.updateErr
+	}
+	if s.pinDetail.UserID.String() != userID && !isModerator {
+		return pins.Pin{}, nil, pins.ErrForbidden
+	}
+	return s.updated, s.updatedPhotos, nil
+}
+
+func (s *stubPinRepo) PinVisible(context.Context, string) (bool, error) {
+	return true, nil
 }
 
 func (s *stubPinRepo) ListByUser(context.Context, string, int) ([]pins.PinListEntry, error) {
@@ -87,10 +101,28 @@ type mockCommentRepo struct {
 	deleteErr   error
 	hideCalls   int
 	deleteCalls int
+	// pinGone makes PinExistsVisible report the pin as hidden/missing; the
+	// zero value (false) keeps the historical "pin exists" behavior.
+	pinGone bool
 }
 
-func (m *mockCommentRepo) ListByPin(context.Context, string) ([]comments.Comment, error) {
-	return m.list, m.listErr
+func (m *mockCommentRepo) PinExistsVisible(context.Context, string) (bool, error) {
+	return !m.pinGone, nil
+}
+
+func (m *mockCommentRepo) ListByPin(_ context.Context, _ string, limit, offset int) ([]comments.Comment, int, error) {
+	if m.listErr != nil {
+		return nil, 0, m.listErr
+	}
+	total := len(m.list)
+	if offset >= len(m.list) {
+		return []comments.Comment{}, total, nil
+	}
+	end := offset + limit
+	if end > len(m.list) {
+		end = len(m.list)
+	}
+	return m.list[offset:end], total, nil
 }
 
 func (m *mockCommentRepo) Create(context.Context, string, string, string) (comments.Comment, error) {
@@ -178,7 +210,7 @@ func (m *mockCollectionRepo) UserExists(context.Context, string) (bool, error) {
 	return m.userExists, nil
 }
 
-func (m *mockCollectionRepo) Create(context.Context, string, string, *string) (collections.Collection, error) {
+func (m *mockCollectionRepo) Create(context.Context, string, string, *string, bool) (collections.Collection, error) {
 	return m.created, m.createErr
 }
 
@@ -190,7 +222,17 @@ func (m *mockCollectionRepo) ListByUser(context.Context, string) ([]collections.
 	return m.collections, nil
 }
 
-func (m *mockCollectionRepo) Update(context.Context, string, string, *string) error {
+func (m *mockCollectionRepo) ListPublicByUser(context.Context, string) ([]collections.Collection, error) {
+	public := m.collections[:0:0]
+	for _, c := range m.collections {
+		if !c.IsPrivate {
+			public = append(public, c)
+		}
+	}
+	return public, nil
+}
+
+func (m *mockCollectionRepo) Update(context.Context, string, string, *string, bool) error {
 	return m.updateErr
 }
 
@@ -198,8 +240,16 @@ func (m *mockCollectionRepo) Delete(context.Context, string) error {
 	return m.deleteErr
 }
 
-func (m *mockCollectionRepo) ListPins(context.Context, string) ([]pins.PinListEntry, error) {
-	return m.pins, nil
+func (m *mockCollectionRepo) ListPins(_ context.Context, _ string, limit, offset int) ([]pins.PinListEntry, int, error) {
+	total := len(m.pins)
+	if offset >= len(m.pins) {
+		return []pins.PinListEntry{}, total, nil
+	}
+	end := offset + limit
+	if end > len(m.pins) {
+		end = len(m.pins)
+	}
+	return m.pins[offset:end], total, nil
 }
 
 func (m *mockCollectionRepo) PinExists(context.Context, string) (bool, error) {
@@ -234,10 +284,10 @@ func setupFeaturesRouter(
 	uploadRoutes.Use(middleware.BodyLimit(64 << 20))
 
 	authSvc := auth.NewService(usersSvc, testSecret)
-	authH := auth.NewHandler(authSvc, nil, middleware.New(1000, time.Minute))
+	authH := auth.NewHandler(authSvc, nil, middleware.New(1000, time.Minute), auth.SameSiteStrict, nil)
 	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: nil})
 
-	jsonRoutes.POST("/errors", apphttp.ClientErrorIngest(nil))
+	jsonRoutes.POST("/errors", middleware.New(30, time.Minute).Middleware(), apphttp.ClientErrorIngest(nil))
 
 	store := storage.NewLocal(t.TempDir(), "http://test.local")
 	userH := users.NewHandler(usersSvc, store)
@@ -485,8 +535,10 @@ func TestSearchUsers(t *testing.T) {
 		if len(body.Users) != 1 || body.Users[0].Username != "alice" {
 			t.Fatalf("expected [alice], got %+v", body.Users)
 		}
-		if body.Total != 2 {
-			t.Fatalf("expected total 2, got %d", body.Total)
+		// Total counts the matches, not every registered user: the
+		// service holds two users but only alice matches "ali".
+		if body.Total != 1 {
+			t.Fatalf("expected total 1, got %d", body.Total)
 		}
 	})
 
@@ -882,6 +934,47 @@ func TestCollectionEndpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("GetPrivateAsOwnerIs200", func(t *testing.T) {
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), IsPrivate: true}}, newUsersSvc())
+		w := doJSON(t, r2, http.MethodGet, "/collections/"+testUUID1, "", authHeaders(token))
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("GetPrivateAsOtherIs404", func(t *testing.T) {
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), IsPrivate: true}}, newUsersSvc())
+		w := doJSON(t, r2, http.MethodGet, "/collections/"+testUUID1, "", authHeaders(otherToken))
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("GetPrivateLoggedOutIs404", func(t *testing.T) {
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), IsPrivate: true}}, newUsersSvc())
+		w := doJSON(t, r2, http.MethodGet, "/collections/"+testUUID1, "", nil)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("ListOmitsPrivateForOthers", func(t *testing.T) {
+		pub := collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), Name: "pub"}
+		priv := collections.Collection{ID: uuidOf(testUUID2), UserID: uuidOf(testUUID1), Name: "priv", IsPrivate: true}
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{userExists: true, collections: []collections.Collection{pub, priv}}, newUsersSvc())
+		w := doJSON(t, r2, http.MethodGet, "/users/"+testUUID1+"/collections", "", authHeaders(otherToken))
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+		}
+		body := w.Body.String()
+		if !strings.Contains(body, testUUID1) {
+			t.Fatalf("expected public collection in list: %s", body)
+		}
+		if strings.Contains(body, testUUID2) {
+			t.Fatalf("private collection leaked into list: %s", body)
+		}
+	})
+
 	t.Run("OwnerUpdates", func(t *testing.T) {
 		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: uuidOf(testUUID1)}}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodPatch, "/collections/"+testUUID1, `{"name":"Renamed"}`, authHeaders(token))
@@ -975,4 +1068,21 @@ func TestClientErrorIngest(t *testing.T) {
 			t.Fatalf("expected 204, got %d (%s)", w.Code, w.Body.String())
 		}
 	})
+}
+
+// TestClientErrorIngestRateLimited proves the /errors limiter reuses the
+// existing in-memory middleware: a burst over 30/min per IP is cut off with
+// 429 instead of flooding the reporter, while the first 30 stay 204.
+func TestClientErrorIngestRateLimited(t *testing.T) {
+	r, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{}, newUsersSvc())
+
+	body := `{"message":"spam","url":"https://app.example/map"}`
+	for i := 0; i < 30; i++ {
+		if w := doJSON(t, r, http.MethodPost, "/errors", body, nil); w.Code != http.StatusNoContent {
+			t.Fatalf("request %d: expected 204, got %d (%s)", i+1, w.Code, w.Body.String())
+		}
+	}
+	if w := doJSON(t, r, http.MethodPost, "/errors", body, nil); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 on request 31, got %d (%s)", w.Code, w.Body.String())
+	}
 }

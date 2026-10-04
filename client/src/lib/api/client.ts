@@ -1,9 +1,23 @@
 import axios from "axios";
-import { useAuth } from "@/store/auth";
 import { API_BASE_URL, reportError } from "@/lib/monitoring";
 import { isSessionEnded } from "./session";
 
 export { API_BASE_URL };
+
+/**
+ * Called when a 401 means the session has ended. The pure API layer must
+ * not import the UI store (see the restricted-imports guard), so the
+ * client bootstrap injects the callback — `SessionSync` registers a
+ * store-clearing handler in an effect. The default is a no-op (notably on
+ * the server, which never registers), and assignment overwrites.
+ */
+type UnauthorizedHandler = () => void;
+
+let unauthorizedHandler: UnauthorizedHandler = () => {};
+
+export function setUnauthorizedHandler(fn: UnauthorizedHandler): void {
+  unauthorizedHandler = fn;
+}
 
 /**
  * ApiError carries the HTTP status code alongside the message, so callers can
@@ -53,7 +67,7 @@ api.interceptors.response.use(
     // caller has no session to lose. Boot-time reconciliation lives in
     // useSessionSync — this is the backstop for a session that dies mid-visit.
     if (status === 401 && isSessionEnded(error?.config?.url)) {
-      useAuth.getState().clearAuth();
+      unauthorizedHandler();
     }
 
     const serverMessage = error?.response?.data?.error;

@@ -1,16 +1,18 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Avatar from "@/components/Avatar";
-import { fetchUser, fetchUserCollections, fetchUserPins, updateMyProfile, type ProfileEdit } from "@/lib/api";
-import { ApiError } from "@/lib/api/client";
-import { errorMessage, formatTime } from "@/lib/utils";
+import { formatTime } from "@/lib/utils";
+import { socialLinks } from "@/lib/utils/profile";
 import { useFollow } from "@/hooks/useFollow";
+import { useProfile } from "@/hooks/useProfile";
+import { useProfileEditor } from "@/hooks/useProfileEditor";
 import { useAuth } from "@/store/auth";
-import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
-import type { CollectionEntry, PinListEntry, PublicProfile } from "@/lib/types";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/PageState";
+import type { PinListEntry } from "@/lib/types";
 
 interface ProfilePageProps {
   params: Promise<{ id: string }>;
@@ -27,44 +29,6 @@ const stroke = {
 
 const INPUT_CLASS =
   "w-full rounded-xl border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100";
-
-function strSocial(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-/** Builds the socials payload, dropping unchanged known keys so no-op saves are skipped. */
-function socialsChanged(
-  current: Record<string, unknown>,
-  edits: Record<string, string>
-): Record<string, unknown> | undefined {
-  const next: Record<string, unknown> = { ...current };
-  let changed = false;
-  for (const key of Object.keys(edits)) {
-    const before = typeof current[key] === "string" ? current[key] : "";
-    if (edits[key] !== before) {
-      next[key] = edits[key];
-      changed = true;
-    }
-  }
-  return changed ? next : undefined;
-}
-
-/** Renders profile socials as external links (instragram/twitter handles, website URL). */
-function socialLinks(socials: Record<string, unknown>): Array<{ label: string; href: string }> {
-  const links: Array<{ label: string; href: string }> = [];
-  const handle = (v: string) => v.trim().replace(/^@/, "");
-  if (typeof socials.instagram === "string" && socials.instagram.trim()) {
-    links.push({ label: "Instagram", href: `https://instagram.com/${handle(socials.instagram)}` });
-  }
-  if (typeof socials.twitter === "string" && socials.twitter.trim()) {
-    links.push({ label: "Twitter", href: `https://x.com/${handle(socials.twitter)}` });
-  }
-  if (typeof socials.website === "string" && socials.website.trim()) {
-    const site = socials.website.trim();
-    links.push({ label: "Website", href: /^https?:\/\//i.test(site) ? site : `https://${site}` });
-  }
-  return links;
-}
 
 function CollectionGlyph() {
   return (
@@ -118,133 +82,36 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const { user } = useAuth();
   const isSelf = user !== null && user.id === id;
 
-  const [profile, setProfile] = useState<PublicProfile | null>(null);
-  const [pins, setPins] = useState<PinListEntry[]>([]);
-  const [collections, setCollections] = useState<CollectionEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  const { profile, setProfile, pins, collections, loading, notFound, error, retry } =
+    useProfile(id);
 
   const { stats, busy, error: followError, toggle } = useFollow(id);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const [prof, userPins, userCollections] = await Promise.all([
-          fetchUser(id),
-          fetchUserPins(id),
-          fetchUserCollections(id),
-        ]);
-        if (cancelled) return;
-        setProfile(prof);
-        setPins(userPins);
-        setCollections(userCollections);
-      } catch (e) {
-        if (cancelled) return;
-        if (e instanceof ApiError && e.status === 404) {
-          setNotFound(true);
-        } else {
-          setError(errorMessage(e));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, attempt]);
-
-  // Profile editing state (own profile only).
-  const [editing, setEditing] = useState(false);
-  const [editUsername, setEditUsername] = useState("");
-  const [editInstagram, setEditInstagram] = useState("");
-  const [editTwitter, setEditTwitter] = useState("");
-  const [editWebsite, setEditWebsite] = useState("");
-  const [editAvatar, setEditAvatar] = useState<File | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const avatarPreview = useMemo(
-    () => (editAvatar ? URL.createObjectURL(editAvatar) : null),
-    [editAvatar]
-  );
-
-  useEffect(() => {
-    return () => {
-      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
-    };
-  }, [avatarPreview]);
-
-  const retry = () => {
-    setError(null);
-    setNotFound(false);
-    setLoading(true);
-    setAttempt((n) => n + 1);
-  };
-
-  const openEdit = () => {
-    if (!profile) return;
-    setEditUsername(profile.username);
-    setEditInstagram(strSocial(profile.socials.instagram));
-    setEditTwitter(strSocial(profile.socials.twitter));
-    setEditWebsite(strSocial(profile.socials.website));
-    setEditAvatar(null);
-    setSaveError(null);
-    setEditing(true);
-  };
-
-  const save = async () => {
-    if (!profile) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const edit: ProfileEdit = {};
-      const username = editUsername.trim();
-      if (username !== profile.username) edit.username = username;
-      const socials = socialsChanged(profile.socials, {
-        instagram: editInstagram,
-        twitter: editTwitter,
-        website: editWebsite,
-      });
-      if (socials) edit.socials = socials;
-      if (editAvatar) edit.avatar = editAvatar;
-      if (edit.username === undefined && edit.socials === undefined && edit.avatar === undefined) {
-        setEditing(false);
-        return;
-      }
-      const updated = await updateMyProfile(edit);
-      setProfile(updated);
-      useAuth.setState((s) =>
-        s.user
-          ? {
-              user: {
-                ...s.user,
-                username: updated.username,
-                avatar_url: updated.avatar_url,
-                socials: updated.socials,
-              },
-            }
-          : s
-      );
-      setEditing(false);
-      setEditAvatar(null);
-    } catch (e) {
-      setSaveError(errorMessage(e));
-    } finally {
-      setSaving(false);
-    }
-  };
+  const {
+    editing,
+    setEditing,
+    editUsername,
+    setEditUsername,
+    editInstagram,
+    setEditInstagram,
+    editTwitter,
+    setEditTwitter,
+    editWebsite,
+    setEditWebsite,
+    editAvatar,
+    setEditAvatar,
+    saving,
+    saveError,
+    avatarPreview,
+    openEdit,
+    save,
+  } = useProfileEditor(profile, setProfile);
 
   if (loading) {
     return (
       <>
         <Navbar backHref="/" />
-        <SkeletonRegion label="Loading profile…">
+        <PageLoading label="Loading profile…">
           <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-16 pt-20">
             {/* Header skeleton */}
             <div className="flex flex-col gap-5 rounded-2xl border border-zinc-200/70 p-5 shadow-sm dark:border-zinc-800 sm:flex-row sm:items-center">
@@ -315,7 +182,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               </div>
             </section>
           </div>
-        </SkeletonRegion>
+        </PageLoading>
       </>
     );
   }
@@ -347,7 +214,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
       <>
         <Navbar backHref="/" />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-          <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+          <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{error}</p>
           <button
             type="button"
             onClick={retry}
@@ -634,6 +501,11 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {c.name}
+                        {c.is_private && (
+                          <span className="ml-1.5 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                            Private
+                          </span>
+                        )}
                       </span>
                       <span className="block text-xs text-zinc-500 dark:text-zinc-400">
                         {c.pin_count} pin{c.pin_count === 1 ? "" : "s"}

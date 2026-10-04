@@ -1,0 +1,40 @@
+-- Rollback for 0017_streams_drop_room_name.sql
+--
+-- Rolled back by RollbackLastMigration (migrate.go), which reads this
+-- directory and applies the newest migration that has a down script. So this
+-- file does execute on its own: no manual psql needed.
+--
+-- An earlier version of this comment claimed there was no rollback runner in
+-- the branch. That was wrong, and it was wrong in a way that mattered, because
+-- it led a reader to believe 0017 could not be reverted at all. It could, and
+-- TestMigrationUpDownUp now rolls it back on the way to 0015, so the restore
+-- is covered.
+--
+-- One consequence worth knowing: RollbackLastMigration steps over any migration
+-- with no down file rather than stopping, so this being present is what lets a
+-- rollback reach 0016 and 0015 underneath it.
+--
+-- Restores the column as a plain nullable TEXT.
+--
+-- NOT NULL is deliberately not restored. This file has to work against a
+-- database that has rows, and every existing row would have to be backfilled
+-- with a value nobody chose. Inventing placeholder room names would write false
+-- data into the table that then has to be distinguished from real values later.
+-- NULL is the honest representation of "this row never had one".
+--
+-- UNIQUE is not restored either. Postgres permits any number of NULLs in a
+-- unique index, so re-adding it would not have blocked the NULLs, but it would
+-- also do nothing useful here: the column is vestigial and re-imposing a
+-- constraint on it constrains a future implementer to invent values for every
+-- row. If a future media layer needs a non-null unique identifier, that belongs
+-- in the migration that introduces it.
+--
+-- Databases that applied this migration under its previous name
+-- (0015_streams_drop_livekit_room_name.sql) should have their schema_migrations
+-- row UPDATEd to the new filename rather than left stale. RunMigrations builds
+-- its work list from the files on disk and never walks schema_migrations looking
+-- for rows it cannot match, so a row naming a file that no longer exists is
+-- silently ignored: no error, no warning, and the renamed migration is then
+-- treated as unapplied and runs again.
+
+ALTER TABLE streams ADD COLUMN IF NOT EXISTS livekit_room_name TEXT;

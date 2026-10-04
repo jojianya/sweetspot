@@ -14,7 +14,7 @@ Progress: **5 of 11 done** (1 in progress, 5 todo).
 - [x] **B. Profile editing (avatar, username, socials)** — done · Medium
   - **What:** `PATCH /users/me` (own-profile only) to change username/socials + avatar upload through the existing storage/imaging pipeline.
   - **Why:** `users.avatar_url` and `socials` (jsonb) exist in the schema and are returned in profiles, but there's no endpoint or UI to set them — `avatar_url` is always `null`. Profiles are the identity hub of the social layer; today every avatar defaults to initials and `socials` is dead data.
-  - **Files:** `server/internal/modules/user/{handler,service,repository,dto,routes}.go`, `client/src/app/users/[id]/page.tsx` (or a new settings page), avatar upload reusing `pins/imaging`. *(Notes — implemented Sep 2026: `PATCH /users/me` (multipart, `AuthRequired`) accepts any subset of `username`, `socials` (JSON object), and `avatar` (jpg/png, ≤5MB); avatars run through a new `imaging.Avatar` (256px square webp) and are stored via the existing `Local` store, with the superseded file deleted; the repo maps a duplicate username to a 409. Client: the profile page gets an "Edit profile" button (own profile only) with avatar preview, username, and Instagram/Twitter/Website fields (socials merged with existing keys, no-op saves skipped), and the profile header now renders socials as links. Registered on the 64MB upload route group because the payload is multipart.)*
+  - **Files:** `server/internal/modules/user/{handler,service,repository,dto,routes}.go`, `client/src/app/users/[id]/page.tsx` (or a new settings page), avatar upload reusing `platform/imaging`. *(Notes — implemented Sep 2026: `PATCH /users/me` (multipart, `AuthRequired`) accepts any subset of `username`, `socials` (JSON object), and `avatar` (jpg/png, ≤5MB); avatars run through a new `imaging.Avatar` (256px square webp) and are stored via the existing `Local` store, with the superseded file deleted; the repo maps a duplicate username to a 409. Client: the profile page gets an "Edit profile" button (own profile only) with avatar preview, username, and Instagram/Twitter/Website fields (socials merged with existing keys, no-op saves skipped), and the profile header now renders socials as links. Registered on the 64MB upload route group because the payload is multipart.)*
 
 - [ ] **C. Delete-pin UI** — todo · Small
   - **What:** A confirm-to-delete action in `PinEditSheet.tsx` (owner only).
@@ -51,7 +51,7 @@ Progress: **5 of 11 done** (1 in progress, 5 todo).
 ## 3. Small quick wins
 
 - [ ] **I. Finish and land the in-flight pin-views work** — in progress · Small
-  - **What:** `0012_pin_views.sql`, `usePinView.ts`, `POST /pins/:id/view` and the `TestPinView` test are written but uncommitted — wire it into the pin pages (live view counter + "viewed recently") and it unblocks trending.
+  - **What:** `0012_pin_views.sql`, `POST /pins/:id/view` and the `TestPinView` test are written but uncommitted — wire them into the pin pages (live view counter + "viewed recently") and it unblocks trending. (`usePinView.ts` was removed in B1 — it had no callers; wire a fresh hook into the pin pages.)
   - **Why:** Already written on disk; landing it closes the loop and unblocks item D.
   - **Files:** the diff already on disk.
 

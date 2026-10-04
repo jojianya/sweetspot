@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -24,6 +25,15 @@ import (
 const defaultCORSAllowedOrigins = "http://localhost:3000,http://localhost:3001,http://localhost:3002," +
 	"http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002"
 
+// defaultCookieSameSite is the fallback for COOKIE_SAMESITE.
+//
+// Strict is the CSRF-safe mode and this service issues no anti-CSRF token, so
+// SameSite=Strict plus the same-origin /api rewrite is the whole defence. Lax is
+// reachable only by setting COOKIE_SAMESITE=lax, which exists for plain-HTTP
+// LAN development where a strict cookie is never sent. Keep this strict;
+// see docs/SECURITY.md.
+const defaultCookieSameSite = "strict"
+
 type Config struct {
 	Port               string
 	AppEnv             string
@@ -32,6 +42,11 @@ type Config struct {
 	DBUser             string
 	DBPass             string
 	DBName             string
+	DBSSLMode          string
+	DBPoolMaxConns     int
+	DBPoolMaxLifetime  time.Duration
+	DBPoolMaxIdle      time.Duration
+	DBPoolHealthCheck  time.Duration
 	LogLevel           string
 	LogFormat          string
 	JWTSecret          string
@@ -43,6 +58,20 @@ type Config struct {
 	SentryDSN          string
 	SentryEnv          string
 	MaxSSEConnections  int
+	CookieSameSite     string // "strict" or "lax"
+	// TrustedProxies is the gin trusted-proxy list. Empty (default) keeps
+	// today's behavior: ClientIP() returns the direct TCP peer and
+	// X-Forwarded-For is ignored, so per-IP rate limits are shared per proxy
+	// behind the Next rewrite (which does not forward X-Forwarded-For).
+	TrustedProxies []string
+	// PublicBaseURL is the public site origin. Password reset links are built
+	// only from this value, never from request headers (which an attacker
+	// controls and could point at their own host).
+	PublicBaseURL string
+	// MailerWebhookURL/Key configure HTTP email delivery for password reset.
+	// Empty URL selects the log-only mailer (dev and tests).
+	MailerWebhookURL string
+	MailerWebhookKey string
 }
 
 func Load() *Config {
@@ -58,6 +87,11 @@ func Load() *Config {
 		DBUser:             getEnv("DB_USER", "postgres"),
 		DBPass:             getEnv("DB_PASSWORD", ""),
 		DBName:             getEnv("DB_NAME", "goodspotdb"),
+		DBSSLMode:          strings.ToLower(strings.TrimSpace(getEnv("DATABASE_SSLMODE", "disable"))),
+		DBPoolMaxConns:     getEnvInt("DB_POOL_MAX_CONNS", 10),
+		DBPoolMaxLifetime:  getEnvDuration("DB_POOL_MAX_LIFETIME", 30*time.Minute),
+		DBPoolMaxIdle:      getEnvDuration("DB_POOL_MAX_IDLE", 5*time.Minute),
+		DBPoolHealthCheck:  getEnvDuration("DB_POOL_HEALTH_CHECK", time.Minute),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		LogFormat:          getEnv("LOG_FORMAT", "text"),
 		JWTSecret:          getEnv("JWT_SECRET", ""),
@@ -69,6 +103,11 @@ func Load() *Config {
 		SentryDSN:          getEnv("SENTRY_DSN", ""),
 		SentryEnv:          getEnv("SENTRY_ENV", "development"),
 		MaxSSEConnections:  getEnvInt("MAX_SSE_CONNECTIONS", 1000),
+		CookieSameSite:     strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", defaultCookieSameSite))),
+		TrustedProxies:     mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
+		PublicBaseURL:      strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "http://localhost:3000")), "/"),
+		MailerWebhookURL:   strings.TrimSpace(getEnv("MAILER_WEBHOOK_URL", "")),
+		MailerWebhookKey:   os.Getenv("MAILER_WEBHOOK_KEY"),
 	}
 
 	if err := validateJWTSecret(cfg.JWTSecret); err != nil {
@@ -83,6 +122,21 @@ func Load() *Config {
 	if err := validateStorageBase(cfg.StorageBase, cfg.AppEnv); err != nil {
 		log.Fatal(err)
 	}
+	if err := validateCookieSameSite(cfg.CookieSameSite); err != nil {
+		log.Fatal(err)
+	}
+	if err := validatePublicBaseURL(cfg.PublicBaseURL, cfg.AppEnv); err != nil {
+		log.Fatal(err)
+	}
+	if err := validateMailer(cfg.MailerWebhookURL, cfg.AppEnv); err != nil {
+		log.Fatal(err)
+	}
+	if err := validateDBSSLMode(cfg.DBSSLMode, cfg.AppEnv); err != nil {
+		log.Fatal(err)
+	}
+	if err := validatePoolOptions(cfg.DBPoolMaxConns, cfg.DBPoolMaxLifetime, cfg.DBPoolMaxIdle, cfg.DBPoolHealthCheck); err != nil {
+		log.Fatal(err)
+	}
 
 	return cfg
 }
@@ -90,6 +144,44 @@ func Load() *Config {
 func validateAppEnv(value string) error {
 	if value != "development" && value != "production" {
 		return fmt.Errorf("APP_ENV must be development or production, got %q", value)
+	}
+	return nil
+}
+
+func validateCookieSameSite(value string) error {
+	if value != "strict" && value != "lax" {
+		return fmt.Errorf("COOKIE_SAMESITE must be 'strict' or 'lax', got %q", value)
+	}
+	return nil
+}
+
+// validatePublicBaseURL checks the origin reset links are built from. Like
+// storage origins it must be absolute http(s) without credentials, and
+// publicly reachable in production so emailed links work.
+func validatePublicBaseURL(raw, appEnv string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fmt.Errorf("PUBLIC_BASE_URL is required")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return fmt.Errorf("PUBLIC_BASE_URL must be an absolute http or https URL")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return fmt.Errorf("PUBLIC_BASE_URL must not include credentials, a query, or a fragment")
+	}
+	if strings.EqualFold(appEnv, "production") && (isLoopbackHost(parsed.Hostname()) || isPrivateIP(parsed.Hostname())) {
+		return fmt.Errorf("PUBLIC_BASE_URL must be publicly reachable in production")
+	}
+	return nil
+}
+
+// validateMailer requires real delivery in production: a password reset the
+// user never receives is a locked account with no recourse. Development and
+// tests use the log-only mailer.
+func validateMailer(webhookURL, appEnv string) error {
+	if strings.EqualFold(appEnv, "production") && webhookURL == "" {
+		return fmt.Errorf("MAILER_WEBHOOK_URL is required in production so password reset emails are actually delivered (email provider: [FILL IN])")
 	}
 	return nil
 }
@@ -122,6 +214,39 @@ func validateStorageBase(raw, appEnv string) error {
 	}
 	if strings.EqualFold(appEnv, "production") && (loopback || private) {
 		return fmt.Errorf("STORAGE_BASE_URL must be publicly reachable in production")
+	}
+	return nil
+}
+
+// validateDBSSLMode checks the Postgres sslmode. Unknown values always fail;
+// in production anything weaker than require fails too, so the DB password
+// and data never travel in cleartext off-host.
+func validateDBSSLMode(mode, appEnv string) error {
+	switch mode {
+	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+	default:
+		return fmt.Errorf("DATABASE_SSLMODE must be one of disable, allow, prefer, require, verify-ca, verify-full; got %q", mode)
+	}
+	if strings.EqualFold(appEnv, "production") {
+		switch mode {
+		case "require", "verify-ca", "verify-full":
+			return nil
+		default:
+			return fmt.Errorf("DATABASE_SSLMODE must be require or stronger in production, got %q", mode)
+		}
+	}
+	return nil
+}
+
+// validatePoolOptions bounds the connection pool so one deployment cannot
+// starve Postgres (too many) or serialize every request (too few), and so a
+// zero duration cannot disable lifetime/idle/health sweeps by accident.
+func validatePoolOptions(maxConns int, maxLifetime, maxIdle, healthCheck time.Duration) error {
+	if maxConns < 1 || maxConns > 100 {
+		return fmt.Errorf("DB_POOL_MAX_CONNS must be between 1 and 100, got %d", maxConns)
+	}
+	if maxLifetime <= 0 || maxIdle <= 0 || healthCheck <= 0 {
+		return fmt.Errorf("DB pool lifetimes must be positive durations")
 	}
 	return nil
 }
@@ -184,9 +309,50 @@ func getOrigins(raw string) []string {
 	return origins
 }
 
+// parseTrustedProxies parses TRUSTED_PROXIES as comma-separated IPs or CIDRs
+// for gin's SetTrustedProxies. Empty input returns nil, which preserves
+// today's behavior (ClientIP returns the direct peer, X-Forwarded-For
+// ignored). Open ranges 0.0.0.0/0 and ::/0 are rejected because trusting every
+// address would let any client spoof X-Forwarded-For and evade per-IP rate
+// limits.
+func parseTrustedProxies(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	var out []string
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if entry == "0.0.0.0/0" || entry == "::/0" {
+			return nil, fmt.Errorf("TRUSTED_PROXIES %q trusts every address and would allow IP spoofing; list only your proxy addresses or CIDRs", entry)
+		}
+		if strings.Contains(entry, "/") {
+			if _, _, err := net.ParseCIDR(entry); err != nil {
+				return nil, fmt.Errorf("TRUSTED_PROXIES %q is not a valid IP or CIDR", entry)
+			}
+		} else if ip := net.ParseIP(entry); ip == nil {
+			return nil, fmt.Errorf("TRUSTED_PROXIES %q is not a valid IP or CIDR", entry)
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+// mustParseTrustedProxies fails fast at startup on an invalid entry.
+func mustParseTrustedProxies(raw string) []string {
+	parsed, err := parseTrustedProxies(raw)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return parsed
+}
+
 func (c *Config) DSN() string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		c.DBHost, c.DBPort, c.DBUser, c.DBPass, c.DBName)
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		c.DBHost, c.DBPort, c.DBUser, c.DBPass, c.DBName, c.DBSSLMode)
 }
 
 func getEnv(key, fallback string) string {
@@ -200,6 +366,15 @@ func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
+		}
+	}
+	return fallback
+}
+
+func getEnvDuration(key string, fallback time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
 		}
 	}
 	return fallback

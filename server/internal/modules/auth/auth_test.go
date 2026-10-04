@@ -16,6 +16,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type stubUserService struct {
@@ -69,12 +70,20 @@ func (s *stubUserService) GetByID(_ context.Context, id string) (users.User, err
 	return u, nil
 }
 
+func (s *stubUserService) CheckSession(_ context.Context, id string) (middleware.SessionState, error) {
+	u, ok := s.users[id]
+	if !ok {
+		return middleware.SessionState{}, users.ErrNotFound
+	}
+	return middleware.SessionState{Role: u.Role}, nil
+}
+
 func (s *stubUserService) UpdateRole(context.Context, string, string, string) (users.User, error) {
 	return users.User{}, nil
 }
 
-func (s *stubUserService) SearchUsers(context.Context, string, int) ([]users.User, error) {
-	return []users.User{}, nil
+func (s *stubUserService) SearchUsers(context.Context, string, int, int) ([]users.User, int, error) {
+	return []users.User{}, 0, nil
 }
 
 func (s *stubUserService) ListUsers(_ context.Context, _ int, _ int) ([]users.User, int, error) {
@@ -239,7 +248,7 @@ func TestLogoutSucceedsWhenRedisIsDown(t *testing.T) {
 	// Simulate a Redis outage: use a real Blacklist pointing at a closed port.
 	// Revoke will fail with a connection error, which is what we're testing.
 	bl := cache.New("127.0.0.1:1", "")
-	h := NewHandler(newTestService(&stubUserService{}), bl, nil)
+	h := NewHandler(newTestService(&stubUserService{}), bl, nil, SameSiteStrict, nil)
 
 	// Create a valid JWT so the handler can extract claims.
 	token, err := jwt.Generate("test-secret", "u1", time.Hour)
@@ -274,5 +283,24 @@ func TestLogoutSucceedsWhenRedisIsDown(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected session_token cookie to be cleared, got %v", cookies)
+	}
+}
+
+// TestAbsentAccountHashIsUsable guards the constant Login compares against when
+// the account does not exist. A malformed or low-cost value would return early
+// instead of doing the bcrypt work, silently reinstating the timing difference
+// the constant exists to remove.
+func TestAbsentAccountHashIsUsable(t *testing.T) {
+	cost, err := bcrypt.Cost([]byte(absentAccountHash))
+	if err != nil {
+		t.Fatalf("absentAccountHash is not a valid bcrypt hash: %v", err)
+	}
+	// 12 is the cost pkg/password hashes at; anything cheaper finishes sooner
+	// than a real comparison and gives the timing channel back.
+	if cost < 12 {
+		t.Errorf("absentAccountHash cost = %d, want at least 12", cost)
+	}
+	if bcrypt.CompareHashAndPassword([]byte(absentAccountHash), []byte("anything")) == nil {
+		t.Fatal("absentAccountHash matches a guessable password")
 	}
 }

@@ -1,4 +1,9 @@
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY!;
+const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
+
+/** True when a MapTiler key is configured. Never logs or prints the key. */
+export function isGeocodingAvailable(): boolean {
+  return MAPTILER_KEY.trim().length > 0;
+}
 
 export interface PlaceResult {
   id: string;
@@ -21,6 +26,9 @@ export async function searchPlaces(
   proximity?: { lat: number; lng: number },
   signal?: AbortSignal
 ): Promise<PlaceResult[]> {
+  // Without a key there is nothing to query: return no places so pin results
+  // still render (SearchBar merges both via Promise.allSettled).
+  if (!isGeocodingAvailable()) return [];
   const params = new URLSearchParams({
     key: MAPTILER_KEY,
     language: "en",
@@ -54,6 +62,7 @@ export async function reverseGeocode(
   coord: { lat: number; lng: number },
   signal?: AbortSignal
 ): Promise<string | null> {
+  if (!isGeocodingAvailable()) return null;
   const params = new URLSearchParams({
     key: MAPTILER_KEY,
     language: "en",

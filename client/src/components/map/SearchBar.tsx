@@ -37,6 +37,7 @@ export default function SearchBar({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const searchRunRef = useRef(0);
   const centerRef = useRef(center);
   useEffect(() => {
     centerRef.current = center;
@@ -44,6 +45,11 @@ export default function SearchBar({
   const selectedRef = useRef(false);
 
   const doSearch = useCallback(async (q: string, signal?: AbortSignal) => {
+    // Tag this run so a superseded request can neither clear the newer
+    // request's loading spinner nor overwrite its results (the previous
+    // `finally { setLoading(false) }` fired even for aborted requests).
+    const runID = ++searchRunRef.current;
+    const stale = () => signal?.aborted || runID !== searchRunRef.current;
     setLoading(true);
     setIsOpen(true);
     try {
@@ -51,7 +57,7 @@ export default function SearchBar({
         searchPlaces(q, centerRef.current, signal),
         searchPins(q, 5, signal),
       ]);
-      if (signal?.aborted) return;
+      if (stale()) return;
       const items: ResultItem[] = [];
       if (placesRes.status === "fulfilled") {
         for (const p of placesRes.value) items.push({ kind: "place", place: p });
@@ -62,11 +68,11 @@ export default function SearchBar({
       setResults(items);
       setIsOpen(items.length > 0);
     } catch {
-      if (signal?.aborted) return;
+      if (stale()) return;
       setResults([]);
       setIsOpen(false);
     } finally {
-      setLoading(false);
+      if (!stale()) setLoading(false);
     }
   }, []);
 
@@ -134,9 +140,6 @@ export default function SearchBar({
     inputRef.current?.focus();
   };
 
-  let placeIdx = -1;
-  let pinIdx = -1;
-
   return (
     <div ref={wrapperRef} className={"relative w-full min-w-0 " + (className ?? "flex-1")}>
       <div className="flex h-12 items-center gap-2 rounded-full border border-[#E0E0E0] bg-white px-4 shadow-[0_2px_6px_rgba(0,0,0,0.15)] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-none">
@@ -195,10 +198,9 @@ export default function SearchBar({
               <li className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                 Places
               </li>
-              {results.map((item) => {
+              {results.map((item, i) => {
                 if (item.kind !== "place" || !item.place) return null;
-                placeIdx++;
-                const isActive = placeIdx === activeIndex;
+                const isActive = i === activeIndex;
                 return (
                   <li
                     key={`place-${item.place.id}`}
@@ -207,7 +209,7 @@ export default function SearchBar({
                     className={`cursor-pointer px-4 py-2.5 text-sm ${isActive ? "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300" : "text-zinc-900 hover:bg-zinc-50 dark:text-zinc-100 dark:hover:bg-zinc-800"}`}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => select(item)}
-                    onMouseEnter={() => setActiveIndex(placeIdx)}
+                    onMouseEnter={() => setActiveIndex(i)}
                   >
                     <span className="line-clamp-1 font-medium">{item.place.text}</span>
                     <span className="line-clamp-1 text-xs text-zinc-500 dark:text-zinc-400">{item.place.place_name}</span>
@@ -221,10 +223,9 @@ export default function SearchBar({
               <li className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                 Pins
               </li>
-              {results.map((item) => {
+              {results.map((item, i) => {
                 if (item.kind !== "pin" || !item.pin) return null;
-                pinIdx++;
-                const isActive = pinIdx === activeIndex;
+                const isActive = i === activeIndex;
                 return (
                   <li
                     key={`pin-${item.pin.id}`}
@@ -233,7 +234,7 @@ export default function SearchBar({
                     className={`cursor-pointer px-4 py-2.5 text-sm ${isActive ? "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300" : "text-zinc-900 hover:bg-zinc-50 dark:text-zinc-100 dark:hover:bg-zinc-800"}`}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => select(item)}
-                    onMouseEnter={() => setActiveIndex(pinIdx)}
+                    onMouseEnter={() => setActiveIndex(i)}
                   >
                     <span className="line-clamp-1 font-medium">
                       {item.pin.caption ?? item.pin.username ?? "Pin"}

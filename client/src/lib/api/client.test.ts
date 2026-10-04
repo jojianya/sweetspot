@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { ApiError } from "./client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AxiosAdapter } from "axios";
+import api, { ApiError, setUnauthorizedHandler } from "./client";
 import { errorMessage } from "@/lib/utils";
+import { useAuth } from "@/store/auth";
 
 describe("ApiError", () => {
   it("carries status, code, and message", () => {
@@ -50,5 +52,104 @@ describe("ApiError", () => {
     const err = new ApiError("boom", 500);
     expect(err instanceof Error).toBe(true);
     expect(err instanceof ApiError).toBe(true);
+  });
+});
+
+describe("401 session backstop", () => {
+  // Rejects like an axios adapter failure with the given status and URL.
+  // Null status simulates a network error (no response at all).
+  function failWith(status: number | null, url?: string): AxiosAdapter {
+    return () =>
+      Promise.reject({
+        response: status === null ? undefined : { status, data: { error: "denied" } },
+        config: { url },
+        message:
+          status === null ? "Network Error" : `Request failed with status code ${status}`,
+      });
+  }
+
+  function signedIn() {
+    useAuth.setState({
+      user: { id: "user-1", username: "alice", avatar_url: null, role: "user" },
+    });
+  }
+
+  beforeEach(() => {
+    signedIn();
+    // Mirrors what SessionSync registers in the browser; the API layer
+    // itself ships a no-op default.
+    setUnauthorizedHandler(() => useAuth.getState().clearAuth());
+  });
+
+  afterEach(() => {
+    useAuth.setState({ user: null });
+    setUnauthorizedHandler(() => {});
+    vi.restoreAllMocks();
+  });
+
+  it("leaves the session alone while no handler is registered", async () => {
+    setUnauthorizedHandler(() => {});
+    signedIn();
+    await expect(
+      api.get("/feed", { adapter: failWith(401, "/feed") }).catch((e) => e)
+    ).resolves.toMatchObject({ status: 401 });
+    expect(useAuth.getState().user).not.toBeNull();
+  });
+
+  it("clears the session on a 401 from an authenticated request", async () => {
+    const failed = api
+      .get("/feed", { adapter: failWith(401, "/feed") })
+      .catch((e) => e);
+    await expect(failed).resolves.toMatchObject({ status: 401 });
+    expect(useAuth.getState().user).toBeNull();
+  });
+
+  it("keeps the session on a 401 from login or register", async () => {
+    for (const url of ["/auth/login", "/auth/register"]) {
+      signedIn();
+      await expect(
+        api.get(url, { adapter: failWith(401, url) }).catch((e) => e)
+      ).resolves.toMatchObject({ status: 401 });
+      expect(useAuth.getState().user).not.toBeNull();
+    }
+  });
+
+  it("keeps clearing on a 401 from password endpoints, as today", async () => {
+    await expect(
+      api.get("/auth/password/request", { adapter: failWith(401, "/auth/password/request") }).catch((e) => e)
+    ).resolves.toMatchObject({ status: 401 });
+    expect(useAuth.getState().user).toBeNull();
+  });
+
+  it("leaves the session alone on non-401 errors", async () => {
+    await expect(
+      api.get("/feed", { adapter: failWith(403, "/feed") }).catch((e) => e)
+    ).resolves.toMatchObject({ status: 403 });
+    expect(useAuth.getState().user).not.toBeNull();
+  });
+
+  it("leaves the session alone on network errors", async () => {
+    await expect(
+      api.get("/feed", { adapter: failWith(null, "/feed") }).catch((e) => e)
+    ).resolves.toMatchObject({ status: 0 });
+    expect(useAuth.getState().user).not.toBeNull();
+  });
+
+  it("settles concurrent 401s the same way, without throwing", async () => {
+    const results = await Promise.allSettled([
+      api.get("/feed", { adapter: failWith(401, "/feed") }),
+      api.get("/feed", { adapter: failWith(401, "/feed") }),
+    ]);
+    expect(results.map((r) => r.status)).toEqual(["rejected", "rejected"]);
+    expect(useAuth.getState().user).toBeNull();
+  });
+
+  it("keeps the thrown error shape callers rely on", async () => {
+    const err = await api
+      .get("/feed", { adapter: failWith(401, "/feed") })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.message).toBe("denied");
+    expect(err.status).toBe(401);
   });
 });

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { LngLatBounds } from "maplibre-gl";
 import {
+  boundsToValidBbox,
+  formatBbox,
+  neighborhoodBounds,
   parsePoint,
   PIN_NEIGHBOR_LIMIT,
   selectNearbyPins,
@@ -76,5 +80,83 @@ describe("selectNearbyPins", () => {
 
   it("returns an empty result when the clicked pin is not loaded", () => {
     expect(selectNearbyPins("missing", [pin("loaded", 0, 0)])).toEqual([]);
+  });
+});
+
+describe("boundsToValidBbox", () => {
+  const bounds = (south: number, west: number, north: number, east: number) =>
+    ({
+      getSouth: () => south,
+      getWest: () => west,
+      getNorth: () => north,
+      getEast: () => east,
+    }) as unknown as LngLatBounds;
+
+  it("quantizes coordinates to ~11m so identical views emit identical strings", () => {
+    const [south, west, north, east] = boundsToValidBbox(
+      bounds(12.345678, 77.654321, 12.365678, 77.674321)
+    );
+    // Math.round(x * 10000) / 10000 carries binary float artifacts
+    // (77.65430000000003); the server parses floats so this is harmless,
+    // but the values must be stable and within half a quantum.
+    for (const [actual, want] of [
+      [south, 12.3457],
+      [west, 77.6543],
+      [north, 12.3657],
+      [east, 77.6743],
+    ] as const) {
+      expect(actual).toBeCloseTo(want, 4);
+    }
+    expect(boundsToValidBbox(bounds(12.345678, 77.654321, 12.365678, 77.674321))).toEqual([
+      south, west, north, east,
+    ]);
+  });
+
+  it("serializes exactly four decimals with no float artifacts", () => {
+    expect(formatBbox([12.3457, 77.65430000000003, 12.3657, 77.67430000000002])).toBe(
+      "12.3457,77.6543,12.3657,77.6743"
+    );
+  });
+
+  it("clamps latitudes to the valid range", () => {
+    expect(boundsToValidBbox(bounds(-95, 0, 95, 10))).toEqual([-90, 0, 90, 10]);
+  });
+
+  it("expands a full-world span to the whole longitude range", () => {
+    expect(boundsToValidBbox(bounds(-10, -200, 10, 200))).toEqual([-10, -180, 10, 180]);
+  });
+});
+
+describe("neighborhoodBounds", () => {
+  it("returns null for fewer than two points", () => {
+    expect(neighborhoodBounds([])).toBeNull();
+    expect(neighborhoodBounds([{ lat: 1, lng: 2 }])).toBeNull();
+  });
+
+  it("frames spread points exactly", () => {
+    expect(
+      neighborhoodBounds([
+        { lat: 10, lng: 20 },
+        { lat: 12, lng: 26 },
+      ])
+    ).toEqual({ west: 20, south: 10, east: 26, north: 12 });
+  });
+
+  it("expands coincident points to the minimum span around their center", () => {
+    expect(
+      neighborhoodBounds([
+        { lat: 10, lng: 20 },
+        { lat: 10, lng: 20 },
+      ])
+    ).toEqual({ west: 19.995, south: 9.995, east: 20.005, north: 10.005 });
+  });
+
+  it("expands only the tight axis", () => {
+    expect(
+      neighborhoodBounds([
+        { lat: 10, lng: 20 },
+        { lat: 10, lng: 26 },
+      ])
+    ).toEqual({ west: 20, south: 9.995, east: 26, north: 10.005 });
   });
 });

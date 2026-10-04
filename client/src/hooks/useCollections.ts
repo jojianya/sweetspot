@@ -22,8 +22,8 @@ export function useCollections() {
   );
 
   const create = useCallback(
-    async (name: string, description?: string | null) => {
-      const collection = await createCollection(name, description);
+    async (name: string, description?: string | null, isPrivate?: boolean) => {
+      const collection = await createCollection(name, description, isPrivate);
       setData((prev) => [collection, ...(prev ?? [])]);
       return collection;
     },
@@ -56,5 +56,14 @@ export function useCollections() {
     [setData]
   );
 
-  return { collections: data ?? [], loading, error, retry, create, addPin, removePin };
+  const patchLocal = useCallback(
+    (collectionId: string, patch: Partial<CollectionEntry>) => {
+      setData((prev) =>
+        (prev ?? []).map((c) => (c.id === collectionId ? { ...c, ...patch } : c))
+      );
+    },
+    [setData]
+  );
+
+  return { collections: data ?? [], loading, error, retry, create, addPin, removePin, patchLocal };
 }

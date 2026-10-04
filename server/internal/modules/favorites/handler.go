@@ -3,7 +3,13 @@ package favorites
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
+)
+
+const (
+	savedListDefaultLimit = 50
+	savedListMaxLimit     = 200
 )
 
 type Handler struct {
@@ -61,13 +67,22 @@ func (h *Handler) Unsave(c *gin.Context) {
 func (h *Handler) GetSaved(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	entries, err := h.repo.List(c.Request.Context(), userID)
+	limit, ok := httpx.ParseLimit(c, savedListDefaultLimit, savedListMaxLimit)
+	if !ok {
+		return
+	}
+	offset, ok := httpx.ParseOffset(c)
+	if !ok {
+		return
+	}
+
+	entries, total, err := h.repo.List(c.Request.Context(), userID, limit, offset)
 	if err != nil {
 		response.Internal(c, "favorite: list", err, "user_id", userID)
 		return
 	}
 
-	response.OK(c, gin.H{"pins": entries})
+	response.OK(c, gin.H{"pins": entries, "total": total})
 }
 
 func (h *Handler) GetSavedIDs(c *gin.Context) {

@@ -35,6 +35,21 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Must run before Type-check, and on a cold .next. The app declares
+      # `RootLayout({ children }: LayoutProps<"/">)` in src/app/layout.tsx;
+      # LayoutProps is a global that Next generates into .next/types/, which is
+      # gitignored (client/.gitignore: /.next/) and therefore absent on a fresh
+      # checkout. Type-checking first fails with
+      #   src/app/layout.tsx(25,50): error TS2304: Cannot find name 'LayoutProps'.
+      # which is why this job was red on every push while the same command
+      # passed locally: a warm local .next carries the generated types.
+      #
+      # `next typegen` emits exactly those definitions without a full build, so
+      # it is cheaper than promoting the Build step above this one and keeps the
+      # type error reporting a type error rather than a build failure.
+      - name: Generate route types
+        run: pnpm next typegen
+
       - name: Type-check
         run: pnpm tsc --noEmit
 
@@ -42,6 +57,9 @@ jobs:
         run: pnpm test
 
       - name: Build
+        # No SITE_URL, NEXT_PUBLIC_API_URL, API_INTERNAL_URL or
+        # NEXT_ALLOWED_DEV_ORIGINS: a build has to succeed with the optional
+        # configuration unset. The client defaults each of them.
         run: pnpm build
 
   server:
@@ -86,18 +104,66 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          key: ${{ runner.os }}-go-${{ hashFiles('server/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
 
       - name: Download dependencies
         run: go mod download
 
+      # github.com/h2non/bimg is a cgo binding, so `go build` shells out to
+      # pkg-config looking for vips.pc. The runner image has no libvips, so the
+      # build died with:
+      #   # [pkg-config --cflags -- vips vips vips]
+      #   Package vips was not found in the pkg-config search path.
+      # and the job never reached the tests. deployments/docker/server.Dockerfile.dev
+      # already installs the Alpine equivalent (`vips-dev`); this is the Debian
+      # package that provides the same vips.pc. build-essential is normally
+      # preinstalled on the runner, but naming it keeps the step self-contained
+      # if that ever changes.
+      - name: Install libvips
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libvips-dev \
+            pkg-config \
+            build-essential
+
       - name: Build
         run: go build ./...
 
       - name: Test (with race detector)
+        # Deliberately no database credentials: the DB-backed tests skip rather
+        # than run against the service containers, which have no schema yet.
+        # TestMigrationUpDownUp covers the migrations against PostGIS below.
         run: go test ./... -race -count=1
+
+      - name: Test migrations (up/down/up against PostGIS)
+        env:
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_USER: postgres
+          DB_PASSWORD: testpass
+          # The service container's database. It is created fresh for this run
+          # and nothing else in this job uses it, which is what makes it safe to
+          # let the migration test apply and roll back the real schema in it.
+          MIGRATION_TEST_DB: goodspotdb
+        run: go test ./internal/platform/database/ -run TestMigrationUpDownUp -count=1 -v
+
+      - name: Test DB-backed endpoint tests (PostGIS)
+        env:
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_USER: postgres
+          DB_PASSWORD: testpass
+          # Separate disposable database on the same PostGIS service container.
+          # The migration test above owns goodspotdb, so endpoint tests get
+          # their own schema to avoid cross-package conflicts.
+          ENDPOINT_TEST_DB: endpoint_test
+          PGPASSWORD: testpass
+        run: |
+          psql -h localhost -U postgres -d goodspotdb -tc "SELECT 1 FROM pg_database WHERE datname='endpoint_test'" | grep -q 1 || psql -h localhost -U postgres -d goodspotdb -c 'CREATE DATABASE endpoint_test'
+          go test ./internal/endpointtest/ -run 'TestDBDeletePin|TestDBPasswordReset|TestDBCollection|TestDBCover|TestDBAuthRevoked|TestDBPinViews' -race -count=1 -v
 
       - name: Vet
         run: go vet ./...

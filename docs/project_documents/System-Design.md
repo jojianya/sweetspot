@@ -63,19 +63,15 @@ POST   /streams/:id/end         — [Phase 8, planned]
 
 Roles are `user` (default), `admin`, and `owner`. There is exactly one owner-bootstrap path: the first owner is set directly against the `users` table via `psql`/DBeaver — no endpoint grants it. From there, the owner promotes trusted users to admin through `PATCH /users/:id/role`. Admins handle day-to-day report review through `PATCH /reports/:id`; nothing about report review requires direct database access anymore, though it remains available as a fallback.
 
-### WebSocket events — **Phase 5, planned, not yet implemented**
+### SSE events — **implemented**
 
 ```
-Client → Server
-  subscribe:  { type: "subscribe", cells: ["u4pruy", "u4prux", ...] }
-  unsubscribe:{ type: "unsubscribe", cells: [...] }
-  chat:       { type: "chat", streamId, message }
-
-Server → Client
-  pin_batch:  { type: "pin_batch", cell: "u4pruy", pins: [...] }
-  viewer_count: { type: "viewer_count", streamId, count }
-  chat:       { type: "chat", streamId, user, message }
+Client → GET /events?bbox=...&category=...
+Server → Client:  event: pin\ndata: <pins.Event JSON>\n\n
+Server → Client:  : heartbeat\n\n   (every 20 s)
 ```
+
+Each connection filters server-side: category equality, then bbox range match via `matches` (handler.go:237-250).
 
 ---
 
@@ -127,18 +123,19 @@ CREATE TABLE pin_photos (
 CREATE INDEX pin_photos_pin_id_idx ON pin_photos (pin_id);
 CREATE UNIQUE INDEX pin_photos_pin_id_position_idx ON pin_photos (pin_id, position);
 
--- Migration 0005_streams.sql (Phase 8, planned):
+-- Migrations 0005_streams.sql + 0015 (planned, no code behind them yet):
 -- CREATE TABLE streams (
 --     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 --     pin_id            UUID REFERENCES pins(id) ON DELETE SET NULL,
 --     broadcaster_id    UUID REFERENCES users(id) ON DELETE SET NULL,
---     livekit_room_name TEXT NOT NULL UNIQUE,
 --     status            TEXT NOT NULL CHECK (status IN ('live','ended')) DEFAULT 'live',
 --     peak_viewer_count INT NOT NULL DEFAULT 0,
 --     started_at        TIMESTAMPTZ DEFAULT now(),
 --     ended_at          TIMESTAMPTZ
 -- );
 -- CREATE INDEX streams_status_idx ON streams (status) WHERE status = 'live';
+-- 0015 dropped the identifier column 0005 had added, which named a specific
+-- media vendor and was never read or written by any code.
 
 CREATE TABLE reports (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -161,66 +158,37 @@ CREATE TABLE reports (
 
 **Why `category_id` is `NOT NULL` with `ON DELETE RESTRICT`:** the PRD defines category as required. `RESTRICT` means a category can't be deleted while any pin still references it, so the "required" guarantee can never be silently broken by a category disappearing out from under existing pins.
 
-**Why geohash column, not just PostGIS GIST index:** the GIST index is for precise "pins within this bounding box" queries (used by the REST viewport endpoint). The `geohash` column is a coarser bucket used purely for **WebSocket room assignment** (Phase 5) — cheap to group clients by, avoids running a spatial query on every broadcast.
+**Why geohash column, not just PostGIS GIST index:** geohash exists from the first schema (room assignment was planned) and remains a column; the viewport path is PostGIS GIST, and SSE filtering is done in memory from parsed locations.
 
 ---
 
-## 4. Real-Time Fan-Out Design (the core scaling piece) — **Phase 5, planned, not yet implemented**
+## 4. Real-Time Fan-Out Design — **implemented as SSE + Redis**
 
-### Room assignment
+### Connection model
 
-- Map viewport is divided into geohash cells (e.g., precision 5-6, ~5km cells, tuned by zoom level)
-- Client subscribes to the cells currently visible on its screen
-- Server maintains: `map[geohashCell][]*Connection`
+- One `GET /events?bbox=&category=` stream per open client; no subscriptions, no rooms.
+- Each connection subscribes once to the Redis channel `goodspot:pins` and filters server-side.
 
 ### Broadcast flow
 
 ```
 1. New pin written to Postgres
-2. Compute its geohash cell
-3. Push event to Redis channel: pin_events:{cell}
-4. Every Go instance subscribed to that channel receives it
-5. Each instance batches events per cell (500ms–1s window)
-6. On tick, broadcast batched pins to all local connections in that cell's room
+2. events.PinCreated → Broker.PinCreated → PUBLISH "goodspot:pins"
+3. Every Go instance subscribed receives it
+4. Each subscriber's runStreamLoop applies matches(ev, bbox, category) and drops non-matching events
+5. Matching event is written as `event: pin` + JSON payload
 ```
 
-### Why batching + rooms + Redis together
+### Why single stream + Redis together (replaces rooms+batching design)
 
-- **Rooms** — shrink fan-out from "all connected users" to "users actually viewing this area"
-- **Batching** — collapse many rapid events into fewer broadcast operations
-- **Redis Pub/Sub** — lets this work correctly across multiple horizontally-scaled Go instances (a pin written on instance A needs to reach a viewer connected to instance B)
+- **No rooms/cells** — one global stream per process; bbox/category filtering happens per subscriber at the handler.
+- **Batching** — deferred: each pin create emits one event today.
+- **Redis Pub/Sub** — lets this work across multiple horizontally-scaled Go instances.
 
 ### Concurrency handling in Go
 
-- Each WebSocket connection read/write runs in its own goroutine
-- Broadcasting to a room's connections is parallelized across goroutines (bounded via worker pool to avoid unbounded goroutine spawn under extreme load)
-- `sync.RWMutex` or sharded maps protect the room registry from concurrent access
-
----
-
-## 5. Livestreaming Design — **Phase 8, planned, not yet implemented**
-
-```
-Broadcaster taps "Go Live"
-  → POST /streams { pinId }
-  → Go API creates a LiveKit room, returns broadcaster token
-  → Broadcaster's client connects to LiveKit via WebRTC, starts publishing
-
-Viewer opens the stream
-  → GET /streams/:id
-  → Go API returns a viewer token (scoped, read-only)
-  → Viewer's client connects to LiveKit, subscribes to broadcaster's tracks
-
-Chat/reactions
-  → Sent over existing WebSocket Realtime Hub (not through LiveKit)
-  → Same room/batching pattern as pin broadcasts, keyed by streamId instead of geohash
-
-Viewer count
-  → LiveKit emits webhooks on participant join/leave
-  → Go API updates count (and streams.peak_viewer_count if a new high), pushes via WebSocket to the stream's room
-```
-
-**Why chat goes through your own WebSocket hub, not LiveKit's data channel:** keeps chat, viewer count, and pin events all on one consistent real-time infrastructure you control and can evolve (e.g., persisting chat history to Postgres) rather than splitting logic across two systems.
+- Each SSE connection runs a write loop (`runStreamLoop`) with heartbeat ticker; writes carry a 10 s deadline (`handler.go:56-62`).
+- A process-wide cap (`MAX_SSE_CONNECTIONS`, default 1000) bounds concurrency via `ConnectionLimiter` (`handler.go:67-95`).
 
 ---
 
@@ -228,25 +196,22 @@ Viewer count
 
 | Scenario                                                           | Handling                                                                                                                                                        |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Go instance crashes mid-broadcast                                  | **Phase 5:** Client WebSocket reconnects, re-subscribes to cells; Redis Pub/Sub means other instances unaffected. **Currently N/A (no WebSocket yet).** |
+| Go instance crashes mid-broadcast                                  | Client `EventSource` reconnects and re-filters with the same bbox; Redis Pub/Sub means other instances unaffected. No guaranteed replay of missed events. |
 | Pin saved but Redis publish fails/is skipped                        | **Phase 5, known gap:** pin exists in Postgres but never broadcasts live. Planned fix: transactional outbox table + poller |
 | Photo upload fails mid-way                                          | ✅ Client retries; pin (and its `pin_photos` rows) isn't created until all photos are validated and saved — inserted in one DB transaction |
 | Unauthenticated user attempts a gated action (create pin, go live) | ✅ Middleware rejects with 401 before handler logic runs; client shows login/register prompt                                                                       |
 | Non-admin attempts to review a report, or non-owner attempts a role change | ✅ Middleware rejects with 403 before handler logic runs                                                                                                     |
 | Viewport query on sparse data                                      | ✅ Standard bounding-box query, no special handling needed at this scale                                                                                           |
 | Viewport query on dense hotspot (thousands of pins in view)        | ✅ Paginate via `LIMIT` param (default 200, max 200); marker clustering planned for frontend                                                                    |
-| LiveKit room fails to start                                        | **Phase 8:** Return error to broadcaster before they think they're live; don't create a "phantom" stream row                                                                 |
 | Redis goes down                                                    | ✅ Real-time updates degrade to single-instance-only (if only one instance up) or pause; core REST API (pins, auth) keeps working since it doesn't depend on Redis (currently Redis is only used for JWT blacklist, so logout is temporarily affected) |
 
 ---
 
 ## 7. What's Deliberately Deferred (not yet implemented)
 
-- WebSocket real-time layer (Phase 5) — code scaffolded, not built
-- Livestreaming via LiveKit (Phase 8) — code scaffolded, not built
+- ~~WebSocket real-time layer (Phase 5)~~ — superseded by SSE (see §4)
 - Cloudflare R2 storage (Phase 6) — env vars documented, not wired
 - Multi-region deployment
 - Dedicated microservice split (Realtime Hub as separate service from API) — start as one Go binary, split only if profiling shows a real need
 - Full Kafka-style event streaming — Redis Pub/Sub is sufficient at MVP/early-growth scale
-- Self-hosted LiveKit — start on LiveKit Cloud (managed)
 - Transactional outbox for pin broadcast events — noted as a known gap in §6, not yet implemented

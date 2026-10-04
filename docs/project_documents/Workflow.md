@@ -35,7 +35,7 @@ This is the only mandatory gate for regular use of the app — everything before
 12. **Photos processed** — each image is converted to WebP (downscaled to ≤1600px, q80) with a 400px square thumbnail generated alongside (libvips via bimg).
 13. **Pin saved** — pin row and its `pin_photos` rows (with `photo_url` + `thumbnail_url`) written to Postgres/PostGIS in one transaction; files stored on the local filesystem (Cloudflare R2 planned for production).
 14. **Pin appears** — the creator sees it immediately (optimistic UI update); other users see it when they next load/reload the map viewport containing it.
-    > **Phase 5 (planned):** the new pin's geohash cell will be pushed to Redis; the Realtime Hub will batch it into the next broadcast window (500ms–1s) so anyone with that cell in view sees it appear via WebSocket `pin_batch` — no refresh needed.
+    > Implemented: the new pin's event is published to Redis; matching SSE clients receive it live.
 
 ---
 
@@ -59,7 +59,6 @@ This is the only mandatory gate for regular use of the app — everything before
 
 ## 6. Future workflow extensions (post-MVP, not built yet)
 
-- **Going live**: `POST /streams` → LiveKit room created → broadcaster connects via WebRTC; viewers hit `GET /streams/:id` for a join token; chat/reactions ride the existing WebSocket hub keyed by `streamId` instead of geohash.
 - **Likes & comments**: engagement layered onto individual pins.
 - **Sponsored pins**: paid placement, separate from the organic pin flow.
 
@@ -90,7 +89,7 @@ Tap "+" to add a pin
                                               │
                                               ▼
                                    Pin visible on other users' maps on next load
-                                   [Phase 5: pushed live via WebSocket]
+                                   [live via SSE `GET /events`]
 
 (Separate, optional path — any logged-in user, any time)
 View pin ──► Report pin ──► Stored in `reports` table ──► Admin reviews via PATCH /reports/:id ──► Pin hidden (approved) or report dismissed

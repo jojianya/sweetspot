@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import MapView, { type MapLocation } from "./MapView";
@@ -17,7 +15,14 @@ import { useCategories } from "@/hooks/useCategories";
 import { usePinStream } from "@/hooks/usePinStream";
 import { useTrending } from "@/hooks/useTrending";
 import { parsePoint } from "@/lib/utils";
-import { categoryHref, resolveCategoryParam } from "@/lib/utils/category";
+import { toPinListEntry } from "@/lib/utils/pinEntry";
+import {
+  canonicalCategoryAction,
+  categoryHref,
+  pickCategoryParam,
+  resolveCategoryParam,
+  slugForCategoryId,
+} from "@/lib/utils/category";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -36,7 +41,7 @@ export default function MapApp({
   const requestedCategoryRef = useRef<{ slug: string | null } | null>(null);
   const currentQuery = searchParams.toString();
   const currentCategoryParam = searchParams.get("category");
-  const categoryParam = currentQuery === "" ? initialCategory : currentCategoryParam;
+  const categoryParam = pickCategoryParam(currentQuery, currentCategoryParam, initialCategory);
   const resolvedCategory =
     categories.length > 0 ? resolveCategoryParam(categoryParam, categories) : null;
 
@@ -54,7 +59,7 @@ export default function MapApp({
   const [createOpen, setCreateOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  const { pins, loading, error: pinsError, addPin } = usePins(bbox, effectiveCategory);
+  const { pins, loading, error: pinsError, addPin, removePin, refetch } = usePins(bbox, effectiveCategory);
   const { pins: trending, loading: trendingLoading, error: trendingError } = useTrending(
     trendingOpen ? bbox : null
   );
@@ -76,7 +81,22 @@ export default function MapApp({
     [addPin]
   );
 
-  usePinStream(bbox, effectiveCategory, handleStreamedPin);
+  // Realtime removals: drop the pin from the map list and close the detail
+  // panel when its open pin disappears (owner delete or report approve).
+  const handleStreamedRemoval = useCallback(
+    (id: string) => {
+      removePin(id);
+      setSelectedPinId((prev) => (prev === id ? null : prev));
+      setHighlightId((prev) => (prev === id ? null : prev));
+    },
+    [removePin]
+  );
+
+  const handleStreamReconnect = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  usePinStream(bbox, effectiveCategory, handleStreamedPin, handleStreamedRemoval, handleStreamReconnect);
 
   useEffect(() => {
     return () => {
@@ -95,8 +115,7 @@ export default function MapApp({
 
   const handleSelectCategory = useCallback(
     (id: number | null) => {
-      const category = id === null ? null : categories.find((item) => item.id === id);
-      const slug = category?.slug ?? null;
+      const slug = slugForCategoryId(id, categories);
       requestedCategoryRef.current = { slug };
       replaceCategoryParam(slug);
     },
@@ -106,19 +125,19 @@ export default function MapApp({
   // Legacy numeric links resolve to their category and are canonicalized to
   // the slug. Unknown values remain "All" and are removed from the query.
   useEffect(() => {
-    const requestedCategory = requestedCategoryRef.current;
-    if (requestedCategory !== null) {
-      if (currentCategoryParam === requestedCategory.slug) {
-        requestedCategoryRef.current = null;
-      }
+    const requested = requestedCategoryRef.current;
+    const action = canonicalCategoryAction(
+      requested ? requested.slug : undefined,
+      currentCategoryParam,
+      categories
+    );
+    if (action.type === "clear-requested") {
+      requestedCategoryRef.current = null;
       return;
     }
-
-    if (categories.length === 0 || currentCategoryParam === null) return;
-
-    const canonicalSlug = resolveCategoryParam(currentCategoryParam, categories)?.slug ?? null;
-    if (canonicalSlug === currentCategoryParam) return;
-    replaceCategoryParam(canonicalSlug);
+    if (action.type === "replace") {
+      replaceCategoryParam(action.slug);
+    }
   }, [categories, currentCategoryParam, replaceCategoryParam]);
 
   // The overlays (posting crosshair, create dialog, saved panel) are mutually
@@ -178,21 +197,8 @@ export default function MapApp({
 
   const handleCreated = useCallback(
     (pin: CreatedPin, photos: NewPinPhoto[]) => {
-      const cover = photos[0]?.thumbnail_url ?? photos[0]?.photo_url ?? "";
       const username = useAuth.getState().user?.username ?? "";
-      addPin({
-        id: pin.id,
-        user_id: pin.user_id,
-        location: pin.location,
-        geohash: pin.geohash,
-        caption: pin.caption,
-        category_id: pin.category_id,
-        is_hidden: pin.is_hidden,
-        views: pin.views,
-        created_at: pin.created_at,
-        cover_url: cover,
-        username,
-      });
+      addPin(toPinListEntry(pin, photos, username));
       setSelectedPinId(pin.id);
       setHighlightId(pin.id);
       closeOverlays();
@@ -372,6 +378,10 @@ export default function MapApp({
           key={detail.id}
           pin={detail}
           onClose={() => setSelectedPinId(null)}
+          onDeleted={(id) => {
+            removePin(id);
+            setSelectedPinId(null);
+          }}
         />
       )}
 

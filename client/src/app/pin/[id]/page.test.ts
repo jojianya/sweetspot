@@ -82,13 +82,16 @@ describe("pin page metadata", () => {
     expect(mocks.notFound).toHaveBeenCalledOnce();
   });
 
-  it("calls notFound() for a genuine 404 (ApiError status 404)", async () => {
+  // getPinServer maps a 404 response to null (lib/api/server.ts), so the
+  // page's contract is "null means missing". Anything it throws is a real
+  // failure and belongs in error.tsx, including an ApiError carrying 404.
+  it("treats a thrown ApiError 404 as a real failure, not a missing pin", async () => {
     mocks.getPinServer.mockRejectedValue(new ApiError("pin not found", 404));
 
     await expect(PinPage({ params: Promise.resolve({ id: PIN_ID }) })).rejects.toThrow(
-      "NEXT_NOT_FOUND"
+      "pin not found"
     );
-    expect(mocks.notFound).toHaveBeenCalledOnce();
+    expect(mocks.notFound).not.toHaveBeenCalled();
   });
 
   it("propagates a timeout to error.tsx instead of calling notFound()", async () => {
@@ -118,14 +121,11 @@ describe("pin page metadata", () => {
     ).rejects.toThrow("network error");
   });
 
-  it("marks a genuine 404 in metadata as noindex", async () => {
+  it("propagates a thrown ApiError 404 out of metadata rather than masking it", async () => {
     mocks.getPinServer.mockRejectedValue(new ApiError("pin not found", 404));
 
-    const metadata = await generateMetadata({ params: Promise.resolve({ id: PIN_ID }) });
-
-    expect(metadata).toEqual({
-      title: "Pin not found · Goodspot",
-      robots: { index: false, follow: false },
-    });
+    await expect(
+      generateMetadata({ params: Promise.resolve({ id: PIN_ID }) })
+    ).rejects.toThrow("pin not found");
   });
 });

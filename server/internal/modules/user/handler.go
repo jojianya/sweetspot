@@ -11,7 +11,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
-	"github.com/jojianya/sweetspot247-backend/internal/modules/pins/imaging"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/imaging"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 )
 
@@ -103,28 +103,15 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 	}
 	fields := c.Request.MultipartForm.Value
 
-	var patch UpdateProfilePatch
-	if vals := fields["username"]; len(vals) > 0 {
-		username := strings.TrimSpace(vals[0])
-		if username == "" {
-			response.BadRequest(c, "username cannot be empty")
-			return
-		}
-		if n := utf8.RuneCountInString(username); n < usernameMinRunes || n > usernameMaxRunes {
-			response.BadRequest(c, "username must be between 3 and 30 characters")
-			return
-		}
-		patch.Username = &username
+	input, msg := validateProfileFields(fields["username"], fields["socials"], len(c.Request.MultipartForm.File["avatar"]) > 0)
+	if msg != "" {
+		response.BadRequest(c, msg)
+		return
 	}
 
-	if vals := fields["socials"]; len(vals) > 0 {
-		socials, parseErr := parseSocials(vals[0])
-		if parseErr != nil {
-			response.BadRequest(c, parseErr.Error())
-			return
-		}
-		patch.Socials = &socials
-	}
+	var patch UpdateProfilePatch
+	patch.Username = input.username
+	patch.Socials = input.socials
 
 	var newAvatar *string
 	if fhs := c.Request.MultipartForm.File["avatar"]; len(fhs) > 0 {
@@ -160,11 +147,6 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 		}
 		newAvatar = &url
 		patch.AvatarURL = &url
-	}
-
-	if patch.Username == nil && patch.Socials == nil && patch.AvatarURL == nil {
-		response.BadRequest(c, "nothing to update")
-		return
 	}
 
 	updated, err := h.service.UpdateProfile(c.Request.Context(), userID, patch)
@@ -226,8 +208,9 @@ func parseSocials(raw string) (map[string]any, error) {
 // List returns users for the owner's role-management console. With `q` it
 // filters to usernames containing the query (case-insensitive); without, it
 // returns every user (newest first). Both modes are paginated via limit/offset,
-// and the response always includes `total` — the number of registered users.
-// Owner-gated at the route level.
+// and the response always includes `total` — the number of registered users
+// when listing, or the number of matches when searching. Owner-gated at the
+// route level.
 func (h *Handler) List(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
 	if len(query) > 64 {
@@ -256,17 +239,11 @@ func (h *Handler) List(c *gin.Context) {
 	if query == "" {
 		found, total, err = h.service.ListUsers(c.Request.Context(), limit, offset)
 	} else {
-		found, err = h.service.SearchUsers(c.Request.Context(), query, limit)
-		if err != nil {
-			response.Internal(c, "user: list", err)
-			return
-		}
-		// SearchUsers doesn't return total; fall back to CountUsers for searches.
-		total, err = h.service.CountUsers(c.Request.Context())
-		if err != nil {
-			response.Internal(c, "user: count", err)
-			return
-		}
+		found, total, err = h.service.SearchUsers(c.Request.Context(), query, limit, offset)
+	}
+	if err != nil {
+		response.Internal(c, "user: list", err)
+		return
 	}
 
 	items := make([]PublicUser, 0, len(found))

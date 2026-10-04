@@ -77,6 +77,35 @@ CREATE INDEX CONCURRENTLY b ON t (y) WHERE z;`,
 				"\n\nCREATE INDEX CONCURRENTLY b ON t (y) WHERE z;",
 			},
 		},
+		{
+			name: "dollar quoted function body with semicolons",
+			input: `CREATE FUNCTION f() RETURNS TRIGGER AS $$
+BEGIN
+	NEW.updated_at = now();
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER t BEFORE UPDATE ON pins FOR EACH ROW EXECUTE FUNCTION f();`,
+			want: []string{
+				"CREATE FUNCTION f() RETURNS TRIGGER AS $$\nBEGIN\n\tNEW.updated_at = now();\n\tRETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;",
+				"\nCREATE TRIGGER t BEFORE UPDATE ON pins FOR EACH ROW EXECUTE FUNCTION f();",
+			},
+		},
+		{
+			name:  "dollar quoted body containing quotes and comment markers",
+			input: "SELECT $tag$ it's -- not a comment; still one $$ LEAKED; $$tag$ AS s; SELECT 2;",
+			want:  []string{"SELECT $tag$ it's -- not a comment; still one $$ LEAKED; $$tag$ AS s;", " SELECT 2;"},
+		},
+		{
+			name:  "positional placeholders are not dollar quotes",
+			input: "UPDATE pins SET views = views + 1 WHERE id = $1; SELECT 2;",
+			want:  []string{"UPDATE pins SET views = views + 1 WHERE id = $1;", " SELECT 2;"},
+		},
+		{
+			name:  "dollar sign inside a string literal is not a quote",
+			input: "INSERT INTO t VALUES ('cost $5 and $x$'); SELECT 2;",
+			want:  []string{"INSERT INTO t VALUES ('cost $5 and $x$');", " SELECT 2;"},
+		},
 	}
 
 	for _, tc := range tests {

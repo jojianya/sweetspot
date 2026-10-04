@@ -10,7 +10,7 @@ import (
 type Service interface {
 	PinExists(ctx context.Context, pinID string) (bool, error)
 	CreateReport(ctx context.Context, pinID, reporterID, reason string) (Report, error)
-	ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, error)
+	ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, *string, error)
 	ListReports(ctx context.Context, status *string, limit, offset int) ([]ReportListEntry, error)
 }
 
@@ -38,7 +38,7 @@ func (s *service) CreateReport(ctx context.Context, pinID, reporterID, reason st
 	return rep, nil
 }
 
-func (s *service) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, error) {
+func (s *service) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, *string, error) {
 	return s.repo.ReviewReport(ctx, reportID, action, resolvedBy)
 }
 

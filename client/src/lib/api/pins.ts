@@ -4,9 +4,17 @@ import {
   newPinPhotoSchema,
   pinDetailSchema,
   pinListEntrySchema,
+  pinPhotoSchema,
   trendingPinSchema,
 } from "./schemas";
-import type { CreatedPin, NewPinPhoto, PinDetail, PinListEntry, TrendingPin } from "@/lib/types";
+import type {
+  CreatedPin,
+  NewPinPhoto,
+  PinDetail,
+  PinListEntry,
+  PinPhoto,
+  TrendingPin,
+} from "@/lib/types";
 
 export async function fetchPins(
   bbox: string,
@@ -72,7 +80,7 @@ export async function searchPins(
 export async function updatePin(
   id: string,
   form: { caption: string; categoryId: number | null; photos: File[] | null }
-): Promise<CreatedPin> {
+): Promise<{ pin: CreatedPin; photos: PinPhoto[] }> {
   const fd = new FormData();
   fd.append("caption", form.caption);
   if (form.categoryId !== null) fd.append("category_id", String(form.categoryId));
@@ -80,8 +88,11 @@ export async function updatePin(
     for (const file of form.photos) fd.append("photos", file);
   }
 
-  const { data } = await api.patch<{ pin: unknown }>(`/pins/${id}`, fd);
-  return createdPinSchema.parse(data.pin);
+  const { data } = await api.patch<{ pin: unknown; photos: unknown }>(`/pins/${id}`, fd);
+  return {
+    pin: createdPinSchema.parse(data.pin),
+    photos: pinPhotoSchema.array().parse(data.photos),
+  };
 }
 
 export async function deletePin(id: string): Promise<void> {
@@ -89,9 +100,9 @@ export async function deletePin(id: string): Promise<void> {
 }
 
 /**
- * Registers a single view for a pin and returns the updated counter. Call this
- * when a pin's detail is actually opened — the read endpoints never increment
- * views, so SSR fetches and crawlers cannot inflate the count.
+ * Registers the viewer's view of a pin and returns the updated counter.
+ * Fire-and-forget: the server counts at most once per account (unique
+ * pin_views row), so callers only need a once-per-open guard.
  */
 export async function registerPinView(id: string): Promise<number> {
   const { data } = await api.post<{ views: number }>(`/pins/${id}/view`);

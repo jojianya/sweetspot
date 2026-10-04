@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
+
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 )
 
 type mockRepository struct {
@@ -57,6 +60,18 @@ func (m *mockRepository) GetByID(_ context.Context, id string) (User, error) {
 	return u, nil
 }
 
+func (m *mockRepository) GetSessionState(_ context.Context, id string) (middleware.SessionState, error) {
+	u, ok := m.users[id]
+	if !ok {
+		return middleware.SessionState{}, ErrNotFound
+	}
+	var floor time.Time
+	if u.SessionsValidAfter != nil {
+		floor = *u.SessionsValidAfter
+	}
+	return middleware.SessionState{ValidAfter: floor, Role: u.Role}, nil
+}
+
 func (m *mockRepository) CountOwners(_ context.Context) (int, error) {
 	return m.owners, nil
 }
@@ -65,13 +80,20 @@ func (m *mockRepository) UpdateRole(_ context.Context, id, role string) (User, e
 	if m.updateErr != nil {
 		return User{}, m.updateErr
 	}
-	u := m.users[id]
+	u, ok := m.users[id]
+	if !ok {
+		return User{}, ErrNotFound
+	}
+	// Mirror the repository's atomic last-owner guard.
+	if u.Role == RoleOwner && role != RoleOwner && m.owners <= 1 {
+		return User{}, ErrCannotDemoteLastOwner
+	}
 	u.Role = role
 	return u, nil
 }
 
-func (m *mockRepository) SearchUsers(_ context.Context, _ string, _ int) ([]User, error) {
-	return m.search, m.searchErr
+func (m *mockRepository) SearchUsers(_ context.Context, _ string, _ int, _ int) ([]User, int, error) {
+	return m.search, len(m.search), m.searchErr
 }
 
 func (m *mockRepository) ListUsers(_ context.Context, _ int, _ int) ([]User, int, error) {
@@ -162,12 +184,15 @@ func TestSearchUsersDelegatesToRepository(t *testing.T) {
 			{ID: "u2", Username: "alicia", Role: RoleAdmin},
 		},
 	})
-	got, err := svc.SearchUsers(context.Background(), "ali", 20)
+	got, total, err := svc.SearchUsers(context.Background(), "ali", 20, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 2 || got[0].Username != "alice" || got[1].Role != RoleAdmin {
 		t.Fatalf("unexpected results: %+v", got)
+	}
+	if total != 2 {
+		t.Fatalf("expected total 2, got %d", total)
 	}
 }
 

@@ -10,14 +10,15 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 )
 
 func init() { gin.SetMode(gin.TestMode) }
 
-// stubRepo implements Repository with only the two methods DeletePin touches.
-// The embedded nil interface means any other call panics, which is what we want
-// from a test double.
+// stubRepo implements Repository with only the methods the handler tests
+// touch. The embedded nil interface means any other call panics, which is
+// what we want from a test double.
 type stubRepo struct {
 	Repository
 
@@ -25,24 +26,88 @@ type stubRepo struct {
 	getErr error
 	delErr error
 
-	deletedID     string
-	deletedUserID string
+	deletedID          string
+	deletedUserID      string
+	deletedIsModerator bool
+
+	userExists     bool
+	userExistsErr  error
+	categoryExists bool
+	createErr      error
+	created        bool
+	updateErr      error
+	updated        bool
+	updatePhotos   int
+	updatedID      string
+	// updateResultPhotos is what UpdatePin reports as the pin's photo set
+	// after the update; visible answers PinVisible.
+	updateResultPhotos []PinPhoto
+	visible            bool
 }
 
 func (s *stubRepo) GetPin(context.Context, string) (PinDetail, error) {
 	return s.detail, s.getErr
 }
 
-func (s *stubRepo) DeletePin(_ context.Context, id, userID string) error {
-	s.deletedID, s.deletedUserID = id, userID
+func (s *stubRepo) DeletePin(_ context.Context, id, userID string, isModerator bool) error {
+	s.deletedID, s.deletedUserID, s.deletedIsModerator = id, userID, isModerator
 	return s.delErr
+}
+
+func (s *stubRepo) UserExists(context.Context, string) (bool, error) {
+	return s.userExists, s.userExistsErr
+}
+
+func (s *stubRepo) CategoryExists(context.Context, int) (bool, error) {
+	return s.categoryExists, nil
+}
+
+func (s *stubRepo) CreatePin(_ context.Context, _ NewPin) (Pin, error) {
+	s.created = true
+	return Pin{}, s.createErr
+}
+
+func (s *stubRepo) UpdatePin(_ context.Context, id, userID string, isModerator bool, patch UpdatePinPatch) (Pin, []PinPhoto, error) {
+	s.updated = true
+	if patch.Photos != nil {
+		s.updatePhotos = len(patch.Photos)
+	}
+	if s.updateErr != nil {
+		return Pin{}, nil, s.updateErr
+	}
+	// Mirror the repository's UPDATE predicate: owner or moderator, visible only.
+	if !s.visible {
+		return Pin{}, nil, ErrNotFound
+	}
+	if s.detail.UserID.String() != userID && !isModerator {
+		return Pin{}, nil, ErrForbidden
+	}
+	s.updatedID = id
+	return Pin{}, s.updateResultPhotos, nil
+}
+
+func (s *stubRepo) PinVisible(context.Context, string) (bool, error) {
+	return s.visible, nil
+}
+
+// stubRoles is a one-method RoleReader returning a fixed role for any caller.
+type stubRoles struct {
+	role string
+}
+
+func (s stubRoles) GetByID(context.Context, string) (users.User, error) {
+	return users.User{Role: s.role}, nil
 }
 
 // newDeleteHarness wires a handler with a stub repo and a real local storage in
 // dir, behind a gin route whose auth middleware is stubbed to report userID.
 func newDeleteHarness(t *testing.T, repo *stubRepo, dir string) *gin.Engine {
 	t.Helper()
-	h := &Handler{repo: repo, store: storage.NewLocal(dir, "http://api.test")}
+	h := &Handler{
+		repo:   repo,
+		store:  storage.NewLocal(dir, "http://api.test"),
+		events: nopEvents{},
+	}
 
 	r := gin.New()
 	r.DELETE("/pins/:id", func(c *gin.Context) {
@@ -83,9 +148,12 @@ func TestDeletePinRemovesPhotoFiles(t *testing.T) {
 	photoURL := stagePhoto(t, dir, "photo-1.webp")
 	thumbURL := stagePhoto(t, dir, "thumb-1.webp")
 
-	r := newDeleteHarness(t, &stubRepo{detail: PinDetail{Photos: []PinPhoto{
-		{PhotoURL: photoURL, ThumbnailURL: thumbURL},
-	}}}, dir)
+	r := newDeleteHarness(t, &stubRepo{detail: PinDetail{
+		Photos: []PinPhoto{
+			{PhotoURL: photoURL, ThumbnailURL: thumbURL},
+		},
+		Location: "POINT(0 0)",
+	}}, dir)
 
 	w := deletePin(r, "pin-1")
 	if w.Code != http.StatusNoContent {
@@ -145,10 +213,10 @@ func TestDeletePinForbiddenLeavesFilesOnDisk(t *testing.T) {
 	}
 }
 
-// TestDeletePinNotFoundReturns404 keeps the 404 path intact now that the handler
-// reads the pin first: a missing pin must still be 404, not 500.
+// TestDeletePinNotFoundReturns404 keeps the 404 path intact: a missing or
+// already-hidden pin must still be 404, not 500.
 func TestDeletePinNotFoundReturns404(t *testing.T) {
-	r := newDeleteHarness(t, &stubRepo{getErr: ErrNotFound}, t.TempDir())
+	r := newDeleteHarness(t, &stubRepo{delErr: ErrNotFound}, t.TempDir())
 
 	w := deletePin(r, "gone")
 	if w.Code != http.StatusNotFound {
@@ -170,5 +238,48 @@ func TestDeletePinHandlesPinWithNoPhotos(t *testing.T) {
 
 	if w := deletePin(r, "pin-1"); w.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+// TestDeletePinForwardsModeratorFlag proves the moderator bypass reaches the
+// repository as a flag (same IsModerator check as UpdatePin) instead of a
+// handler-side owner comparison, so the SQL predicate decides atomically.
+func TestDeletePinForwardsModeratorFlag(t *testing.T) {
+	dir := t.TempDir()
+	repo := &stubRepo{detail: PinDetail{Photos: []PinPhoto{}, Location: "POINT(0 0)"}}
+	h := &Handler{
+		repo:   repo,
+		store:  storage.NewLocal(dir, "http://api.test"),
+		roles:  stubRoles{role: users.RoleAdmin},
+		events: nopEvents{},
+	}
+	r := gin.New()
+	r.DELETE("/pins/:id", func(c *gin.Context) {
+		c.Set("user_id", "moderator-1")
+		h.DeletePin(c)
+	})
+
+	if w := deletePin(r, "pin-9"); w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if !repo.deletedIsModerator {
+		t.Error("expected isModerator=true to reach the repository for an admin caller")
+	}
+	if repo.deletedUserID != "moderator-1" {
+		t.Errorf("DeletePin got userID %q, want \"moderator-1\"", repo.deletedUserID)
+	}
+}
+
+// TestDeletePinNonModeratorFlagIsFalse guards the common path: a plain owner
+// delete must not claim moderation rights.
+func TestDeletePinNonModeratorFlagIsFalse(t *testing.T) {
+	repo := &stubRepo{detail: PinDetail{Photos: []PinPhoto{}}}
+	r := newDeleteHarness(t, repo, t.TempDir())
+
+	if w := deletePin(r, "pin-1"); w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if repo.deletedIsModerator {
+		t.Error("expected isModerator=false for a handler without roles")
 	}
 }

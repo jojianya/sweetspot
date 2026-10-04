@@ -257,7 +257,7 @@ Granular, task-level checklist version of the Roadmap. Each phase is broken into
 
 This app is photo-heavy and map-based — unprocessed multi-photo uploads at up to 10MB each will hurt storage costs and load times fast once there's real traffic. Do this now, before Phase 4 puts real images in front of real users, not as a later optimization pass.
 
-- [x] `go get github.com/h2non/bimg` — **chosen:** libvips via `bimg` (CGO binding; requires libvips installed), implemented in `internal/modules/pins/imaging/imaging.go`
+- [x] `go get github.com/h2non/bimg` — **chosen:** libvips via `bimg` (CGO binding; requires libvips installed), implemented in `internal/platform/imaging/imaging.go` (moved from `internal/modules/pins/imaging/` in B6)
 - [x] Resize to a max dimension (1600px) and compress uploaded images to WebP q80 before saving
 - [x] Generate a 400px square thumbnail alongside the full size for map/list views (stored in `pin_photos.thumbnail_url`, migration `0006`)
 - [x] Reject images above 8000×8000 px (checked via metadata before decode) and cap concurrent libvips processes at 2
@@ -321,38 +321,57 @@ This app is photo-heavy and map-based — unprocessed multi-photo uploads at up 
 
 ## Phase 5 — Real-Time Layer
 
-### 5.1 WebSocket server setup
+> **Status:** the plan was revised from WebSocket to Server-Sent Events. The live design is `GET /events` (one global stream per process, no rooms): `internal/modules/realtime/broker.go` publishes `pins.Event` JSON to Redis channel `goodspot:pins`; each client connection subscribes and `runStreamLoop` (in `realtime/handler.go`) filters server-side by bbox (`matches`) and category, writes `event: pin` messages, and emits a `: heartbeat` comment every 20 s. `MAX_SSE_CONNECTIONS` caps total connections per process; Caddy serves `/events` with `flush_interval -1` so frames are not buffered.
 
-- [ ] `go get github.com/gorilla/websocket`
-- [ ] `internal/realtime/hub.go` — connection registry (`map[string][]*Connection` keyed by geohash cell)
-- [ ] `internal/realtime/handler.go` — WebSocket upgrade handler, route: `GET /ws`
-- [ ] Handle client `subscribe`/`unsubscribe` messages (cell list) — shapes defined in `internal/realtime/dto.go`
+### 5.1 WebSocket server setup — superseded by SSE
 
-### 5.2 Redis pub/sub
+- [x] `go get github.com/gorilla/websocket` — superseded: no WebSocket library; SSE instead.
+- [x] `internal/realtime/hub.go` — connection registry (`map[string][]*Connection` keyed by geohash cell) — superseded: single global broker per process, per-subscriber Redis subscription, no geohash cell rooms.
+- [x] `internal/realtime/handler.go` — WebSocket upgrade handler, route: `GET /ws` — superseded: `Handler.Stream` at `GET /events`.
+- [x] Handle client `subscribe`/`unsubscribe` messages (cell list) — superseded: client passes `bbox`/`category` as query params; `runStreamLoop`/`matches` decide which events reach that subscriber.
 
-- [ ] `go get github.com/redis/go-redis/v9`
-- [ ] `REDIS_URL` in `.env`
-- [ ] `internal/realtime/pubsub.go` — on pin creation, publish event to Redis channel keyed by geohash cell
-- [ ] Realtime hub subscribes to relevant Redis channels, receives cross-instance events
-- [ ] (Known gap, not required for MVP) Pin write and Redis publish are two separate steps today — a crash between them means a pin is saved but never broadcast. Revisit with a transactional outbox table + poller before relying on real-time delivery being 100% reliable.
+### 5.2 Redis pub/sub — done (SSE)
 
-### 5.3 Batching
+- [x] `go get github.com/redis/go-redis/v9`
+- [x] `REDIS_URL` in `.env`
+- [x] `internal/realtime/broker.go` — on pin creation, `Broker.PinCreated` publishes the event to Redis channel `goodspot:pins`.
+- [x] Each `GET /events` connection subscribes and receives cross-instance events.
+- [x] (Known gap, deferred) Pin write and Redis publish are two separate steps — a crash between them means a pin is saved but never broadcast. Documented, not fixed; a transactional outbox table + poller can close it if it becomes a real problem.
 
-- [ ] `internal/realtime/broadcast.go` — per-cell buffer + ticker (500ms–1s)
-- [ ] On tick, flush buffered pins as one `pin_batch` message to all connections in that room
+### 5.3 Batching — deferred
 
-### 5.4 Frontend WebSocket client
+- [ ] Batching of bursts (one event per create today). Deferred: no burst requirement demonstrated; revisit only if a real storm appears.
 
-- [ ] Native `WebSocket` (or `reconnecting-websocket`) connects on map load
-- [ ] Compute visible geohash cells from current viewport, send `subscribe`
-- [ ] On viewport change, update subscription (unsubscribe old cells, subscribe new ones)
-- [ ] On `pin_batch` message, merge new pins into map state without a full refetch
+### 5.4 Frontend WebSocket client — superseded by SSE
+
+- [x] Native `WebSocket` connect on map load — superseded: `openPinStream` uses `EventSource` (`client/src/lib/api/realtime.ts`).
+- [x] Compute visible geohash cells, send `subscribe` — superseded: client sends `bbox` + `category` query params (`realtime.ts`, `usePinStream`).
+- [x] Update subscription on viewport change — `usePinStream` re-opens on `[bbox, category, onPin, onPinRemoved, onReconnect]` (`usePinStream`).
+- [x] On `pin_batch` message, merge new pins without a full refetch — live: one `event: pin` per create; `usePinStream` enriches it and calls `onPin` (current behavior verified; payload schema is client-validated with zod).
 
 ### 5.5 Testing
 
 - [ ] Open app in two browser tabs/windows
 - [ ] Post a pin in tab A
-- [ ] Confirm it appears in tab B within the batch window, no refresh
+- [ ] Confirm it appears in tab B (no refresh) — with matching category and live bbox overlap.
+- [ ] Delete a pin in tab A; confirm it disappears from tab B and closes its open detail panel.
+
+### 5.6 Removal events and reconnect catch-up
+
+- [x] Separate Redis channel for removals: `goodspot:pin-removed` (never mixed into `goodspot:pins`).
+- [x] Test proving a removal cannot produce `event: pin` (it must emit `event: pin_removed` only).
+- [x] Publish `pin_removed` from the pin delete handler (`Handler.DeletePin`).
+- [x] Publish `pin_removed` from report approve, with `reports` free of a `pins` import (publisher interface defined inside `reports`, broker implements it, wired in router/routes).
+- [x] Handler tests for `pin_removed`.
+- [x] DB-backed publish-after-commit tests: repository returns the pin location only after the commit (`TestDBReviewApproveReturnsLocationAfterCommit`, `TestDBReviewDismissReturnsNilLocation`, `TestDBReviewUpdateErrorSurfaces`: UPDATE-error fix); handler publishes nothing when the service errors (`TestReviewErrorPublishesNothing`). No test asserts the Redis publish itself fires after commit.
+- [x] Client: map list removes the pin on `pin_removed`.
+- [x] Client: detail panel closes when its open pin is removed.
+- [x] Client: permalink page behavior (`/pin/[id]` does not use `usePinStream`; document/leave as-is).
+- [x] Reconnect catch-up: `onerror` only marks the episode — no refetch while the stream is broken (SSE has no replay, so that refetch could be immediately stale). The first `onopen` after any error always refetches, even if time has passed; an episode yields exactly one refetch if a reconnect follows, zero otherwise.
+- [x] The seven fake-`EventSource` test cases: (1) normal `pin_removed` delivered calls `onPinRemoved` with the pin id, (2) `pin_removed` never calls `onPin` (removals cannot produce pin events), (3) error alone never refetches (no timer; waits for open), (4) clean intentional re-subscription does not refetch (bbox change without error), (5) error then open refetches exactly once, (6) error, time passes, then open refetches on open, (7) repeated errors before one open refetch exactly once.
+- [x] Arch test passes without an allowlist change (`reports` must not import `pins`).
+
+> **Note:** Removals share the same known gap as pin creation — a crash between the DB commit and the Redis publish means the removal is persisted but never broadcast. Reconnect catch-up (refetch on the first `onopen` after any error — the only refetch; nothing fires while the stream is broken) is the partial mitigation, not a full outbox.
 
 **Phase 5 done when:** Two-tab live-update test passes reliably.
 
@@ -404,41 +423,6 @@ This app is photo-heavy and map-based — unprocessed multi-photo uploads at up 
 
 **Phase 7 done when:** GoodSpot247 is live at a real public URL and you (and a few trusted testers) can use it fully.
 
----
-
-## Phase 8 — Livestreaming (post-MVP, only after Phase 7 is validated)
-
-### 8.1 LiveKit setup
-
-- [ ] Create LiveKit Cloud account
-- [ ] `go get github.com/livekit/server-sdk-go`
-- [ ] Add LiveKit API key/secret to env config
-
-### 8.2 Streams table + endpoints
-
-- [x] Migration `0005_streams.sql` (already written and applied during the refactor): `id`, `pin_id`, `broadcaster_id`, `livekit_room_name` (`NOT NULL UNIQUE`), `status` (`NOT NULL`, `CHECK IN ('live','ended')`, default `'live'`), `peak_viewer_count` (`INT NOT NULL DEFAULT 0`), `started_at`, `ended_at`
-- [x] Partial index: `CREATE INDEX streams_status_idx ON streams (status) WHERE status = 'live';`
-- [ ] `internal/streams/handler.go` -> `POST /streams` — creates LiveKit room, returns broadcaster token
-- [ ] `internal/streams/handler.go` -> `GET /streams/:id` — returns stream info + viewer token
-- [ ] `internal/streams/handler.go` -> `POST /streams/:id/end` — closes room, updates status
-
-### 8.3 Frontend streaming
-
-- [ ] `npm install livekit-client`
-- [ ] "Go Live" button (auth required) -> connects as broadcaster
-- [ ] Live pins render distinctly on the map
-- [ ] Viewer screen connects to LiveKit room, renders video
-- [ ] Chat UI wired to existing WebSocket hub, keyed by `streamId`
-
-### 8.4 Viewer count
-
-- [ ] Configure LiveKit webhook endpoint on your backend
-- [ ] Handle participant join/leave webhooks -> update live count -> push via WebSocket -> update `streams.peak_viewer_count` whenever the live count exceeds the stored peak
-- [ ] (Known gap, not required for MVP) Webhooks can be dropped or delivered out of order, causing live counts to drift. Revisit with a periodic reconciliation job (poll LiveKit's actual room participant count and correct drift) before relying on viewer counts for anything user-facing beyond a rough indicator
-
-**Phase 8 done when:** A user can go live from a pin, another user can watch + chat in real time, viewer counts (including the peak) are tracked, and the stream ends cleanly.
-
----
 
 ## Quick Reference — Checklist Count by Phase
 
@@ -453,6 +437,5 @@ This app is photo-heavy and map-based — unprocessed multi-photo uploads at up 
 | 5. Real-Time Layer                | 16                      |
 | 6. Storage Swap                   | 7                       |
 | 7. Deploy                         | 13                      |
-| 8. Livestreaming                  | 16                      |
 
 Work top to bottom, phase by phase. Don't skip ahead to Phase 5+ until Phase 4's exit criteria genuinely passes — that's the point where you have something real to show and test.

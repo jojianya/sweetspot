@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,21 +18,6 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 	"github.com/redis/go-redis/v9"
 )
-
-// validateBbox checks that a parsed bbox [minLat, minLng, maxLat, maxLng] has
-// valid coordinate ranges and non-zero area. Returns nil if valid.
-func validateBbox(b [4]float64) error {
-	if b[0] < -90 || b[0] > 90 || b[2] < -90 || b[2] > 90 {
-		return fmt.Errorf("latitudes must be between -90 and 90")
-	}
-	if b[1] < -180 || b[1] > 180 || b[3] < -180 || b[3] > 180 {
-		return fmt.Errorf("longitudes must be between -180 and 180")
-	}
-	if b[0] >= b[2] || b[1] >= b[3] {
-		return fmt.Errorf("bbox min must be less than max (minLat < maxLat and minLng < maxLng)")
-	}
-	return nil
-}
 
 // sseTracker tracks active SSE connections so graceful shutdown can notify
 // them to close rather than waiting for the full shutdown timeout.
@@ -172,13 +159,10 @@ func (h *Handler) Stream(c *gin.Context) {
 
 	var bbox *[4]float64
 	if raw := strings.TrimSpace(c.Query("bbox")); raw != "" {
+		// ParseBbox is the single source of truth for bbox validation: it
+		// rejects out-of-range, inverted and zero-area boxes itself.
 		b, ok := httpx.ParseBbox(c)
 		if !ok {
-			return
-		}
-		// Validate bbox coordinate ranges.
-		if err := validateBbox(b); err != nil {
-			response.BadRequest(c, err.Error())
 			return
 		}
 		bbox = &b
@@ -198,7 +182,7 @@ func (h *Handler) Stream(c *gin.Context) {
 	defer sub.Close()
 
 	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
+	c.Header("Cache-Control", "no-cache, no-transform")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
 
@@ -209,11 +193,17 @@ func (h *Handler) Stream(c *gin.Context) {
 	c.Writer.Flush()
 
 	ch := sub.Channel()
-	runStreamLoop(ctx, c.Writer, ch, h.heartbeatInterval, bbox, category)
+
+	// Also subscribe to pin removed channel
+	removedSub := h.broker.SubscribeRemoved(ctx)
+	defer removedSub.Close()
+	removedCh := removedSub.Channel()
+
+	runStreamLoop(ctx, c.Writer, ch, h.heartbeatInterval, bbox, category, removedCh)
 }
 
 // runStreamLoop runs the SSE event/heartbeat loop. Extracted for testing.
-func runStreamLoop(ctx context.Context, w http.ResponseWriter, ch <-chan *redis.Message, interval time.Duration, bbox *[4]float64, category *int) {
+func runStreamLoop(ctx context.Context, w http.ResponseWriter, ch <-chan *redis.Message, interval time.Duration, bbox *[4]float64, category *int, removedCh <-chan *redis.Message) {
 	heartbeat := time.NewTicker(interval)
 	defer heartbeat.Stop()
 
@@ -232,6 +222,25 @@ func runStreamLoop(ctx context.Context, w http.ResponseWriter, ch <-chan *redis.
 			}
 			setWriteDeadline(w, sseWriteTimeout)
 			if _, err := fmt.Fprintf(w, "event: pin\ndata: %s\n\n", msg.Payload); err != nil {
+				return
+			}
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		case msg, ok := <-removedCh:
+			if !ok {
+				return
+			}
+			// Forward pin_removed events directly (they contain pin_id and location for filtering)
+			var ev pins.PinRemoved
+			if err := json.Unmarshal([]byte(msg.Payload), &ev); err != nil {
+				continue
+			}
+			if !matchesRemoved(ev, bbox) {
+				continue
+			}
+			setWriteDeadline(w, sseWriteTimeout)
+			if _, err := fmt.Fprintf(w, "event: pin_removed\ndata: %s\n\n", msg.Payload); err != nil {
 				return
 			}
 			if flusher, ok := w.(http.Flusher); ok {
@@ -263,7 +272,60 @@ func matches(ev pins.Event, bbox *[4]float64, category *int) bool {
 	var lng, lat float64
 	if _, err := fmt.Sscanf(ev.Location, "POINT(%f %f)", &lng, &lat); err != nil {
 		// Malformed location: only pass through when no bbox filter is set.
+		noteMalformedLocation("pin_created", ev)
 		return false
 	}
 	return lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]
+}
+
+// matchesRemoved applies the optional bbox filter to a pin_removed event.
+func matchesRemoved(ev pins.PinRemoved, bbox *[4]float64) bool {
+	if bbox == nil {
+		return true
+	}
+
+	var lng, lat float64
+	if _, err := fmt.Sscanf(ev.Location, "POINT(%f %f)", &lng, &lat); err != nil {
+		// Malformed location: only pass through when no bbox filter is set.
+		noteMalformedLocation("pin_removed", ev)
+		return false
+	}
+	return lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]
+}
+
+// malformedLocationDrops counts events dropped for an unparsable
+// location, and malformedLocationLastLog gates how often that is written out.
+// There is no metrics registry in this service, so the count rides along on a
+// rate-limited structured log line: one warning per interval, each carrying the
+// running total, so a recurrence is visible without a bad publisher being able
+// to flood the logs.
+var (
+	malformedLocationDrops   atomic.Int64
+	malformedLocationLastLog atomic.Int64
+)
+
+// malformedLocationLogIntervalSecs is the minimum gap, in seconds, between
+// warnings. Kept in seconds because that is the unit both timestamps use.
+const malformedLocationLogIntervalSecs = 60
+
+// noteMalformedLocation records and (rate-limited) reports a drop.
+func noteMalformedLocation(kind string, ev interface{ GetID() string; GetLocation() string }) {
+	total := malformedLocationDrops.Add(1)
+
+	now := time.Now().Unix()
+	last := malformedLocationLastLog.Load()
+	if now-last < malformedLocationLogIntervalSecs {
+		return
+	}
+	// Only the goroutine that wins the swap writes, so a burst of drops in the
+	// same interval still produces exactly one line.
+	if !malformedLocationLastLog.CompareAndSwap(last, now) {
+		return
+	}
+	slog.Warn("realtime: dropped event with unparsable location",
+		"kind", kind,
+		"pin_id", ev.GetID(),
+		"location", ev.GetLocation(),
+		"drops_since_last_log", total,
+	)
 }

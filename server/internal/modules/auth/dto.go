@@ -15,3 +15,14 @@ type LoginRequest struct {
 	Identifier string `json:"identifier" binding:"required,max=254"`
 	Password   string `json:"password" binding:"required"`
 }
+
+type ResetRequest struct {
+	Email string `json:"email" binding:"required,email,max=254"`
+}
+
+type ResetConfirm struct {
+	Token string `json:"token" binding:"required"`
+	// No length tag on purpose, same as registration: password.Validate
+	// measures both bounds in the units bcrypt uses.
+	Password string `json:"password" binding:"required"`
+}

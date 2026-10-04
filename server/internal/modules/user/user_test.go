@@ -92,8 +92,8 @@ func (m *mockRepository) UpdateRole(_ context.Context, id, role string) (User, e
 	return u, nil
 }
 
-func (m *mockRepository) SearchUsers(_ context.Context, _ string, _ int) ([]User, error) {
-	return m.search, m.searchErr
+func (m *mockRepository) SearchUsers(_ context.Context, _ string, _ int, _ int) ([]User, int, error) {
+	return m.search, len(m.search), m.searchErr
 }
 
 func (m *mockRepository) ListUsers(_ context.Context, _ int, _ int) ([]User, int, error) {
@@ -184,12 +184,15 @@ func TestSearchUsersDelegatesToRepository(t *testing.T) {
 			{ID: "u2", Username: "alicia", Role: RoleAdmin},
 		},
 	})
-	got, err := svc.SearchUsers(context.Background(), "ali", 20)
+	got, total, err := svc.SearchUsers(context.Background(), "ali", 20, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 2 || got[0].Username != "alice" || got[1].Role != RoleAdmin {
 		t.Fatalf("unexpected results: %+v", got)
+	}
+	if total != 2 {
+		t.Fatalf("expected total 2, got %d", total)
 	}
 }
 

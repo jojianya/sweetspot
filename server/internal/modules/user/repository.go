@@ -35,7 +35,11 @@ type Repository interface {
 	// just demoted.
 	UpdateRole(ctx context.Context, id, role string) (User, error)
 	UpdateProfile(ctx context.Context, id string, patch UpdateProfilePatch) (User, error)
-	SearchUsers(ctx context.Context, query string, limit int) ([]User, error)
+	// SearchUsers returns a page of username matches plus the total number of
+	// matches. The total comes from COUNT(*) OVER () in the same query, with a
+	// fallback count when the page is empty and the window function has no row
+	// to read.
+	SearchUsers(ctx context.Context, query string, limit, offset int) ([]User, int, error)
 }
 
 // UpdateProfilePatch carries the fields to change on the caller's own profile.
@@ -302,33 +306,50 @@ func (r *postgresRepository) UpdateProfile(ctx context.Context, id string, patch
 	return u, nil
 }
 
-// SearchUsers returns users whose username contains the query (case-insensitive),
-// sorted by username. LIKE wildcards in the query are escaped so they match
-// literally; the caller has already bounded the query length and limit.
-func (r *postgresRepository) SearchUsers(ctx context.Context, query string, limit int) ([]User, error) {
+// SearchUsers returns users whose username contains the query
+// (case-insensitive) plus the total number of matches, sorted by
+// username. The total comes from COUNT(*) OVER () in the same query, so
+// the handler can page through matches; if the page is empty we cannot
+// read the window function's result and fall back to a count with the
+// same predicate. LIKE wildcards in the query are escaped so they match
+// literally; the caller has already bounded the query length, limit
+// and offset.
+func (r *postgresRepository) SearchUsers(ctx context.Context, query string, limit, offset int) ([]User, int, error) {
 	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at
+		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at,
+		       COUNT(*) OVER () AS total
 		FROM users
 		WHERE username ILIKE '%' || $1 || '%'
 		ORDER BY username
-		LIMIT $2
-	`, escaped, limit)
+		LIMIT $2 OFFSET $3
+	`, escaped, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	users := []User{}
+	var total int
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
-			return nil, err
+		if err := rows.Scan(&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt, &total); err != nil {
+			return nil, 0, err
 		}
 		users = append(users, u)
 	}
 	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
-		return nil, err
+		return nil, 0, err
 	}
-	return users, nil
+
+	// Empty page: the window function returns nothing, so we fall back to
+	// counting the matches so the caller still learns the true total.
+	if len(users) == 0 {
+		if err := r.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM users WHERE username ILIKE '%' || $1 || '%'
+		`, escaped).Scan(&total); err != nil {
+			return nil, 0, err
+		}
+	}
+	return users, total, nil
 }

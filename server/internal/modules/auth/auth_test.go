@@ -81,8 +81,8 @@ func (s *stubUserService) UpdateRole(context.Context, string, string, string) (u
 	return users.User{}, nil
 }
 
-func (s *stubUserService) SearchUsers(context.Context, string, int) ([]users.User, error) {
-	return []users.User{}, nil
+func (s *stubUserService) SearchUsers(context.Context, string, int, int) ([]users.User, int, error) {
+	return []users.User{}, 0, nil
 }
 
 func (s *stubUserService) ListUsers(_ context.Context, _ int, _ int) ([]users.User, int, error) {

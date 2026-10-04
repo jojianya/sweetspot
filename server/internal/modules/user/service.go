@@ -21,7 +21,7 @@ type Service interface {
 	ListUsers(ctx context.Context, limit, offset int) ([]User, int, error)
 	UpdateRole(ctx context.Context, actorID, userID, role string) (User, error)
 	UpdateProfile(ctx context.Context, id string, patch UpdateProfilePatch) (User, error)
-	SearchUsers(ctx context.Context, query string, limit int) ([]User, error)
+	SearchUsers(ctx context.Context, query string, limit, offset int) ([]User, int, error)
 }
 
 type service struct {
@@ -58,8 +58,8 @@ func (s *service) CheckSession(ctx context.Context, id string) (middleware.Sessi
 	return s.repo.GetSessionState(ctx, id)
 }
 
-func (s *service) SearchUsers(ctx context.Context, query string, limit int) ([]User, error) {
-	return s.repo.SearchUsers(ctx, query, limit)
+func (s *service) SearchUsers(ctx context.Context, query string, limit, offset int) ([]User, int, error) {
+	return s.repo.SearchUsers(ctx, query, limit, offset)
 }
 
 func (s *service) CountUsers(ctx context.Context) (int, error) {

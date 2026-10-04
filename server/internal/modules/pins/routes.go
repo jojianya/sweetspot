@@ -7,8 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
-	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/http/validid"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 )
 
 type RouteOptions struct {
@@ -42,7 +42,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 			c.Next()
 			return
 		}
-		if !viewPerUser.AllowKey("pin-view:user:"+uid) {
+		if !viewPerUser.AllowKey("pin-view:user:" + uid) {
 			response.AbortError(c, http.StatusTooManyRequests, "too many requests, try again later")
 			return
 		}

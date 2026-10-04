@@ -66,11 +66,11 @@ func (r *postgresRepository) PinExists(ctx context.Context, pinID string) (bool,
 func (r *postgresRepository) List(ctx context.Context, userID string, limit, offset int) ([]Entry, int, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
-		       ` + database.CoverPhotoCoalesce + `, u.username, f.created_at AS saved_at,
+		       `+database.CoverPhotoCoalesce+`, u.username, f.created_at AS saved_at,
 		       COUNT(*) OVER () AS total
 		FROM favorites f
 		JOIN pins p ON p.id = f.pin_id
-		` + database.CoverPhotoLateral + `
+		`+database.CoverPhotoLateral+`
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE f.user_id = $1 AND p.is_hidden = false
 		ORDER BY f.created_at DESC

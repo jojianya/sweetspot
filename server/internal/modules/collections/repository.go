@@ -159,11 +159,11 @@ func (r *postgresRepository) Delete(ctx context.Context, id string) error {
 func (r *postgresRepository) ListPins(ctx context.Context, id string, limit, offset int) ([]pins.PinListEntry, int, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
-		       ` + database.CoverPhotoCoalesce + `, u.username,
+		       `+database.CoverPhotoCoalesce+`, u.username,
 		       COUNT(*) OVER () AS total
 		FROM collection_pins cp
 		JOIN pins p ON p.id = cp.pin_id AND p.is_hidden = false
-		` + database.CoverPhotoLateral + `
+		`+database.CoverPhotoLateral+`
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE cp.collection_id = $1
 		ORDER BY cp.position, cp.created_at

@@ -191,12 +191,12 @@ func (h *Handler) Stream(c *gin.Context) {
 	c.Writer.Flush()
 
 	ch := sub.Channel()
-	
+
 	// Also subscribe to pin removed channel
 	removedSub := h.broker.SubscribeRemoved(ctx)
 	defer removedSub.Close()
 	removedCh := removedSub.Channel()
-	
+
 	runStreamLoop(ctx, c.Writer, ch, h.heartbeatInterval, bbox, category, removedCh)
 }
 

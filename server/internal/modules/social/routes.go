@@ -3,8 +3,8 @@ package social
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
-	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/http/validid"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 )
 
 type RouteOptions struct {

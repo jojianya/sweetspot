@@ -100,10 +100,10 @@ func (r *postgresRepository) CountPins(ctx context.Context, userID string) (int,
 func (r *postgresRepository) Feed(ctx context.Context, userID string, limit int) ([]pins.PinListEntry, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
-		       ` + database.CoverPhotoCoalesce + `, u.username
+		       `+database.CoverPhotoCoalesce+`, u.username
 		FROM follows f
 		JOIN pins p ON p.user_id = f.followee_id
-		` + database.CoverPhotoLateral + `
+		`+database.CoverPhotoLateral+`
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE f.follower_id = $1 AND p.is_hidden = false
 		ORDER BY p.created_at DESC

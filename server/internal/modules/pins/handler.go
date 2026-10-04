@@ -16,8 +16,8 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
-	"github.com/jojianya/sweetspot247-backend/internal/platform/imaging"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/imaging"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/pkg/geohash"
 )
@@ -69,7 +69,7 @@ func NewHandler(repo Repository, store *storage.Local, events Events, roles user
 // nopEvents is the zero-value event publisher used when realtime is disabled.
 type nopEvents struct{}
 
-func (nopEvents) PinCreated(context.Context, Event) {}
+func (nopEvents) PinCreated(context.Context, Event)      {}
 func (nopEvents) PinRemoved(context.Context, PinRemoved) {}
 
 func (h *Handler) ListCategories(c *gin.Context) {

@@ -191,11 +191,17 @@ func (h *Handler) Stream(c *gin.Context) {
 	c.Writer.Flush()
 
 	ch := sub.Channel()
-	runStreamLoop(ctx, c.Writer, ch, h.heartbeatInterval, bbox, category)
+	
+	// Also subscribe to pin removed channel
+	removedSub := h.broker.SubscribeRemoved(ctx)
+	defer removedSub.Close()
+	removedCh := removedSub.Channel()
+	
+	runStreamLoop(ctx, c.Writer, ch, h.heartbeatInterval, bbox, category, removedCh)
 }
 
 // runStreamLoop runs the SSE event/heartbeat loop. Extracted for testing.
-func runStreamLoop(ctx context.Context, w http.ResponseWriter, ch <-chan *redis.Message, interval time.Duration, bbox *[4]float64, category *int) {
+func runStreamLoop(ctx context.Context, w http.ResponseWriter, ch <-chan *redis.Message, interval time.Duration, bbox *[4]float64, category *int, removedCh <-chan *redis.Message) {
 	heartbeat := time.NewTicker(interval)
 	defer heartbeat.Stop()
 
@@ -214,6 +220,25 @@ func runStreamLoop(ctx context.Context, w http.ResponseWriter, ch <-chan *redis.
 			}
 			setWriteDeadline(w, sseWriteTimeout)
 			if _, err := fmt.Fprintf(w, "event: pin\ndata: %s\n\n", msg.Payload); err != nil {
+				return
+			}
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		case msg, ok := <-removedCh:
+			if !ok {
+				return
+			}
+			// Forward pin_removed events directly (they contain pin_id and location for filtering)
+			var ev pins.PinRemoved
+			if err := json.Unmarshal([]byte(msg.Payload), &ev); err != nil {
+				continue
+			}
+			if !matchesRemoved(ev, bbox) {
+				continue
+			}
+			setWriteDeadline(w, sseWriteTimeout)
+			if _, err := fmt.Fprintf(w, "event: pin_removed\ndata: %s\n\n", msg.Payload); err != nil {
 				return
 			}
 			if flusher, ok := w.(http.Flusher); ok {
@@ -238,6 +263,20 @@ func matches(ev pins.Event, bbox *[4]float64, category *int) bool {
 	if category != nil && ev.CategoryID != *category {
 		return false
 	}
+	if bbox == nil {
+		return true
+	}
+
+	var lng, lat float64
+	if _, err := fmt.Sscanf(ev.Location, "POINT(%f %f)", &lng, &lat); err != nil {
+		// Malformed location: only pass through when no bbox filter is set.
+		return false
+	}
+	return lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]
+}
+
+// matchesRemoved applies the optional bbox filter to a pin_removed event.
+func matchesRemoved(ev pins.PinRemoved, bbox *[4]float64) bool {
 	if bbox == nil {
 		return true
 	}

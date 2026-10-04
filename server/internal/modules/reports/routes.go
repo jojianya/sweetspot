@@ -13,6 +13,7 @@ type RouteOptions struct {
 	Blacklist   *cache.Blacklist
 	UserService users.Service
 	Sessions    middleware.SessionChecker
+	Events      Publisher
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {

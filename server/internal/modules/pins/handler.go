@@ -70,6 +70,7 @@ func NewHandler(repo Repository, store *storage.Local, events Events, roles user
 type nopEvents struct{}
 
 func (nopEvents) PinCreated(context.Context, Event) {}
+func (nopEvents) PinRemoved(context.Context, PinRemoved) {}
 
 func (h *Handler) ListCategories(c *gin.Context) {
 	categories, err := h.repo.ListCategories(c.Request.Context())
@@ -252,6 +253,14 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		if err := h.store.Delete(ph.ThumbnailURL); err != nil {
 			slog.Warn("delete pin: remove thumbnail", "error", err.Error(), "url", ph.ThumbnailURL, "pin_id", id)
 		}
+	}
+
+	// Publish pin_removed event for realtime updates (best-effort; failure logged but not fatal).
+	if h.events != nil {
+		h.events.PinRemoved(c.Request.Context(), PinRemoved{
+			ID:       id,
+			Location: existing.Location,
+		})
 	}
 
 	response.NoContent(c)

@@ -12,7 +12,7 @@ import (
 type Repository interface {
 	PinExists(ctx context.Context, pinID string) (bool, error)
 	CreateReport(ctx context.Context, pinID, reporterID, reason string) (Report, error)
-	ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, error)
+	ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, *string, error)
 	ListReports(ctx context.Context, status *string, limit, offset int) ([]ReportListEntry, error)
 }
 
@@ -45,41 +45,50 @@ func (r *postgresRepository) CreateReport(ctx context.Context, pinID, reporterID
 	return rep, err
 }
 
-func (r *postgresRepository) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, error) {
+func (r *postgresRepository) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, *string, error) {
 	var rep Report
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return rep, err
+		return rep, nil, err
 	}
 	defer tx.Rollback(ctx)
 
-	err = tx.QueryRow(ctx, `
+	var scanErr error
+	scanErr = tx.QueryRow(ctx, `
 		SELECT status FROM reports WHERE id = $1 FOR UPDATE
 	`, reportID).Scan(&rep.Status)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return rep, ErrReportNotFound
+	if scanErr != nil {
+		if errors.Is(scanErr, pgx.ErrNoRows) {
+			return rep, nil, ErrReportNotFound
 		}
-		return rep, err
+		return rep, nil, scanErr
 	}
 	if rep.Status != StatusPending {
-		return rep, ErrAlreadyResolved
+		return rep, nil, ErrAlreadyResolved
 	}
 
 	status := StatusReviewed
+	var pinLocation *string
 	if action == "approve" {
 		status = StatusActioned
 		var pinID pgtype.UUID
 		if err := tx.QueryRow(ctx, `SELECT pin_id FROM reports WHERE id = $1`, reportID).Scan(&pinID); err != nil {
-			return rep, err
+			return rep, nil, err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE pins SET is_hidden = true WHERE id = $1`, pinID); err != nil {
-			return rep, err
+			return rep, nil, err
 		}
+		// Get the pin location for the pin_removed event
+		var location string
+		err := tx.QueryRow(ctx, `SELECT location FROM pins WHERE id = $1`, pinID).Scan(&location)
+		if err != nil {
+			return rep, nil, err
+		}
+		pinLocation = &location
 	}
 
-	err = tx.QueryRow(ctx, `
+	scanErr = tx.QueryRow(ctx, `
 		UPDATE reports
 		SET status = $2, resolved_by = $3, resolved_at = now()
 		WHERE id = $1
@@ -87,14 +96,14 @@ func (r *postgresRepository) ReviewReport(ctx context.Context, reportID, action,
 	`, reportID, status, resolvedBy).Scan(
 		&rep.ID, &rep.PinID, &rep.ReporterID, &rep.Reason, &rep.Status, &rep.ResolvedBy, &rep.ResolvedAt, &rep.CreatedAt,
 	)
-	if err != nil {
-		return rep, err
+	if scanErr != nil {
+		return rep, nil, scanErr
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return rep, err
+		return rep, nil, err
 	}
-	return rep, nil
+	return rep, pinLocation, nil
 }
 
 func (r *postgresRepository) ListReports(ctx context.Context, status *string, limit, offset int) ([]ReportListEntry, error) {

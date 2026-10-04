@@ -15,12 +15,14 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/favorites"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/realtime"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
+	"github.com/redis/go-redis/v9"
 )
 
 // getSessionCookie extracts the session_token cookie from a response, or nil
@@ -249,8 +251,8 @@ func (m *mockReportRepo) CreateReport(ctx context.Context, pinID, reporterID, re
 	return m.created, m.createErr
 }
 
-func (m *mockReportRepo) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (reports.Report, error) {
-	return m.reviewed, m.reviewErr
+func (m *mockReportRepo) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (reports.Report, *string, error) {
+	return m.reviewed, nil, m.reviewErr
 }
 
 func (m *mockReportRepo) ListReports(ctx context.Context, status *string, limit, offset int) ([]reports.ReportListEntry, error) {
@@ -335,7 +337,8 @@ func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo 
 	userH := users.NewHandler(usersSvc, store)
 	users.RegisterRoutes(jsonRoutes, userH, users.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
 
-	reportH := reports.NewHandler(reports.NewService(reportRepo))
+	events := realtime.NewBrokerWithClient(redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}))
+	reportH := reports.NewHandler(reports.NewService(reportRepo), events)
 	reports.RegisterRoutes(jsonRoutes, reportH, reports.RouteOptions{
 		JWTSecret:   testSecret,
 		Blacklist:   bl,

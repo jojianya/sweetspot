@@ -145,7 +145,7 @@ func TestRunStreamLoop(t *testing.T) {
 	defer cancel()
 
 	// Run the stream loop with a very short heartbeat interval
-	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, nil, nil)
+	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, nil, nil, nil)
 
 	// Read body after goroutine exits
 	body := rec.Body.String()
@@ -181,7 +181,7 @@ func TestRunStreamLoopWithFilters(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
-	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, &bbox, &category)
+	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, &bbox, &category, nil)
 
 	body := rec.Body.String()
 
@@ -219,7 +219,7 @@ func TestRunStreamLoopFilterIsolation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
-	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, &bbox, &category)
+	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, &bbox, &category, nil)
 
 	body := rec.Body.String()
 
@@ -249,7 +249,7 @@ func TestRunStreamLoopNoFilters(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
-	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, nil, nil)
+	runStreamLoop(ctx, rec, msgCh, 50*time.Millisecond, nil, nil, nil)
 
 	body := rec.Body.String()
 

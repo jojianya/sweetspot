@@ -83,7 +83,11 @@ func (s stubRoles) GetByID(context.Context, string) (users.User, error) {
 // dir, behind a gin route whose auth middleware is stubbed to report userID.
 func newDeleteHarness(t *testing.T, repo *stubRepo, dir string) *gin.Engine {
 	t.Helper()
-	h := &Handler{repo: repo, store: storage.NewLocal(dir, "http://api.test")}
+	h := &Handler{
+		repo:   repo,
+		store:  storage.NewLocal(dir, "http://api.test"),
+		events: nopEvents{},
+	}
 
 	r := gin.New()
 	r.DELETE("/pins/:id", func(c *gin.Context) {
@@ -124,9 +128,12 @@ func TestDeletePinRemovesPhotoFiles(t *testing.T) {
 	photoURL := stagePhoto(t, dir, "photo-1.webp")
 	thumbURL := stagePhoto(t, dir, "thumb-1.webp")
 
-	r := newDeleteHarness(t, &stubRepo{detail: PinDetail{Photos: []PinPhoto{
-		{PhotoURL: photoURL, ThumbnailURL: thumbURL},
-	}}}, dir)
+	r := newDeleteHarness(t, &stubRepo{detail: PinDetail{
+		Photos: []PinPhoto{
+			{PhotoURL: photoURL, ThumbnailURL: thumbURL},
+		},
+		Location: "POINT(0 0)",
+	}}, dir)
 
 	w := deletePin(r, "pin-1")
 	if w.Code != http.StatusNoContent {
@@ -219,8 +226,13 @@ func TestDeletePinHandlesPinWithNoPhotos(t *testing.T) {
 // handler-side owner comparison, so the SQL predicate decides atomically.
 func TestDeletePinForwardsModeratorFlag(t *testing.T) {
 	dir := t.TempDir()
-	repo := &stubRepo{detail: PinDetail{Photos: []PinPhoto{}}}
-	h := &Handler{repo: repo, store: storage.NewLocal(dir, "http://api.test"), roles: stubRoles{role: users.RoleAdmin}}
+	repo := &stubRepo{detail: PinDetail{Photos: []PinPhoto{}, Location: "POINT(0 0)"}}
+	h := &Handler{
+		repo:   repo,
+		store:  storage.NewLocal(dir, "http://api.test"),
+		roles:  stubRoles{role: users.RoleAdmin},
+		events: nopEvents{},
+	}
 	r := gin.New()
 	r.DELETE("/pins/:id", func(c *gin.Context) {
 		c.Set("user_id", "moderator-1")

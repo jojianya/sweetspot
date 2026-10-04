@@ -30,7 +30,7 @@ func (s *stubReportService) ListReports(_ context.Context, _ *string, _, offset 
 
 func listReports(path string) *httptest.ResponseRecorder {
 	svc := &stubReportService{}
-	h := NewHandler(svc)
+	h := NewHandler(svc, nil)
 	r := gin.New()
 	r.GET("/reports", h.List)
 	w := httptest.NewRecorder()

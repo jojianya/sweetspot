@@ -15,6 +15,7 @@ export function usePins(bbox: string | null, category: number | null) {
     bbox: string | null;
     category: number | null;
   }>({ bbox, category });
+  const [refreshSeq, setRefreshSeq] = useState(0);
   if (query.bbox !== bbox || query.category !== category) {
     setQuery({ bbox, category });
     if (bbox) {
@@ -46,7 +47,15 @@ export function usePins(bbox: string | null, category: number | null) {
       ctrl.abort();
       if (abortRef.current === ctrl) abortRef.current = null;
     };
-  }, [bbox, category]);
+  }, [bbox, category, refreshSeq]);
+
+  const refetch = useCallback(() => {
+    setRefreshSeq((n) => n + 1);
+    if (bbox) {
+      setLoading(true);
+      setError(null);
+    }
+  }, [bbox]);
 
   const addPin = useCallback((pin: PinListEntry) => {
     setPins((prev) =>
@@ -58,5 +67,5 @@ export function usePins(bbox: string | null, category: number | null) {
     setPins((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
-  return { pins, loading, error, addPin, removePin };
+  return { pins, loading, error, addPin, removePin, refetch };
 }

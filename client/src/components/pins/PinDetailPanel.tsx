@@ -49,12 +49,13 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
   const { saved, saving, handleSave } = useOptimisticSave(pin.id);
   const view = usePinView(pin.id, pin.user_id);
 
-  // Applies the counted total only while the same pin is still open; a late
-  // response after switching pins (or unmount) is discarded.
+  // Applies the counted total to local pin state once per fetch. The parent
+  // remounts via key={detail.id} (and route change on the permalink page),
+  // so no pinId guard is needed here.
   useEffect(() => {
     if (!view) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- merge the freshly counted total into local pin state once per fetch
-    setPin((prev) => (prev.id === view.pinId ? { ...prev, views: view.views } : prev));
+    setPin((prev) => ({ ...prev, views: view.views }));
   }, [view]);
 
   const photo = pin.photos[index];

@@ -25,6 +25,14 @@ export const pinEventSchema = z.object({
 
 export type PinEvent = z.infer<typeof pinEventSchema>;
 
+/** Payload emitted as `event: pin_removed` on the same /events stream. */
+export const pinRemovedEventSchema = z.object({
+  id: z.string().uuid(),
+  location: z.string(),
+});
+
+export type PinRemovedEvent = z.infer<typeof pinRemovedEventSchema>;
+
 export const pinListEntrySchema = pinBaseSchema.extend({
   cover_url: z.string(),
   username: z.string().nullable(),

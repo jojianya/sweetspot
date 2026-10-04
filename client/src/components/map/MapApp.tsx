@@ -59,7 +59,7 @@ export default function MapApp({
   const [createOpen, setCreateOpen] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  const { pins, loading, error: pinsError, addPin, removePin } = usePins(bbox, effectiveCategory);
+  const { pins, loading, error: pinsError, addPin, removePin, refetch } = usePins(bbox, effectiveCategory);
   const { pins: trending, loading: trendingLoading, error: trendingError } = useTrending(
     trendingOpen ? bbox : null
   );
@@ -81,7 +81,22 @@ export default function MapApp({
     [addPin]
   );
 
-  usePinStream(bbox, effectiveCategory, handleStreamedPin);
+  // Realtime removals: drop the pin from the map list and close the detail
+  // panel when its open pin disappears (owner delete or report approve).
+  const handleStreamedRemoval = useCallback(
+    (id: string) => {
+      removePin(id);
+      setSelectedPinId((prev) => (prev === id ? null : prev));
+      setHighlightId((prev) => (prev === id ? null : prev));
+    },
+    [removePin]
+  );
+
+  const handleStreamReconnect = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  usePinStream(bbox, effectiveCategory, handleStreamedPin, handleStreamedRemoval, handleStreamReconnect);
 
   useEffect(() => {
     return () => {

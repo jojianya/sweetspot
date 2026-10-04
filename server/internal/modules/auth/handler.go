@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 )
@@ -29,6 +30,15 @@ func NewHandler(service Service, bl *cache.Blacklist, emailLim *middleware.Limit
 func (h *Handler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	// The binding tags cover presence and length; the character rule lives in
+	// the users module so registration and profile rename cannot drift apart.
+	// Checked here, next to the bind error, so a bad username is a 400 like any
+	// other input problem instead of falling through to the 500 branch.
+	if err := users.ValidateUsername(strings.TrimSpace(req.Username)); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import { errorMessage } from "@/lib/utils";
 import { checkPassword } from "@/lib/password";
+import { checkUsername } from "@/lib/username";
 import { register } from "@/lib/api";
 import { useAuth } from "@/store/auth";
 
@@ -24,8 +25,10 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
     if (!EMAIL_RE.test(email.trim())) return setError("Enter a valid email");
-    if (username.trim().length < 3)
-      return setError("Username must be at least 3 characters");
+    // Mirrors the server's rules (see lib/username.ts) so the problem is named
+    // before the request rather than after it.
+    const usernameCheck = checkUsername(username);
+    if (!usernameCheck.ok) return setError(usernameCheck.message);
     // Mirrors the server's rules, including the byte-based maximum. A
     // character-count check would let a long non-ASCII password through and
     // then fail server-side with a 400.

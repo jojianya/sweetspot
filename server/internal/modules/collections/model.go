@@ -20,8 +20,11 @@ type Collection struct {
 	CoverURL    string      `json:"cover_url"`
 }
 
-// CollectionDetail is a collection with its pins (public, non-hidden only).
+// CollectionDetail is a collection with a page of its pins (public, non-hidden
+// only). PinTotal is the number of pins in the whole collection, so a client can
+// tell a partial page from a complete one.
 type CollectionDetail struct {
 	Collection
-	Pins []pins.PinListEntry `json:"pins"`
+	Pins     []pins.PinListEntry `json:"pins"`
+	PinTotal int                 `json:"pin_total"`
 }

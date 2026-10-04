@@ -15,8 +15,8 @@ const (
 )
 
 type Handler struct {
-	service  Service
-	events   Publisher
+	service Service
+	events  Publisher
 }
 
 func NewHandler(service Service, events Publisher) *Handler {

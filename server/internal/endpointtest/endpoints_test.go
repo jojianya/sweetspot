@@ -296,8 +296,19 @@ func (m *mockFavoriteRepo) PinExists(context.Context, string) (bool, error) {
 	return m.exists, m.existsErr
 }
 
-func (m *mockFavoriteRepo) List(context.Context, string) ([]favorites.Entry, error) {
-	return m.entries, m.listErr
+func (m *mockFavoriteRepo) List(_ context.Context, _ string, limit, offset int) ([]favorites.Entry, int, error) {
+	if m.listErr != nil {
+		return nil, 0, m.listErr
+	}
+	total := len(m.entries)
+	if offset >= len(m.entries) {
+		return []favorites.Entry{}, total, nil
+	}
+	end := offset + limit
+	if end > len(m.entries) {
+		end = len(m.entries)
+	}
+	return m.entries[offset:end], total, nil
 }
 
 func (m *mockFavoriteRepo) ListIDs(context.Context, string) ([]string, error) {

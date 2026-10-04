@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _resetForTests, API_BASE_URL, reportError } from "./monitoring";
 
@@ -9,9 +10,15 @@ function stubFetch() {
   return fetchMock;
 }
 
+/** Points jsdom's location at a URL with a query string and a fragment. */
+function setLocation(href: string) {
+  window.history.replaceState({}, "", href);
+}
+
 describe("reportError", () => {
   beforeEach(() => {
     _resetForTests();
+    setLocation("/");
   });
 
   afterEach(() => {
@@ -72,5 +79,32 @@ describe("reportError", () => {
     const init = fetchMock.mock.calls[0][1];
     const body = JSON.parse(init.body as string);
     expect(body.message).toBe("42");
+  });
+
+  // The reported URL reaches the server's logs and Sentry, so a token or
+  // invite code in the query string or fragment must never be sent.
+  it("reports the origin and path without the query string or fragment", () => {
+    const fetchMock = stubFetch();
+    setLocation("/pins/abc123?token=secret-token#section");
+
+    reportError(new Error("boom"));
+
+    const init = fetchMock.mock.calls[0][1];
+    const body = JSON.parse(init.body as string);
+    expect(body.url).toBe(`${window.location.origin}/pins/abc123`);
+    expect(body.url).not.toContain("secret-token");
+    expect(body.url).not.toContain("?");
+    expect(body.url).not.toContain("#");
+  });
+
+  it("omits the url when there is no window", () => {
+    const fetchMock = stubFetch();
+    vi.stubGlobal("window", undefined);
+
+    reportError(new Error("boom"));
+
+    const init = fetchMock.mock.calls[0][1];
+    const body = JSON.parse(init.body as string);
+    expect(body.url).toBeUndefined();
   });
 });

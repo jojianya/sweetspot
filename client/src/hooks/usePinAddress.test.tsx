@@ -72,6 +72,30 @@ describe("usePinAddress", () => {
     expect(container.textContent).toBe("none");
   });
 
+  // The previous pin's address must not be shown against the new coordinate
+  // while its own lookup is in flight.
+  it("clears the previous address while the new point is in flight", async () => {
+    const second = deferred<string | null>();
+    geoMocks.reverseGeocode.mockResolvedValueOnce("First Street");
+    geoMocks.reverseGeocode.mockImplementationOnce(() => second.promise);
+
+    await act(async () => {
+      root.render(createElement(AddressProbe, { point: { lat: 1, lng: 1 } }));
+    });
+    expect(container.textContent).toBe("First Street");
+
+    await act(async () => {
+      root.render(createElement(AddressProbe, { point: { lat: 2, lng: 2 } }));
+    });
+    expect(container.textContent).toBe("none");
+
+    await act(async () => {
+      second.resolve("Second Street");
+      await second.promise;
+    });
+    expect(container.textContent).toBe("Second Street");
+  });
+
   it("ignores a superseded lookup that resolves late", async () => {
     const first = deferred<string | null>();
     geoMocks.reverseGeocode.mockImplementationOnce(() => first.promise);

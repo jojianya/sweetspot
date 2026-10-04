@@ -18,7 +18,15 @@ export async function removeFavorite(pinId: string): Promise<void> {
   await api.delete(`/favorites/${pinId}`);
 }
 
-export async function fetchFavorites(): Promise<FavoriteEntry[]> {
-  const { data } = await api.get<{ pins: FavoriteEntry[] }>("/favorites");
-  return data.pins;
+/**
+ * GET /favorites — one page of saved pins plus the total number of saved pins,
+ * so the panel can tell a full list from a truncated one.
+ */
+export async function fetchFavorites(
+  options: { limit?: number; offset?: number } = {}
+): Promise<{ entries: FavoriteEntry[]; total: number }> {
+  const { data } = await api.get<{ pins: FavoriteEntry[]; total?: number }>("/favorites", {
+    params: options,
+  });
+  return { entries: data.pins, total: data.total ?? data.pins.length };
 }

@@ -21,6 +21,21 @@ export function useProfile(id: string) {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
+  // Clear the previous id's data during render, the same derived-state
+  // pattern useAsyncData uses: navigating from /users/a to /users/b must not
+  // leave a's profile on screen under b, and it must show as loading rather
+  // than settled with stale content while b is in flight.
+  const [prevID, setPrevID] = useState(id);
+  if (prevID !== id) {
+    setPrevID(id);
+    setProfile(null);
+    setPins([]);
+    setCollections([]);
+    setNotFound(false);
+    setError(null);
+    setLoading(true);
+  }
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {

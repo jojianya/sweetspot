@@ -7,8 +7,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
+)
+
+const (
+	collectionPinListDefaultLimit = 50
+	collectionPinListMaxLimit     = 200
 )
 
 // CreateCollectionRequest / UpdateCollectionRequest share the same shape:
@@ -132,13 +138,22 @@ func (h *Handler) Get(c *gin.Context) {
 		return
 	}
 
-	pins, err := h.repo.ListPins(c.Request.Context(), id)
+	limit, ok := httpx.ParseLimit(c, collectionPinListDefaultLimit, collectionPinListMaxLimit)
+	if !ok {
+		return
+	}
+	offset, ok := httpx.ParseOffset(c)
+	if !ok {
+		return
+	}
+
+	pins, total, err := h.repo.ListPins(c.Request.Context(), id, limit, offset)
 	if err != nil {
 		response.Internal(c, "collections: get pins", err, "collection_id", id)
 		return
 	}
 
-	response.OK(c, gin.H{"collection": CollectionDetail{Collection: collection, Pins: pins}})
+	response.OK(c, gin.H{"collection": CollectionDetail{Collection: collection, Pins: pins, PinTotal: total}})
 }
 
 // requireOwner aborts unless the caller owns the collection (or moderates),

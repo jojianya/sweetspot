@@ -30,6 +30,16 @@ function ProfileProbe({ id }: { id: string }) {
   );
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("useProfile", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -93,5 +103,55 @@ describe("useProfile", () => {
     });
     expect(apiMocks.fetchUser).toHaveBeenCalledTimes(2);
     expect(state()).toBe("settled:found:noerror");
+  });
+
+  // Navigating from one profile to another must never leave the previous
+  // profile's data on screen under the new id, even once the old request
+  // settles late.
+  it("clears the previous profile while the new id loads", async () => {
+    const second = deferred<{ username: string }>();
+    apiMocks.fetchUser.mockResolvedValueOnce({ username: "alice" });
+    apiMocks.fetchUser.mockImplementationOnce(() => second.promise);
+
+    await act(async () => {
+      root.render(createElement(ProfileProbe, { id: "user-1" }));
+    });
+    expect(counts()).toBe("alice:2:1");
+
+    // user-2's pins and collections come back empty; user-1's must not survive
+    // into the new profile. Registered before the render, because the effect
+    // fires during it.
+    apiMocks.fetchUserPins.mockResolvedValueOnce([]);
+    apiMocks.fetchUserCollections.mockResolvedValueOnce([]);
+    await act(async () => {
+      root.render(createElement(ProfileProbe, { id: "user-2" }));
+    });
+    // Still loading, and nothing from user-1 is on screen.
+    expect(state()).toContain("loading");
+    expect(counts()).toBe("noprofile:0:0");
+
+    await act(async () => {
+      second.resolve({ username: "bob" });
+      await second.promise;
+    });
+    expect(counts()).toBe("bob:0:0");
+  });
+
+  it("ignores a superseded profile that resolves after the new one", async () => {
+    const first = deferred<{ username: string }>();
+    apiMocks.fetchUser.mockImplementationOnce(() => first.promise);
+    apiMocks.fetchUser.mockResolvedValueOnce({ username: "bob" });
+
+    await act(async () => {
+      root.render(createElement(ProfileProbe, { id: "user-1" }));
+    });
+    await act(async () => {
+      root.render(createElement(ProfileProbe, { id: "user-2" }));
+    });
+    await act(async () => {
+      first.resolve({ username: "alice (stale)" });
+      await first.promise;
+    });
+    expect(counts()).toBe("bob:2:1");
   });
 });

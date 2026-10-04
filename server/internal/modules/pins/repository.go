@@ -20,10 +20,12 @@ type Repository interface {
 	ListTrending(ctx context.Context, bbox [4]float64, limit int) ([]TrendingPin, error)
 	ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error)
 	SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error)
-	// UpdatePin applies the patch and returns the pin plus its photo set
-	// after the change, so the handler can answer with the pin's current
-	// photos instead of leaving the client to refetch them.
-	UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, []PinPhoto, error)
+	// UpdatePin applies the patch and returns the pin plus its photo set after
+	// the change, so the handler can answer with the pin's current photos
+	// instead of leaving the client to refetch them. Authorization lives in
+	// the UPDATE predicate (owner or moderator, visible pins only), so there is
+	// no TOCTOU between an ownership read and the write.
+	UpdatePin(ctx context.Context, id, userID string, isModerator bool, patch UpdatePinPatch) (Pin, []PinPhoto, error)
 	// PinVisible reports whether the pin exists and is not soft-hidden. It
 	// delegates to the shared VisiblePinExists helper so the "hidden pins do
 	// not exist" rule stays in one place.
@@ -359,7 +361,12 @@ func (r *postgresRepository) ListByUser(ctx context.Context, userID string, limi
 // (nil keeps), and optionally a full photo-set replacement. It also returns the
 // pin's photo set as it stands after the update, read inside the same
 // transaction, so the response can carry the current photos.
-func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, []PinPhoto, error) {
+//
+// Ownership and visibility are decided by the UPDATE predicate rather than by a
+// handler-side load-then-decide, matching DeletePin: a missing or already-hidden
+// pin reports NotFound (the hidden-pin 404 convention) and a visible pin the
+// caller does not own reports Forbidden.
+func (r *postgresRepository) UpdatePin(ctx context.Context, id, userID string, isModerator bool, patch UpdatePinPatch) (Pin, []PinPhoto, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Pin{}, nil, err
@@ -369,16 +376,18 @@ func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch Upd
 	var p Pin
 	if err := tx.QueryRow(ctx, `
 		UPDATE pins
-		SET caption    = COALESCE($2, caption),
-		    category_id = COALESCE($3, category_id),
+		SET caption    = COALESCE($4, caption),
+		    category_id = COALESCE($5, category_id),
 		    updated_at  = now()
 		WHERE id = $1
+		  AND is_hidden = false
+		  AND (user_id = $2 OR $3)
 		RETURNING id, user_id, ST_AsText(location) AS location, geohash, caption, category_id, is_hidden, views, created_at
-	`, id, patch.Caption, patch.CategoryID).Scan(
+	`, id, userID, isModerator, patch.Caption, patch.CategoryID).Scan(
 		&p.ID, &p.UserID, &p.Location, &p.Geohash, &p.Caption, &p.CategoryID, &p.IsHidden, &p.Views, &p.CreatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return Pin{}, nil, ErrNotFound
+			return Pin{}, nil, classifyPinMiss(ctx, tx, id)
 		}
 		return Pin{}, nil, err
 	}
@@ -413,6 +422,18 @@ func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch Upd
 // to the shared VisiblePinExists helper.
 func (r *postgresRepository) PinVisible(ctx context.Context, id string) (bool, error) {
 	return VisiblePinExists(ctx, r.pool, id)
+}
+
+// classifyPinMiss turns a zero-row UPDATE into a truthful error. It runs only
+// after the predicate found nothing, and only decides the status code: a pin
+// that does not exist or is already hidden is NotFound, a pin that exists and
+// is visible but was not matched belongs to someone else.
+func classifyPinMiss(ctx context.Context, tx pgx.Tx, id string) error {
+	var hidden bool
+	if err := tx.QueryRow(ctx, `SELECT is_hidden FROM pins WHERE id = $1`, id).Scan(&hidden); err != nil || hidden {
+		return ErrNotFound
+	}
+	return ErrForbidden
 }
 
 // scanPinListEntries maps the shared list/search result rows into entries.

@@ -160,9 +160,12 @@ func TestDBCoverCollectionPins(t *testing.T) {
 		}
 	}
 
-	got, err := colRepo.ListPins(ctx, col.ID.String())
+	got, total, err := colRepo.ListPins(ctx, col.ID.String(), 50, 0)
 	if err != nil {
 		t.Fatalf("ListPins: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("ListPins total = %d, want 3", total)
 	}
 	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID.String() })
 	for id, want := range map[string]string{a: coverThumbA, b: coverFullB, c: ""} {
@@ -220,9 +223,12 @@ func TestDBCoverFavorites(t *testing.T) {
 		t.Fatalf("save favorite: %v", err)
 	}
 
-	got, err := favRepo.List(ctx, author)
+	got, total, err := favRepo.List(ctx, author, 50, 0)
 	if err != nil {
 		t.Fatalf("List: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("favorites total = %d, want 1", total)
 	}
 	if len(got) != 1 {
 		t.Fatalf("favorites = %d entries, want 1", len(got))

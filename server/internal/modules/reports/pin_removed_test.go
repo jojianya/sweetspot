@@ -15,8 +15,8 @@ func init() { gin.SetMode(gin.TestMode) }
 
 type stubReviewService struct {
 	Service
-	report   Report
-	location *string
+	report    Report
+	location  *string
 	reviewErr error
 }
 

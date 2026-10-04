@@ -4,30 +4,24 @@ import PinPageClient from "@/components/pins/PinPageClient";
 import { getPinServer } from "@/lib/api/server";
 import { buildPinMetadata } from "@/lib/metadata/pin";
 import { getSiteUrl } from "@/lib/site";
-import { ApiError } from "@/lib/api/client";
 
 interface PinPageParams {
   params: Promise<{ id: string }>;
 }
 
 /**
- * Resolves a pin for the page, mapping a 404 to notFound() and letting every
- * other error propagate to error.tsx.
+ * Resolves a pin for the page: null means the API answered 404, and anything
+ * else propagates to error.tsx.
  *
- * getPinServer throws an ApiError with status 404 for a genuine not-found
- * response. Timeouts, 500s, and network failures also throw ApiError (with
- * status 0 for network-level failures) — those propagate to the error
- * boundary rather than crashing the route unhandled.
+ * getPinServer already maps a 404 response to null (see lib/api/server.ts), so
+ * there is no ApiError to inspect here: a missing or hidden pin arrives as null,
+ * and timeouts, 500s and network failures arrive as thrown errors that belong
+ * in the error boundary. The previous ApiError 404 branch was unreachable —
+ * getPinServer never threw ApiError — which meant a genuine 404 could only be
+ * handled by accident.
  */
 async function resolvePin(id: string) {
-  try {
-    return await getPinServer(id);
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 404) {
-      return null;
-    }
-    throw e;
-  }
+  return getPinServer(id);
 }
 
 export async function generateMetadata({ params }: PinPageParams): Promise<Metadata> {

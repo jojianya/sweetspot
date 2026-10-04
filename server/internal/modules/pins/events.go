@@ -19,8 +19,8 @@ type Event struct {
 
 // PinRemoved describes a pin that has been removed (hidden/deleted).
 type PinRemoved struct {
-	ID       string    `json:"id"`
-	Location string    `json:"location"`
+	ID       string `json:"id"`
+	Location string `json:"location"`
 }
 
 // Events lets the create flow publish pin events without depending on a

@@ -5,6 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import { fetchReports, reviewReport } from "@/lib/api";
 import { errorMessage, relativeTime } from "@/lib/utils";
+import { useAdminSession } from "@/hooks/useAdminSession";
 import { useAuth } from "@/store/auth";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageEmpty, PageError, PageLoading } from "@/components/ui/PageState";
@@ -41,8 +42,64 @@ export function reportEmptyCopy(status: ReportStatus | "all"): {
 
 export default function ReportsPage() {
   const { user } = useAuth();
-  const isModerator = user?.role === "admin" || user?.role === "owner";
+  // The cached role is not a credential, so /me decides whether this screen
+  // renders at all. Until it answers, authorized is false and the reports tree
+  // below is never mounted, so no moderation request goes out for a signed-out
+  // or unprivileged caller.
+  const { authorized, checked } = useAdminSession("moderator");
 
+  if (!user) {
+    return (
+      <>
+        <Navbar backHref="/" backLabel="Back to map" />
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
+          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            Sign in to moderate
+          </h1>
+          <Link
+            href="/login"
+            className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
+          >
+            Log in
+          </Link>
+        </div>
+      </>
+    );
+  }
+
+  if (!authorized) {
+    return (
+      <>
+        <Navbar backHref="/" backLabel="Back to map" />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
+          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            Admins only
+          </h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {checked
+              ? "You don't have permission to review reports."
+              : "Checking your access…"}
+          </p>
+          <Link
+            href="/"
+            className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
+          >
+            Back to map
+          </Link>
+        </div>
+      </>
+    );
+  }
+
+  return <ReportsShell />;
+}
+
+/**
+ * The moderation queue. Split out so the reports fetch only runs for a caller
+ * /me has confirmed is a moderator.
+ */
+function ReportsShell() {
+  const { user } = useAuth();
   const [status, setStatus] = useState<ReportStatus | "all">("pending");
   const [reports, setReports] = useState<ReportEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,47 +155,6 @@ export default function ReportsPage() {
       setBusyId(null);
     }
   };
-
-  if (!user) {
-    return (
-      <>
-        <Navbar backHref="/" backLabel="Back to map" />
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Sign in to moderate
-          </h1>
-          <Link
-            href="/login"
-            className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
-          >
-            Log in
-          </Link>
-        </div>
-      </>
-    );
-  }
-
-  if (!isModerator) {
-    return (
-      <>
-        <Navbar backHref="/" backLabel="Back to map" />
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Admins only
-          </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            You don&apos;t have permission to review reports.
-          </p>
-          <Link
-            href="/"
-            className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
-          >
-            Back to map
-          </Link>
-        </div>
-      </>
-    );
-  }
 
   // Render the reports list or appropriate state
   const renderContent = () => {
@@ -246,7 +262,7 @@ export default function ReportsPage() {
       <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-16 pt-20">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Reports</h1>
-          {user.role === "owner" && (
+          {user?.role === "owner" && (
             <Link
               href="/roles"
               className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"

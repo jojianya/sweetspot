@@ -2,6 +2,7 @@ package endpointtest
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -24,7 +25,7 @@ func TestDBUpdatePinReturnsPhotoSet(t *testing.T) {
 
 	t.Run("CaptionOnlyEditKeepsPhotoSet", func(t *testing.T) {
 		caption := "renamed"
-		updated, photos, err := repo.UpdatePin(ctx, pinID, pins.UpdatePinPatch{Caption: &caption})
+		updated, photos, err := repo.UpdatePin(ctx, pinID, owner, false, pins.UpdatePinPatch{Caption: &caption})
 		if err != nil {
 			t.Fatalf("UpdatePin: %v", err)
 		}
@@ -40,7 +41,7 @@ func TestDBUpdatePinReturnsPhotoSet(t *testing.T) {
 			{PhotoURL: "new-b.webp", ThumbnailURL: "new-b-thumb.webp"},
 			{PhotoURL: "new-c.webp", ThumbnailURL: "new-c-thumb.webp"},
 		}
-		_, photos, err := repo.UpdatePin(ctx, pinID, pins.UpdatePinPatch{Photos: replacement})
+		_, photos, err := repo.UpdatePin(ctx, pinID, owner, false, pins.UpdatePinPatch{Photos: replacement})
 		if err != nil {
 			t.Fatalf("UpdatePin with photos: %v", err)
 		}
@@ -67,6 +68,82 @@ func TestDBUpdatePinReturnsPhotoSet(t *testing.T) {
 		}
 		if visible, err := repo.PinVisible(ctx, pinID); err != nil || visible {
 			t.Errorf("PinVisible after hide = %v, %v; want false, nil", visible, err)
+		}
+	})
+}
+
+// TestDBUpdatePinAuthorization exercises the UPDATE predicate against real
+// SQL: the owner may edit, a stranger may not (Forbidden, and the row is
+// untouched), a moderator may, and a hidden or missing pin is NotFound.
+func TestDBUpdatePinAuthorization(t *testing.T) {
+	pool := requireDB(t)
+	ctx := context.Background()
+	owner := seedDBUser(t, ctx, pool, "user")
+	stranger := seedDBUser(t, ctx, pool, "user")
+	pinID := seedDBPin(t, ctx, pool, owner, dbCategoryID(t, ctx, pool))
+	repo := pins.NewRepository(pool)
+
+	pinCaption := func(t *testing.T) string {
+		t.Helper()
+		var caption *string
+		if err := pool.QueryRow(ctx, `SELECT caption FROM pins WHERE id = $1`, pinID).Scan(&caption); err != nil {
+			t.Fatalf("read caption: %v", err)
+		}
+		if caption == nil {
+			return ""
+		}
+		return *caption
+	}
+
+	t.Run("OwnerCanUpdate", func(t *testing.T) {
+		caption := "edited by owner"
+		if _, _, err := repo.UpdatePin(ctx, pinID, owner, false, pins.UpdatePinPatch{Caption: &caption}); err != nil {
+			t.Fatalf("owner update: %v", err)
+		}
+		if got := pinCaption(t); got != "edited by owner" {
+			t.Errorf("caption = %q, want %q", got, "edited by owner")
+		}
+	})
+
+	t.Run("NonOwnerIsForbiddenAndChangesNothing", func(t *testing.T) {
+		caption := "edited by stranger"
+		if _, _, err := repo.UpdatePin(ctx, pinID, stranger, false, pins.UpdatePinPatch{Caption: &caption}); !errors.Is(err, pins.ErrForbidden) {
+			t.Fatalf("non-owner update = %v, want ErrForbidden", err)
+		}
+		if got := pinCaption(t); got == "edited by stranger" {
+			t.Error("a forbidden update must not change the pin")
+		}
+	})
+
+	t.Run("ModeratorCanUpdateAnotherPin", func(t *testing.T) {
+		caption := "edited by moderator"
+		if _, _, err := repo.UpdatePin(ctx, pinID, stranger, true, pins.UpdatePinPatch{Caption: &caption}); err != nil {
+			t.Fatalf("moderator update: %v", err)
+		}
+		if got := pinCaption(t); got != "edited by moderator" {
+			t.Errorf("caption = %q, want %q", got, "edited by moderator")
+		}
+	})
+
+	t.Run("HiddenPinIsNotFound", func(t *testing.T) {
+		if _, err := pool.Exec(ctx, `UPDATE pins SET is_hidden = true WHERE id = $1`, pinID); err != nil {
+			t.Fatalf("hide pin: %v", err)
+		}
+		caption := "edited while hidden"
+		// Not Forbidden: a hidden pin must be indistinguishable from a
+		// missing one even for its own owner.
+		if _, _, err := repo.UpdatePin(ctx, pinID, owner, false, pins.UpdatePinPatch{Caption: &caption}); !errors.Is(err, pins.ErrNotFound) {
+			t.Fatalf("hidden pin update = %v, want ErrNotFound", err)
+		}
+		if _, err := pool.Exec(ctx, `UPDATE pins SET is_hidden = false WHERE id = $1`, pinID); err != nil {
+			t.Fatalf("unhide pin: %v", err)
+		}
+	})
+
+	t.Run("MissingPinIsNotFound", func(t *testing.T) {
+		caption := "edited a ghost"
+		if _, _, err := repo.UpdatePin(ctx, "00000000-0000-0000-0000-000000000000", owner, false, pins.UpdatePinPatch{Caption: &caption}); !errors.Is(err, pins.ErrNotFound) {
+			t.Fatalf("missing pin update = %v, want ErrNotFound", err)
 		}
 	})
 }

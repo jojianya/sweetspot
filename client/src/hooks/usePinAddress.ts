@@ -12,6 +12,17 @@ import { reverseGeocode } from "@/lib/api/geocoding";
 export function usePinAddress(point: { lat: number; lng: number } | null): string | null {
   const [address, setAddress] = useState<string | null>(null);
 
+  // Drop the previous pin's address during render when the point changes (the
+  // derived-state pattern useAsyncData uses). The effect below already ignores
+  // a superseded lookup; this stops the old address from being shown against
+  // the new point while its own lookup is still in flight.
+  const pointKey = point ? `${point.lat},${point.lng}` : "";
+  const [prevKey, setPrevKey] = useState(pointKey);
+  if (prevKey !== pointKey) {
+    setPrevKey(pointKey);
+    setAddress(null);
+  }
+
   useEffect(() => {
     if (!point) return;
     const controller = new AbortController();

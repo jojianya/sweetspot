@@ -18,8 +18,8 @@ type fakeRepo struct {
 	createErr  error
 }
 
-func (f *fakeRepo) ListByPin(context.Context, string) ([]Comment, error) {
-	return nil, nil
+func (f *fakeRepo) ListByPin(context.Context, string, int, int) ([]Comment, int, error) {
+	return nil, 0, nil
 }
 func (f *fakeRepo) Create(context.Context, string, string, string) (Comment, error) {
 	return Comment{}, f.createErr

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { removeFavorite, saveFavorite } from "@/lib/api";
 import { useSavedStatus } from "@/hooks/useFavorites";
+import { errorMessage } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
 /**
@@ -21,6 +22,7 @@ export function useOptimisticSave(pinId: string) {
   // two clicks in the same tick would both pass the state check and send
   // duplicate requests. The ref flips synchronously instead.
   const busyRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSave = () => {
     if (!user) {
@@ -30,6 +32,7 @@ export function useOptimisticSave(pinId: string) {
     if (saving || busyRef.current) return;
     busyRef.current = true;
     setSaving(true);
+    setError(null);
     const next = !saved;
     setSaved(next);
     const op = next ? saveFavorite(pinId) : removeFavorite(pinId);
@@ -37,11 +40,14 @@ export function useOptimisticSave(pinId: string) {
       busyRef.current = false;
       setSaving(false);
     };
-    op.then(done).catch(() => {
+    op.then(done).catch((e: unknown) => {
+      // Roll the badge back, and say why: a silent revert left the user
+      // staring at a pin that was not saved with no explanation.
       setSaved(!next);
+      setError(errorMessage(e));
       done();
     });
   };
 
-  return { saved, saving, handleSave };
+  return { saved, saving, error, handleSave };
 }

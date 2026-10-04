@@ -61,7 +61,7 @@ func TestDBHiddenPinIsInvisibleToSharedChecks(t *testing.T) {
 		}
 	}
 
-	entries, err := favRepo.List(ctx, reporter)
+	entries, _, err := favRepo.List(ctx, reporter, 50, 0)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

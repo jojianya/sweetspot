@@ -272,6 +272,7 @@ func matches(ev pins.Event, bbox *[4]float64, category *int) bool {
 	var lng, lat float64
 	if _, err := fmt.Sscanf(ev.Location, "POINT(%f %f)", &lng, &lat); err != nil {
 		// Malformed location: only pass through when no bbox filter is set.
+		noteMalformedLocation("pin_created", ev)
 		return false
 	}
 	return lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]
@@ -286,17 +287,13 @@ func matchesRemoved(ev pins.PinRemoved, bbox *[4]float64) bool {
 	var lng, lat float64
 	if _, err := fmt.Sscanf(ev.Location, "POINT(%f %f)", &lng, &lat); err != nil {
 		// Malformed location: only pass through when no bbox filter is set.
-		// Dropping is the right behaviour — a pin whose position cannot be read
-		// cannot be placed on a map — but it used to be silent, which is how a
-		// publisher that emitted a different WKT dialect went unnoticed: the
-		// pins simply stopped leaving other people's viewports.
-		noteMalformedRemovalLocation(ev)
+		noteMalformedLocation("pin_removed", ev)
 		return false
 	}
 	return lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]
 }
 
-// malformedLocationDrops counts pin_removed events dropped for an unparsable
+// malformedLocationDrops counts events dropped for an unparsable
 // location, and malformedLocationLastLog gates how often that is written out.
 // There is no metrics registry in this service, so the count rides along on a
 // rate-limited structured log line: one warning per interval, each carrying the
@@ -311,8 +308,8 @@ var (
 // warnings. Kept in seconds because that is the unit both timestamps use.
 const malformedLocationLogIntervalSecs = 60
 
-// noteMalformedRemovalLocation records and (rate-limited) reports a drop.
-func noteMalformedRemovalLocation(ev pins.PinRemoved) {
+// noteMalformedLocation records and (rate-limited) reports a drop.
+func noteMalformedLocation(kind string, ev interface{ GetID() string; GetLocation() string }) {
 	total := malformedLocationDrops.Add(1)
 
 	now := time.Now().Unix()
@@ -325,9 +322,10 @@ func noteMalformedRemovalLocation(ev pins.PinRemoved) {
 	if !malformedLocationLastLog.CompareAndSwap(last, now) {
 		return
 	}
-	slog.Warn("realtime: dropped pin_removed with unparsable location",
-		"pin_id", ev.ID,
-		"location", ev.Location,
+	slog.Warn("realtime: dropped event with unparsable location",
+		"kind", kind,
+		"pin_id", ev.GetID(),
+		"location", ev.GetLocation(),
 		"drops_since_last_log", total,
 	)
 }

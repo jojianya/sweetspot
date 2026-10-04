@@ -142,3 +142,74 @@ func TestMalformedLocationCounterAccumulates(t *testing.T) {
 		t.Errorf("counter advanced by %d, want 3", got)
 	}
 }
+
+// --- pin_created (matches) tests mirror the pin_removed ones ---
+
+func TestMatchesReportsMalformedLocation(t *testing.T) {
+	resetMalformedLocationCounters()
+	bbox := [4]float64{10, 20, 30, 40}
+	bad := pins.Event{ID: "pin-malformed", Location: "0101000020E6100000"}
+
+	logged := captureSlog(t, func() {
+		if matches(bad, &bbox, nil) {
+			t.Error("a malformed location must still be dropped when a bbox is set")
+		}
+	})
+
+	if got := malformedLocationDrops.Load(); got != 1 {
+		t.Errorf("drop counter = %d, want 1", got)
+	}
+	if !strings.Contains(logged, "unparsable location") {
+		t.Errorf("expected a warning about the unparsable location, got %q", logged)
+	}
+	if !strings.Contains(logged, "pin-malformed") {
+		t.Errorf("expected the event id in the warning, got %q", logged)
+	}
+	if !strings.Contains(logged, "drops_since_last_log") {
+		t.Errorf("expected a running counter in the warning, got %q", logged)
+	}
+	if !strings.Contains(logged, "pin_created") {
+		t.Errorf("expected the event kind in the warning, got %q", logged)
+	}
+}
+
+func TestMatchesDoesNotCountWellFormedLocations(t *testing.T) {
+	resetMalformedLocationCounters()
+	bbox := [4]float64{10, 20, 30, 40}
+	inside := pins.Event{ID: "pin-inside", Location: "POINT(25 15)"}
+	outside := pins.Event{ID: "pin-outside", Location: "POINT(100 100)"}
+
+	logged := captureSlog(t, func() {
+		if !matches(inside, &bbox, nil) {
+			t.Error("expected an inside-bbox event to match")
+		}
+		if matches(outside, &bbox, nil) {
+			t.Error("expected an outside-bbox event to be filtered")
+		}
+	})
+
+	if got := malformedLocationDrops.Load(); got != 0 {
+		t.Errorf("drop counter = %d, want 0 for well-formed locations", got)
+	}
+	if logged != "" {
+		t.Errorf("expected no warnings for well-formed locations, got %q", logged)
+	}
+}
+
+func TestMatchesWithoutBboxIsNotCounted(t *testing.T) {
+	resetMalformedLocationCounters()
+	bad := pins.Event{ID: "pin-malformed", Location: "not-a-point"}
+
+	logged := captureSlog(t, func() {
+		if !matches(bad, nil, nil) {
+			t.Error("a malformed location must pass when no bbox is set")
+		}
+	})
+
+	if got := malformedLocationDrops.Load(); got != 0 {
+		t.Errorf("drop counter = %d, want 0 when nothing was dropped", got)
+	}
+	if logged != "" {
+		t.Errorf("expected no warnings when nothing was dropped, got %q", logged)
+	}
+}

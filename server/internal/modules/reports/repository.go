@@ -75,9 +75,11 @@ func (r *postgresRepository) ReviewReport(ctx context.Context, reportID, action,
 		if _, err := tx.Exec(ctx, `UPDATE pins SET is_hidden = true WHERE id = $1`, pinID); err != nil {
 			return rep, nil, err
 		}
-		// Get the pin location for the pin_removed event
+		// Get the pin location for the pin_removed event. Must be WKT like
+		// the pins repo's ST_AsText, or matchesRemoved in realtime/handler.go
+		// drops it for bbox-filtered clients.
 		var location string
-		err := tx.QueryRow(ctx, `SELECT location FROM pins WHERE id = $1`, pinID).Scan(&location)
+		err := tx.QueryRow(ctx, `SELECT ST_AsText(location) FROM pins WHERE id = $1`, pinID).Scan(&location)
 		if err != nil {
 			return rep, nil, err
 		}

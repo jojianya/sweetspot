@@ -27,6 +27,12 @@ type Repository interface {
 	// from COUNT(*) OVER () in the same query (P1.4), with a fallback to the
 	// separate CountUsers call when the page is empty and the total is unknown.
 	ListUsers(ctx context.Context, limit, offset int) ([]User, int, error)
+	// UpdateRole changes a user's role. The last-owner guard is atomic:
+	// the owner count and the role write share one transaction that
+	// locks every owner row first (SELECT ... FOR UPDATE), so two
+	// concurrent demotions serialize — the second re-evaluates the lock
+	// after the first commits and can no longer count an owner that was
+	// just demoted.
 	UpdateRole(ctx context.Context, id, role string) (User, error)
 	UpdateProfile(ctx context.Context, id string, patch UpdateProfilePatch) (User, error)
 	SearchUsers(ctx context.Context, query string, limit int) ([]User, error)
@@ -211,18 +217,53 @@ func (r *postgresRepository) ListUsers(ctx context.Context, limit, offset int) (
 	return users, total, nil
 }
 
+// UpdateRole changes a user's role. When the change would demote an
+// owner, the check and the write happen in one transaction that
+// first locks every owner row, so two concurrent demotions cannot
+// both pass the count check and leave zero owners.
 func (r *postgresRepository) UpdateRole(ctx context.Context, id, role string) (User, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return User{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	// Lock the owner rows before counting. Under READ COMMITTED a
+	// concurrent demotion blocks here until this transaction commits;
+	// its lock request then re-evaluates against the updated rows, so
+	// a just-demoted owner no longer matches role = 'owner'.
+	var owners int
+	if err := tx.QueryRow(ctx, `
+		SELECT COUNT(*) FROM users WHERE role = 'owner' FOR UPDATE
+	`).Scan(&owners); err != nil {
+		return User{}, err
+	}
+
+	// Re-read the target's role inside the transaction so the check
+	// cannot race a concurrent role change on the same row.
+	var currentRole string
+	if err := tx.QueryRow(ctx, `SELECT role FROM users WHERE id = $1`, id).Scan(&currentRole); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		return User{}, err
+	}
+
+	if currentRole == RoleOwner && role != RoleOwner && owners <= 1 {
+		return User{}, ErrCannotDemoteLastOwner
+	}
+
 	var u User
-	err := r.pool.QueryRow(ctx, `
+	if err := tx.QueryRow(ctx, `
 		UPDATE users SET role = $2 WHERE id = $1
 		RETURNING id, email, username, avatar_url, socials, role, created_at, updated_at
 	`, id, role).Scan(
 		&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return User{}, ErrNotFound
+	); err != nil {
+		return User{}, err
 	}
-	if err != nil {
+
+	if err := tx.Commit(ctx); err != nil {
 		return User{}, err
 	}
 	return u, nil

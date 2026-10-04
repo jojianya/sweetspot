@@ -80,7 +80,14 @@ func (m *mockRepository) UpdateRole(_ context.Context, id, role string) (User, e
 	if m.updateErr != nil {
 		return User{}, m.updateErr
 	}
-	u := m.users[id]
+	u, ok := m.users[id]
+	if !ok {
+		return User{}, ErrNotFound
+	}
+	// Mirror the repository's atomic last-owner guard.
+	if u.Role == RoleOwner && role != RoleOwner && m.owners <= 1 {
+		return User{}, ErrCannotDemoteLastOwner
+	}
 	u.Role = role
 	return u, nil
 }

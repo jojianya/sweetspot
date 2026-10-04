@@ -79,21 +79,10 @@ func (s *service) UpdateRole(ctx context.Context, actorID, userID, role string) 
 		return User{}, ErrCannotChangeOwnRole
 	}
 
-	target, err := s.repo.GetByID(ctx, userID)
-	if err != nil {
-		return User{}, err
-	}
-
-	if target.Role == RoleOwner && role != RoleOwner {
-		owners, err := s.repo.CountOwners(ctx)
-		if err != nil {
-			return User{}, err
-		}
-		if owners <= 1 {
-			return User{}, ErrCannotDemoteLastOwner
-		}
-	}
-
+	// The last-owner guard lives in repo.UpdateRole: it counts the
+	// owner rows and writes the new role inside one transaction that
+	// locks the owner rows first, so concurrent demotions cannot both
+	// pass the check.
 	return s.repo.UpdateRole(ctx, userID, role)
 }
 

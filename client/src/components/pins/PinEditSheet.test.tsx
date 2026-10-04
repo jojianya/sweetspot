@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { PinDetail } from "@/lib/types";
 import PinEditSheet from "./PinEditSheet";
 
@@ -33,6 +33,87 @@ function buttonByName(container: HTMLElement, name: string): HTMLButtonElement |
   const buttons = Array.from(container.querySelectorAll("button"));
   return (buttons.find((b) => b.textContent === name) as HTMLButtonElement) ?? null;
 }
+
+describe("PinEditSheet update", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  let onClose: Mock<() => void>;
+  let onUpdated: Mock<(pin: PinDetail) => void>;
+
+  beforeEach(() => {
+    const actEnvironment = globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT: boolean;
+    };
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    onClose = vi.fn<() => void>();
+    onUpdated = vi.fn<(pin: PinDetail) => void>();
+    apiMocks.fetchPin.mockReset();
+    apiMocks.updatePin.mockReset();
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  async function renderSheet() {
+    await act(async () => {
+      root.render(
+        <PinEditSheet
+          pin={pin}
+          categories={[{ id: 1, name: "Food", slug: "food" }]}
+          onClose={onClose}
+          onUpdated={onUpdated}
+          onDeleted={vi.fn()}
+        />
+      );
+    });
+  }
+
+  async function clickButton(name: string) {
+    await act(async () => {
+      buttonByName(container, name)!.click();
+    });
+  }
+
+  function updatedPhoto(overrides: Partial<PinDetail["photos"][number]> = {}): PinDetail["photos"][number] {
+    return {
+      id: "photo-2",
+      pin_id: "pin-1",
+      photo_url: "http://api.test/new.webp",
+      thumbnail_url: "http://api.test/new-thumb.webp",
+      position: 0,
+      created_at: "2026-02-01T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  // The update response carries the pin's photo set, so the sheet must adopt it
+  // instead of refetching the pin it was just handed.
+  it("adopts the photo set from the update response without refetching", async () => {
+    const photo = updatedPhoto();
+    apiMocks.updatePin.mockResolvedValue({ pin: { ...pin, caption: "Renamed" }, photos: [photo] });
+    await renderSheet();
+
+    await clickButton("Save changes");
+    await act(async () => {});
+
+    expect(apiMocks.updatePin).toHaveBeenCalledTimes(1);
+    expect(apiMocks.fetchPin).not.toHaveBeenCalled();
+    expect(onUpdated).toHaveBeenCalledTimes(1);
+    const passed = onUpdated.mock.calls[0][0];
+    expect(passed.caption).toBe("Renamed");
+    expect(passed.photos).toEqual([photo]);
+    // Fields the edit cannot change carry over from the sheet's own pin.
+    expect(passed.category).toBe("Food");
+    expect(onClose).toHaveBeenCalled();
+  });
+});
 
 describe("PinEditSheet delete", () => {
   let container: HTMLDivElement;

@@ -505,6 +505,10 @@ func (h *Handler) ListByUser(c *gin.Context) {
 //   - caption:     present string; "" clears the caption
 //   - category_id: optional; when present it replaces the category
 //   - photos[]:    optional; when present it replaces the whole photo set
+//
+// The response carries the pin's photo set after the change, matching
+// CreatePin's {"pin", "photos"} envelope, so the client can adopt the new photo
+// URLs without refetching the pin.
 func (h *Handler) UpdatePin(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	id := c.Param("id")
@@ -516,6 +520,19 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 			return
 		}
 		response.Internal(c, "update pin: get", err, "pin_id", id)
+		return
+	}
+
+	// Hidden pins do not exist for edits. Checked before the ownership gate so
+	// a hidden pin answers 404 rather than revealing that it exists, the same
+	// rule DeletePin, comments, favorites, reports and collections follow.
+	visible, err := h.repo.PinVisible(c.Request.Context(), id)
+	if err != nil {
+		response.Internal(c, "update pin: visibility check", err, "pin_id", id)
+		return
+	}
+	if !visible {
+		response.NotFound(c, "pin not found")
 		return
 	}
 
@@ -588,7 +605,7 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		}
 	}
 
-	updated, err := h.repo.UpdatePin(c.Request.Context(), id, patch)
+	updated, photos, err := h.repo.UpdatePin(c.Request.Context(), id, patch)
 	if err != nil {
 		// The new photos are already on disk; remove them so a failed update
 		// cannot orphan files.
@@ -612,5 +629,5 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		}
 	}
 
-	response.OK(c, gin.H{"pin": updated})
+	response.OK(c, gin.H{"pin": updated, "photos": photos})
 }

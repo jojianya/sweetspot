@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
 import { CloseIcon } from "@/components/icons";
-import { fetchPin, deletePin, updatePin } from "@/lib/api";
+import { deletePin, updatePin } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 import type { Category, PinDetail } from "@/lib/types";
 
@@ -72,13 +72,15 @@ export default function PinEditSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await updatePin(pin.id, {
+      const result = await updatePin(pin.id, {
         caption: caption.trim(),
         categoryId,
         photos: files.length > 0 ? files : null,
       });
-      const refreshed = await fetchPin(pin.id);
-      onUpdated(refreshed);
+      // The update response carries the pin's photo set as it stands after the
+      // edit, so adopt it instead of refetching the pin. category, username and
+      // avatar_url are not editable here, so they carry over unchanged.
+      onUpdated({ ...pin, ...result.pin, photos: result.photos });
       onClose();
     } catch (e) {
       setError(errorMessage(e));

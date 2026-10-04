@@ -38,6 +38,7 @@ type stubPinRepo struct {
 	pinDetailErr  error
 	updated       pins.Pin
 	updateErr     error
+	updatedPhotos []pins.PinPhoto
 	userPins      []pins.PinListEntry
 	userPinsErr   error
 	trending      []pins.TrendingPin
@@ -56,8 +57,12 @@ func (s *stubPinRepo) GetPin(context.Context, string) (pins.PinDetail, error) {
 	return s.pinDetail, s.pinDetailErr
 }
 
-func (s *stubPinRepo) UpdatePin(context.Context, string, pins.UpdatePinPatch) (pins.Pin, error) {
-	return s.updated, s.updateErr
+func (s *stubPinRepo) UpdatePin(context.Context, string, pins.UpdatePinPatch) (pins.Pin, []pins.PinPhoto, error) {
+	return s.updated, s.updatedPhotos, s.updateErr
+}
+
+func (s *stubPinRepo) PinVisible(context.Context, string) (bool, error) {
+	return true, nil
 }
 
 func (s *stubPinRepo) ListByUser(context.Context, string, int) ([]pins.PinListEntry, error) {
@@ -502,8 +507,10 @@ func TestSearchUsers(t *testing.T) {
 		if len(body.Users) != 1 || body.Users[0].Username != "alice" {
 			t.Fatalf("expected [alice], got %+v", body.Users)
 		}
-		if body.Total != 2 {
-			t.Fatalf("expected total 2, got %d", body.Total)
+		// Total counts the matches, not every registered user: the
+		// service holds two users but only alice matches "ali".
+		if body.Total != 1 {
+			t.Fatalf("expected total 1, got %d", body.Total)
 		}
 	})
 

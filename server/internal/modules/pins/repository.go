@@ -20,7 +20,14 @@ type Repository interface {
 	ListTrending(ctx context.Context, bbox [4]float64, limit int) ([]TrendingPin, error)
 	ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error)
 	SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error)
-	UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error)
+	// UpdatePin applies the patch and returns the pin plus its photo set
+	// after the change, so the handler can answer with the pin's current
+	// photos instead of leaving the client to refetch them.
+	UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, []PinPhoto, error)
+	// PinVisible reports whether the pin exists and is not soft-hidden. It
+	// delegates to the shared VisiblePinExists helper so the "hidden pins do
+	// not exist" rule stays in one place.
+	PinVisible(ctx context.Context, id string) (bool, error)
 	RegisterView(ctx context.Context, id, viewerID string) (int64, error)
 	UserExists(ctx context.Context, id string) (bool, error)
 }
@@ -173,30 +180,45 @@ func (r *postgresRepository) GetPin(ctx context.Context, id string) (PinDetail, 
 		return PinDetail{}, err
 	}
 
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, pin_id, photo_url, thumbnail_url, position, created_at
-		FROM pin_photos
-		WHERE pin_id = $1
-		ORDER BY position
-	`, id)
+	d.Photos, err = scanPinPhotos(ctx, r.pool, id)
 	if err != nil {
-		return PinDetail{}, err
-	}
-	defer rows.Close()
-
-	d.Photos = []PinPhoto{}
-	for rows.Next() {
-		var ph PinPhoto
-		if err := rows.Scan(&ph.ID, &ph.PinID, &ph.PhotoURL, &ph.ThumbnailURL, &ph.Position, &ph.CreatedAt); err != nil {
-			return PinDetail{}, err
-		}
-		d.Photos = append(d.Photos, ph)
-	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
 		return PinDetail{}, err
 	}
 
 	return d, nil
+}
+
+// rowQuerier is the shared subset of *pgxpool.Pool and pgx.Tx that reads a pin's
+// photo rows.
+type rowQuerier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+// scanPinPhotos reads a pin's photos in position order.
+func scanPinPhotos(ctx context.Context, q rowQuerier, pinID string) ([]PinPhoto, error) {
+	rows, err := q.Query(ctx, `
+		SELECT id, pin_id, photo_url, thumbnail_url, position, created_at
+		FROM pin_photos
+		WHERE pin_id = $1
+		ORDER BY position
+	`, pinID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	photos := []PinPhoto{}
+	for rows.Next() {
+		var ph PinPhoto
+		if err := rows.Scan(&ph.ID, &ph.PinID, &ph.PhotoURL, &ph.ThumbnailURL, &ph.Position, &ph.CreatedAt); err != nil {
+			return nil, err
+		}
+		photos = append(photos, ph)
+	}
+	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+		return nil, err
+	}
+	return photos, nil
 }
 
 // pinListEntrySelect is the shared SELECT shape for list/search results: the
@@ -334,11 +356,13 @@ func (r *postgresRepository) ListByUser(ctx context.Context, userID string, limi
 }
 
 // UpdatePin applies a patch: caption (nil keeps, empty clears), category_id
-// (nil keeps), and optionally a full photo-set replacement.
-func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, error) {
+// (nil keeps), and optionally a full photo-set replacement. It also returns the
+// pin's photo set as it stands after the update, read inside the same
+// transaction, so the response can carry the current photos.
+func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch UpdatePinPatch) (Pin, []PinPhoto, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return Pin{}, err
+		return Pin{}, nil, err
 	}
 	defer tx.Rollback(ctx)
 
@@ -354,14 +378,14 @@ func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch Upd
 		&p.ID, &p.UserID, &p.Location, &p.Geohash, &p.Caption, &p.CategoryID, &p.IsHidden, &p.Views, &p.CreatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return Pin{}, ErrNotFound
+			return Pin{}, nil, ErrNotFound
 		}
-		return Pin{}, err
+		return Pin{}, nil, err
 	}
 
 	if patch.Photos != nil {
 		if _, err := tx.Exec(ctx, `DELETE FROM pin_photos WHERE pin_id = $1`, id); err != nil {
-			return Pin{}, err
+			return Pin{}, nil, err
 		}
 		for i, ph := range patch.Photos {
 			position := int16(i)
@@ -369,15 +393,26 @@ func (r *postgresRepository) UpdatePin(ctx context.Context, id string, patch Upd
 				INSERT INTO pin_photos (pin_id, photo_url, thumbnail_url, position)
 				VALUES ($1, $2, $3, $4)
 			`, id, ph.PhotoURL, ph.ThumbnailURL, position); err != nil {
-				return Pin{}, err
+				return Pin{}, nil, err
 			}
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return Pin{}, err
+	photos, err := scanPinPhotos(ctx, tx, id)
+	if err != nil {
+		return Pin{}, nil, err
 	}
-	return p, nil
+
+	if err := tx.Commit(ctx); err != nil {
+		return Pin{}, nil, err
+	}
+	return p, photos, nil
+}
+
+// PinVisible reports whether the pin exists and is not soft-hidden, delegating
+// to the shared VisiblePinExists helper.
+func (r *postgresRepository) PinVisible(ctx context.Context, id string) (bool, error) {
+	return VisiblePinExists(ctx, r.pool, id)
 }
 
 // scanPinListEntries maps the shared list/search result rows into entries.

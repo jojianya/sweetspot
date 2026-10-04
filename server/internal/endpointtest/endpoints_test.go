@@ -166,7 +166,7 @@ func (m *mockUserService) UpdateRole(ctx context.Context, actorID, userID, role 
 	return u, nil
 }
 
-func (m *mockUserService) SearchUsers(_ context.Context, query string, _ int) ([]users.User, error) {
+func (m *mockUserService) SearchUsers(_ context.Context, query string, limit, offset int) ([]users.User, int, error) {
 	q := strings.ToLower(query)
 	out := []users.User{}
 	for _, u := range m.users {
@@ -174,7 +174,15 @@ func (m *mockUserService) SearchUsers(_ context.Context, query string, _ int) ([
 			out = append(out, u)
 		}
 	}
-	return out, nil
+	total := len(out)
+	if offset >= len(out) {
+		return []users.User{}, total, nil
+	}
+	end := offset + limit
+	if end > len(out) {
+		end = len(out)
+	}
+	return out[offset:end], total, nil
 }
 
 func (m *mockUserService) ListUsers(_ context.Context, limit, offset int) ([]users.User, int, error) {

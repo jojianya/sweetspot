@@ -21,7 +21,6 @@ import ReportSheet from "./ReportSheet";
 import type { PinDetail } from "@/lib/types";
 import { parsePoint } from "@/lib/utils";
 import { categorySlug } from "@/lib/utils/category";
-import { fetchPin } from "@/lib/api/pins";
 import { useCategories } from "@/hooks/useCategories";
 import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/hooks/useOptimisticSave";
@@ -69,14 +68,9 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
 
   const { copied, handleShare, goDirections } = usePinShare(pin.caption, pin.id, point);
 
-  const handleUpdated = async () => {
-    try {
-      const refreshed = await fetchPin(pin.id);
-      setPin(refreshed);
-    } catch {
-      // ignored: the sheet already confirmed the update server-side
-    }
-  };
+  // The edit sheet hands back the updated pin (its response carries the
+  // current photos), so there is nothing left to refetch.
+  const handleUpdated = (updated: PinDetail) => setPin(updated);
 
   const name = pin.caption?.trim();
 

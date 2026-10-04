@@ -30,14 +30,18 @@ type stubRepo struct {
 	deletedUserID      string
 	deletedIsModerator bool
 
-	userExists    bool
-	userExistsErr error
+	userExists     bool
+	userExistsErr  error
 	categoryExists bool
-	createErr     error
-	created       bool
-	updateErr     error
-	updated       bool
-	updatePhotos  int
+	createErr      error
+	created        bool
+	updateErr      error
+	updated        bool
+	updatePhotos   int
+	// updateResultPhotos is what UpdatePin reports as the pin's photo set
+	// after the update; visible answers PinVisible.
+	updateResultPhotos []PinPhoto
+	visible            bool
 }
 
 func (s *stubRepo) GetPin(context.Context, string) (PinDetail, error) {
@@ -62,12 +66,19 @@ func (s *stubRepo) CreatePin(_ context.Context, _ NewPin) (Pin, error) {
 	return Pin{}, s.createErr
 }
 
-func (s *stubRepo) UpdatePin(_ context.Context, _ string, patch UpdatePinPatch) (Pin, error) {
+func (s *stubRepo) UpdatePin(_ context.Context, _ string, patch UpdatePinPatch) (Pin, []PinPhoto, error) {
 	s.updated = true
 	if patch.Photos != nil {
 		s.updatePhotos = len(patch.Photos)
 	}
-	return Pin{}, s.updateErr
+	if s.updateErr != nil {
+		return Pin{}, nil, s.updateErr
+	}
+	return Pin{}, s.updateResultPhotos, nil
+}
+
+func (s *stubRepo) PinVisible(context.Context, string) (bool, error) {
+	return s.visible, nil
 }
 
 // stubRoles is a one-method RoleReader returning a fixed role for any caller.

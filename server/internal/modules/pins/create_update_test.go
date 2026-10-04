@@ -237,6 +237,7 @@ func baseUpdateRepo() *stubRepo {
 	return &stubRepo{
 		detail:         PinDetail{UserID: mustUUID(testOwnerID), Photos: []PinPhoto{}},
 		categoryExists: true,
+		visible:        true,
 	}
 }
 
@@ -390,9 +391,65 @@ func TestUpdatePinSweepsStalePhotosOnSuccess(t *testing.T) {
 }
 
 
+// TestUpdatePinReturnsPhotos proves the response carries the pin's photo set
+// after the update, so a client that replaced its photos does not have to
+// refetch the pin to learn the new URLs. CreatePin answers the same way.
+func TestUpdatePinReturnsPhotos(t *testing.T) {
+	repo := baseUpdateRepo()
+	repo.updateResultPhotos = []PinPhoto{
+		{PhotoURL: "http://api.test/new-full.webp", ThumbnailURL: "http://api.test/new-thumb.webp", Position: 0},
+		{PhotoURL: "http://api.test/new2-full.webp", ThumbnailURL: "http://api.test/new2-thumb.webp", Position: 1},
+	}
+	r := newUpdateHarness(t, repo, t.TempDir(), nil)
+	req := multipartBody(t, http.MethodPatch, "/pins/pin-1",
+		map[string]string{"caption": "new"},
+		map[string][]byte{"a.jpg": validJPEG(t), "b.jpg": validJPEG(t)})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	var body struct {
+		Pin    Pin              `json:"pin"`
+		Photos []map[string]any `json:"photos"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Photos) != 2 {
+		t.Fatalf("photos = %d, want 2 (body: %s)", len(body.Photos), w.Body.String())
+	}
+	for i, ph := range body.Photos {
+		if ph["photo_url"] != repo.updateResultPhotos[i].PhotoURL {
+			t.Errorf("photo %d url = %v, want %q", i, ph["photo_url"], repo.updateResultPhotos[i].PhotoURL)
+		}
+		if ph["thumbnail_url"] != repo.updateResultPhotos[i].ThumbnailURL {
+			t.Errorf("photo %d thumbnail = %v, want %q", i, ph["thumbnail_url"], repo.updateResultPhotos[i].ThumbnailURL)
+		}
+	}
+}
+
+// TestUpdatePinHiddenPinIsNotFound proves a soft-hidden pin cannot be edited:
+// the shared VisiblePinExists rule makes it a 404, not a silent success.
+func TestUpdatePinHiddenPinIsNotFound(t *testing.T) {
+	repo := baseUpdateRepo()
+	repo.visible = false
+	r := newUpdateHarness(t, repo, t.TempDir(), nil)
+	req := multipartBody(t, http.MethodPatch, "/pins/pin-1", map[string]string{"caption": "new"}, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (body: %s)", w.Code, w.Body.String())
+	}
+	if repo.updated {
+		t.Error("a hidden pin must not reach the repository update")
+	}
+}
+
 func baseUpdateRepoOther() *stubRepo {
 	return &stubRepo{
 		detail:         PinDetail{UserID: mustUUID("223e4567-e89b-42d3-a456-426614174000"), Photos: []PinPhoto{}},
 		categoryExists: true,
+		visible:        true,
 	}
 }

@@ -208,8 +208,9 @@ func parseSocials(raw string) (map[string]any, error) {
 // List returns users for the owner's role-management console. With `q` it
 // filters to usernames containing the query (case-insensitive); without, it
 // returns every user (newest first). Both modes are paginated via limit/offset,
-// and the response always includes `total` — the number of registered users.
-// Owner-gated at the route level.
+// and the response always includes `total` — the number of registered users
+// when listing, or the number of matches when searching. Owner-gated at the
+// route level.
 func (h *Handler) List(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
 	if len(query) > 64 {
@@ -238,17 +239,11 @@ func (h *Handler) List(c *gin.Context) {
 	if query == "" {
 		found, total, err = h.service.ListUsers(c.Request.Context(), limit, offset)
 	} else {
-		found, err = h.service.SearchUsers(c.Request.Context(), query, limit)
-		if err != nil {
-			response.Internal(c, "user: list", err)
-			return
-		}
-		// SearchUsers doesn't return total; fall back to CountUsers for searches.
-		total, err = h.service.CountUsers(c.Request.Context())
-		if err != nil {
-			response.Internal(c, "user: count", err)
-			return
-		}
+		found, total, err = h.service.SearchUsers(c.Request.Context(), query, limit, offset)
+	}
+	if err != nil {
+		response.Internal(c, "user: list", err)
+		return
 	}
 
 	items := make([]PublicUser, 0, len(found))

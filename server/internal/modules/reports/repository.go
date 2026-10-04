@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
 
 type Repository interface {
@@ -25,12 +26,7 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 }
 
 func (r *postgresRepository) PinExists(ctx context.Context, pinID string) (bool, error) {
-	var exists bool
-	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pins WHERE id = $1)`, pinID).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
+	return pins.VisiblePinExists(ctx, r.pool, pinID)
 }
 
 func (r *postgresRepository) CreateReport(ctx context.Context, pinID, reporterID, reason string) (Report, error) {

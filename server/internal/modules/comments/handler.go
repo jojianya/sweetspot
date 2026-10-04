@@ -8,11 +8,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 )
 
-const maxCommentLength = 500
+const (
+	maxCommentLength = 500
+
+	commentListDefaultLimit = 50
+	commentListMaxLimit     = 200
+)
 
 type Handler struct {
 	repo Repository
@@ -41,12 +47,21 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	comments, err := h.repo.ListByPin(c.Request.Context(), c.Param("id"))
+	limit, ok := httpx.ParseLimit(c, commentListDefaultLimit, commentListMaxLimit)
+	if !ok {
+		return
+	}
+	offset, ok := httpx.ParseOffset(c)
+	if !ok {
+		return
+	}
+
+	comments, total, err := h.repo.ListByPin(c.Request.Context(), c.Param("id"), limit, offset)
 	if err != nil {
 		response.Internal(c, "comments: list", err, "pin_id", c.Param("id"))
 		return
 	}
-	response.OK(c, gin.H{"comments": comments})
+	response.OK(c, gin.H{"comments": comments, "total": total})
 }
 
 func (h *Handler) Create(c *gin.Context) {

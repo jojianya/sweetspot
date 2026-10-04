@@ -91,6 +91,8 @@ export const collectionEntrySchema = z.object({
 
 export const collectionDetailSchema = collectionEntrySchema.extend({
   pins: z.array(pinListEntrySchema),
+  // Number of pins in the whole collection; `pins` is one page of them.
+  pin_total: z.number().optional(),
 });
 
 export const userStatsSchema = z.object({

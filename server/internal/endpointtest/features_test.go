@@ -110,8 +110,19 @@ func (m *mockCommentRepo) PinExistsVisible(context.Context, string) (bool, error
 	return !m.pinGone, nil
 }
 
-func (m *mockCommentRepo) ListByPin(context.Context, string) ([]comments.Comment, error) {
-	return m.list, m.listErr
+func (m *mockCommentRepo) ListByPin(_ context.Context, _ string, limit, offset int) ([]comments.Comment, int, error) {
+	if m.listErr != nil {
+		return nil, 0, m.listErr
+	}
+	total := len(m.list)
+	if offset >= len(m.list) {
+		return []comments.Comment{}, total, nil
+	}
+	end := offset + limit
+	if end > len(m.list) {
+		end = len(m.list)
+	}
+	return m.list[offset:end], total, nil
 }
 
 func (m *mockCommentRepo) Create(context.Context, string, string, string) (comments.Comment, error) {
@@ -229,8 +240,16 @@ func (m *mockCollectionRepo) Delete(context.Context, string) error {
 	return m.deleteErr
 }
 
-func (m *mockCollectionRepo) ListPins(context.Context, string) ([]pins.PinListEntry, error) {
-	return m.pins, nil
+func (m *mockCollectionRepo) ListPins(_ context.Context, _ string, limit, offset int) ([]pins.PinListEntry, int, error) {
+	total := len(m.pins)
+	if offset >= len(m.pins) {
+		return []pins.PinListEntry{}, total, nil
+	}
+	end := offset + limit
+	if end > len(m.pins) {
+		end = len(m.pins)
+	}
+	return m.pins[offset:end], total, nil
 }
 
 func (m *mockCollectionRepo) PinExists(context.Context, string) (bool, error) {

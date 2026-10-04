@@ -232,13 +232,18 @@ func (r *postgresRepository) UpdateRole(ctx context.Context, id, role string) (U
 	}
 	defer tx.Rollback(ctx)
 
-	// Lock the owner rows before counting. Under READ COMMITTED a
-	// concurrent demotion blocks here until this transaction commits;
-	// its lock request then re-evaluates against the updated rows, so
-	// a just-demoted owner no longer matches role = 'owner'.
+	// Lock the owner rows before counting. The lock lives in a subquery
+	// because Postgres rejects FOR UPDATE next to an aggregate, and
+	// ORDER BY id fixes the acquisition order so two concurrent demotions
+	// always lock in the same sequence and cannot deadlock. Under READ
+	// COMMITTED a concurrent demotion blocks here until this transaction
+	// commits; its lock request then re-evaluates against the updated
+	// rows, so a just-demoted owner no longer matches role = 'owner'.
 	var owners int
 	if err := tx.QueryRow(ctx, `
-		SELECT COUNT(*) FROM users WHERE role = 'owner' FOR UPDATE
+		SELECT COUNT(*) FROM (
+			SELECT id FROM users WHERE role = 'owner' ORDER BY id FOR UPDATE
+		) AS locked_owners
 	`).Scan(&owners); err != nil {
 		return User{}, err
 	}

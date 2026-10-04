@@ -1,6 +1,7 @@
 package params
 
 import (
+	"math"
 	"strconv"
 	"strings"
 
@@ -27,6 +28,12 @@ func ParseBbox(c *gin.Context) (bbox [4]float64, ok bool) {
 		v, err := strconv.ParseFloat(strings.TrimSpace(p), 64)
 		if err != nil {
 			response.BadRequest(c, "bbox must be 4 comma-separated floats")
+			return bbox, false
+		}
+		// ParseFloat accepts "NaN"/"Inf"; NaN would slip past the range and
+		// min/max checks below and 500 the envelope query, so reject it first.
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			response.BadRequest(c, "bbox components must be finite numbers")
 			return bbox, false
 		}
 		bbox[i] = v

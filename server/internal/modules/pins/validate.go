@@ -1,6 +1,7 @@
 package pins
 
 import (
+	"math"
 	"net/http"
 	"strconv"
 	"unicode/utf8"
@@ -26,6 +27,11 @@ func validateCreateFields(latStr, lngStr, categoryStr, captionStr string, photoC
 	lng, err := strconv.ParseFloat(lngStr, 64)
 	if err != nil {
 		return nil, &photoErr{http.StatusBadRequest, "lng must be a number"}
+	}
+	// ParseFloat accepts "NaN"/"Inf"; NaN would slip past every range check
+	// below and 500 the PostGIS insert, so reject non-finite values up front.
+	if math.IsNaN(lat) || math.IsInf(lat, 0) || math.IsNaN(lng) || math.IsInf(lng, 0) {
+		return nil, &photoErr{http.StatusBadRequest, "latitude or longitude must be a finite number"}
 	}
 	if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
 		return nil, &photoErr{http.StatusBadRequest, "latitude or longitude out of range"}

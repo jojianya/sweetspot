@@ -32,6 +32,10 @@ function apiProxyTarget(): string {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // SSE /events must stream uncompressed: Next's compressor buffers
+  // proxied event frames indefinitely when the client sends
+  // Accept-Encoding: gzip. Caddy handles compression in prod.
+  compress: false,
   // Next blocks cross-origin requests to dev-only assets and endpoints, which
   // shows up as a failed ws://<host>:3000/_next/hmr connection. The app is
   // reached by hostname (localhost), by loopback IP (127.0.0.1) and by LAN IP

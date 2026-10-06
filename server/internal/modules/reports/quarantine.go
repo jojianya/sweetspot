@@ -103,6 +103,16 @@ func SweepHiddenPinFiles(ctx context.Context, pool *pgxpool.Pool, store *storage
 	if err := rows.Err(); err != nil {
 		return checked, moved, err
 	}
+	if !dryRun {
+		// Crash leftovers from interrupted copies are never valid final
+		// artifacts; drop them so they can't accumulate. Dry-run mutates
+		// nothing.
+		if n, err := store.CleanStaleTemps(); err != nil {
+			slog.Warn("quarantine sweep: clean stale temps", "error", err.Error())
+		} else if n > 0 {
+			slog.Info("quarantine sweep: cleaned stale temps", "count", n)
+		}
+	}
 	checked, moved, err = SweepURLs(ctx, urls, store, dryRun)
 	return checked, moved, err
 }

@@ -1,11 +1,27 @@
 package storage
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
+
+// quarantineTempPrefix marks interrupted-copy temp files inside the quarantine
+// directory. Temp names never equal a final name, so a crash mid-copy cannot
+// leave a partial file where the sweep or a later quarantine would mistake it
+// for a real quarantined file; the sweep cleans them.
+const quarantineTempPrefix = ".qtmp-"
+
+// renameFn and copyFileFn are package variables (not parameters) so tests can
+// simulate a cross-volume rename (EXDEV) and a failed copy without touching
+// production call sites.
+var renameFn = os.Rename
+var copyFileFn = copyFileSynced
 
 // quarantinePaths resolves a stored media URL to its (source, destination)
 // filesystem paths, preserving the relative structure under /uploads so a
@@ -46,7 +62,10 @@ func (l *Local) quarantinePaths(raw string) (src, dst string, ok bool) {
 	if rel == "" || rel == "." || rel == "/" {
 		return "", "", false
 	}
-	if filepath.IsAbs(rel) || filepath.IsAbs(v) && !strings.HasPrefix(v, "/uploads/") {
+	if filepath.IsAbs(rel) {
+		return "", "", false
+	}
+	if filepath.IsAbs(v) && !strings.HasPrefix(v, "/uploads/") {
 		return "", "", false
 	}
 	clean := filepath.Clean(rel)
@@ -87,35 +106,129 @@ func (l *Local) Quarantine(rawURL string) (bool, error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return false, err
 	}
-	if err := os.Rename(src, dst); err != nil {
+	if err := renameFn(src, dst); err == nil {
+		return true, nil
+	} else if os.IsNotExist(err) {
+		return false, nil
+	} else if !isEXDEV(err) {
+		return false, err
+	}
+	// Cross-volume (uploads and quarantine on separate mounts): copy then
+	// remove, verifying before touching the source.
+	return l.quarantineCopy(src, dst)
+}
+
+func isEXDEV(err error) bool {
+	return errors.Is(err, syscall.EXDEV)
+}
+
+// quarantineCopy falls back to copy+verify+remove when rename reports EXDEV.
+// The copy lands under a temp name in the destination dir, is fsynced, is
+// atomically renamed within the destination, has its size verified, and only
+// then is the source removed. Any failure removes the temp file and leaves
+// the source intact.
+func (l *Local) quarantineCopy(src, dst string) (bool, error) {
+	st, err := os.Stat(src)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
+		return false, err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(dst), quarantineTempPrefix+"*")
+	if err != nil {
+		return false, err
+	}
+	tmpName := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return false, err
+	}
+	if err := copyFileFn(src, tmpName, st.Mode()); err != nil {
+		os.Remove(tmpName)
+		return false, err
+	}
+	if err := renameFn(tmpName, dst); err != nil {
+		os.Remove(tmpName)
+		return false, err
+	}
+	if err := fsyncDir(filepath.Dir(dst)); err != nil {
+		return false, err
+	}
+	fin, err := os.Stat(dst)
+	if err != nil {
+		return false, err
+	}
+	if fin.Size() != st.Size() {
+		os.Remove(dst)
+		return false, fmt.Errorf("quarantine copy size mismatch for %q", filepath.Base(dst))
+	}
+	if err := os.Remove(src); err != nil {
+		// Copy verified; the retry path dedupes via the dst-exists branch.
 		return false, err
 	}
 	return true, nil
 }
 
-// Restore moves a quarantined file back under the static root. It exists for
-// operator recovery; no HTTP un-hide path calls it today.
-func (l *Local) Restore(rawURL string) (bool, error) {
-	src, dst, ok := l.quarantinePaths(rawURL)
-	if !ok {
-		return false, nil
+// copyFileSynced copies src to the existing temp path, preserves the source
+// mode, and fsyncs before returning.
+func copyFileSynced(src, tmp string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
 	}
-	if _, err := os.Stat(src); err == nil {
-		return false, nil
+	defer in.Close()
+	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
-		return false, err
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
 	}
-	if err := os.Rename(dst, src); err != nil {
+	// CreateTemp pins 0600; restore the source mode explicitly.
+	if err := out.Chmod(mode); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Sync(); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+func fsyncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
+}
+
+// CleanStaleTemps removes interrupted-copy temp files from the quarantine
+// directory. Final-name files are never touched. The sweep calls this in real
+// mode; dry-run leaves the filesystem alone.
+func (l *Local) CleanStaleTemps() (int, error) {
+	entries, err := os.ReadDir(l.quarantineDir)
+	if err != nil {
 		if os.IsNotExist(err) {
-			return false, nil
+			return 0, nil
 		}
-		return false, err
+		return 0, err
 	}
-	return true, nil
+	n := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), quarantineTempPrefix) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(l.quarantineDir, e.Name())); err != nil && !os.IsNotExist(err) {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }
 
 // QuarantineWouldMove reports whether Quarantine would move anything, without

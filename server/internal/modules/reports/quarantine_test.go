@@ -3,10 +3,12 @@ package reports
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 )
@@ -69,6 +71,52 @@ func TestReviewApproveQuarantinesPinFiles(t *testing.T) {
 	}
 }
 
+// TestReviewApproveQuarantinesAllPhotos proves full photo coverage: a pin
+// with 3 photos plus thumbnails (6 files) leaves /uploads entirely — every
+// file is quarantined and every old URL 404s.
+func TestReviewApproveQuarantinesAllPhotos(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store, uploads, qdir := quarantineStore(t)
+	var photos []pins.PinPhoto
+	var urls []string
+	for i := 0; i < 3; i++ {
+		photo := saveFile(t, store, string(rune('a'+i))+`-full`)
+		thumb := saveFile(t, store, string(rune('a'+i))+`-thumb`)
+		photos = append(photos, pins.PinPhoto{PhotoURL: photo, ThumbnailURL: thumb})
+		urls = append(urls, photo, thumb)
+	}
+
+	loc := "POINT(1 2)"
+	svc := &stubReviewService{
+		report:   Report{PinID: uuidPtr("11111111-1111-1111-1111-111111111111")},
+		location: &loc,
+	}
+	h := NewHandler(svc, &recordingPublisher{}).
+		WithQuarantine(store, &stubPhotos{detail: pins.PinDetail{Photos: photos}})
+
+	w := reviewRequest(t, h, "rep-1", "approve")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", w.Code, w.Body.String())
+	}
+
+	r := gin.New()
+	r.Static("/uploads", uploads)
+	for _, u := range urls {
+		name := filepath.Base(u)
+		if _, err := os.Stat(filepath.Join(uploads, name)); !os.IsNotExist(err) {
+			t.Fatalf("%s should be gone from uploads", name)
+		}
+		if _, err := os.Stat(filepath.Join(qdir, name)); err != nil {
+			t.Fatalf("%s should be in quarantine: %v", name, err)
+		}
+		sw := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/uploads/"+name, nil)
+		r.ServeHTTP(sw, req)
+		if sw.Code != http.StatusNotFound {
+			t.Fatalf("GET /uploads/%s = %d, want 404", name, sw.Code)
+		}
+	}
+}
 // TestReviewApproveQuarantineFailureStillHides proves a storage failure never
 // un-hides the pin: the DB commit stands, the request is still 200, the miss
 // is left for the sweep, and nothing panics.

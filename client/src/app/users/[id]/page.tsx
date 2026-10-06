@@ -13,6 +13,7 @@ import { useAuth } from "@/store/auth";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageLoading } from "@/components/ui/PageState";
 import type { PinListEntry } from "@/lib/types";
+import { resolveMediaUrl } from "@/lib/media";
 
 interface ProfilePageProps {
   params: Promise<{ id: string }>;
@@ -57,7 +58,7 @@ function PinGrid({ pins }: { pins: PinListEntry[] }) {
         >
           {p.cover_url ? (
             <img
-              src={p.cover_url}
+              src={resolveMediaUrl(p.cover_url)}
               alt={p.caption?.trim() || "Pin"}
               loading="lazy"
               decoding="async"
@@ -489,7 +490,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                   >
                     {c.cover_url ? (
                       <img
-                        src={c.cover_url}
+                        src={resolveMediaUrl(c.cover_url)}
                         alt=""
                         className="h-9 w-9 shrink-0 rounded-lg object-cover"
                       />

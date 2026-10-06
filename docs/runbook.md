@@ -60,6 +60,38 @@ docker compose -f docker-compose.prod.yml cp postgres:/tmp/goodspotdb.dump \
   backups/goodspotdb-$(date +%Y%m%d-%H%M%S).dump
 docker compose -f docker-compose.prod.yml exec -T server \
   sh -c 'tar cf - -C /app/uploads .' > backups/uploads-$(date +%Y%m%d-%H%M%S).tar
+docker compose -f docker-compose.prod.yml exec -T server \
+  sh -c 'tar cf - -C /app/quarantine .' > backups/quarantine-$(date +%Y%m%d-%H%M%S).tar
+```
+
+### Quarantine volume (hidden pins)
+
+The server mounts two data volumes: `server_uploads:/app/uploads` and
+`quarantine_data:/app/quarantine`. Both must exist; Compose creates them on
+first `up -d`. When a pin is hidden, its files move from `/app/uploads` to the
+same relative path under `/app/quarantine`, which nothing serves
+(`GET /uploads/<file>` then 404s). A startup sweep finishes moves left over
+from before this wiring existed; it is idempotent and never deletes.
+
+Root-owned volume fix: images before this change never created
+`/app/quarantine`, so a pre-existing `quarantine_data` volume can be
+root-owned while the server runs as `appuser` — every move then fails
+permission-denied (`/ready` reports `"quarantine":"unwritable"` and boot logs
+an ERROR). Fix from a root shell in the container:
+
+```sh
+docker compose -f docker-compose.prod.yml exec -T -u root server \
+  chown -R appuser:appuser /app/quarantine
+```
+
+Manual restore (operator only; there is no API un-hide path): move the file
+back preserving the relative path, then un-hide the row:
+
+```sh
+docker compose -f docker-compose.prod.yml exec -T server \
+  sh -c 'mv /app/quarantine/<name>.webp /app/uploads/<name>.webp'
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U postgres -d goodspotdb -c "UPDATE pins SET is_hidden = false WHERE id = '<pin-uuid>'"
 ```
 
 Copy `backups/` off-host (object storage or a second machine); a backup that
@@ -107,7 +139,10 @@ that is the trigger to move to managed Postgres + R2 object storage
 Monitor: `[PROVIDER, FILL IN, or documentation only]`.
 
 * Readiness: `GET /ready` must return 200 with `{status: ok}` (fails 503
-  `degraded` with `db`/`redis` fields when a dependency is down). Alert on
+  `degraded` with `db`/`redis` fields when a dependency is down). It also
+  carries a `quarantine` field (`ok`/`unwritable`): `unwritable` stays HTTP
+  200 but means hidden-pin files cannot leave `/uploads` — treat it as an
+  ERROR-level signal and fix the volume ownership (see §3). Alert on
   non-200 for 2 consecutive minutes, and on Caddy 5xx rate from its access
   logs. This is the user-facing signal.
 * Liveness: `GET /health` returns 200 whenever the process is alive

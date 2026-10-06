@@ -53,6 +53,7 @@ func RunMigrations(pool *pgxpool.Pool, migrationsDir string) error {
 	if err != nil {
 		return fmt.Errorf("querying applied migrations: %w", err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var filename string
 		if err := rows.Scan(&filename); err != nil {
@@ -60,7 +61,9 @@ func RunMigrations(pool *pgxpool.Pool, migrationsDir string) error {
 		}
 		applied[filename] = true
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
 
 	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {

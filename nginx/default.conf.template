@@ -1,0 +1,112 @@
+# Public server block (the only thing Next/Go traffic ever hits).
+# envsubst (via the nginx entrypoint's /docker-entrypoint.d/20-envsubst-on-templates.sh)
+# substitutes ${DOMAIN}; nginx runtime variables like $host stay untouched.
+
+# HTTP :80 — ACME webroot for certbot, everything else 301 to HTTPS.
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name ${DOMAIN};
+
+    server_tokens off;
+
+    # Served plaintext for the ACME HTTP-01 challenge during issuance and
+    # renewal. certbot (sidecar) writes these files into the shared webroot
+    # volume mounted at /var/www/certbot.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # The session cookie is Secure and HSTS is only served on 443, so this
+    # redirect must stay a bare 301 with no proxied body.
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name ${DOMAIN};
+
+    server_tokens off;
+
+    # Matches the Go BodyLimit of 64<<20 on the upload routes. Caddy applied no
+    # limit, so a smaller value here would 413 photo uploads before the Go
+    # handler ever saw them.
+    client_max_body_size 64m;
+
+    # Certs are copied out of the certbot lineage into this path by the
+    # entrypoint bootstrap / the certbot reload hook. Both files live on the
+    # nginx_certs volume shared with the certbot sidecar.
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+
+    # Resolve "client" at request time via Docker's embedded DNS. Without the
+    # variable proxy_pass, nginx resolves the upstream once at startup and
+    # refuses to boot while the client hostname is not resolvable.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $client_upstream http://client:3000;
+
+    # gzip covers everything EXCEPT /events (overrides with `gzip off` below).
+    # nginx only gzips text/html by default; the rest must be listed in
+    # gzip_types. Listing "text/html" explicitly is a duplicate-MIME warning
+    # (`nginx -t` warns), so html is NOT repeated here.
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_types text/css text/plain text/xml application/xml application/json application/javascript text/javascript image/svg+xml;
+
+    # The Go API's SecurityHeaders middleware and this config enforce the same
+    # four headers. Hide the upstream copies so proxy_pass responses carry
+    # each header exactly once (Caddy's `header` block replaced, not appended).
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Referrer-Policy;
+
+    # Buffered locations: sensible timeouts.
+    proxy_connect_timeout 5s;
+    proxy_send_timeout 60s;
+    proxy_read_timeout 60s;
+
+    # SSE: /events is a long-lived stream. Flush immediately; never gzip,
+    # buffer, or cache it. Timeouts of 1h so idle streams survive.
+    location /events {
+        include /etc/nginx/includes/security-headers.conf;
+        add_header X-Accel-Buffering "no" always;
+
+        gzip off;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        # nginx is the first hop: overwrite, do not append. Any spoofed
+        # X-Forwarded-For from the internet is discarded before the Go API's
+        # TRUSTED_PROXIES applies.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_pass $client_upstream;
+    }
+
+    # Everything else (pages, static assets, /api/* and /uploads rewrites)
+    # goes through the Next server. Never proxy to the Go server directly.
+    location / {
+        include /etc/nginx/includes/security-headers.conf;
+
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_pass $client_upstream;
+    }
+}

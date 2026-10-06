@@ -1,4 +1,4 @@
-# PRODUCTION stack — single VM with Caddy as the TLS terminator.
+# PRODUCTION stack — single VM with nginx as the TLS terminator.
 #
 # Only the `proxy` service publishes ports (80/443). The app, API, Postgres
 # and Redis share an internal bridge network and are not reachable from the
@@ -14,7 +14,10 @@
 
 services:
   proxy:
-    image: caddy:2-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: goodspot-nginx:latest
     container_name: goodspot-proxy
     restart: unless-stopped
     ports:
@@ -23,13 +26,41 @@ services:
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/includes/security-headers.conf:/etc/nginx/includes/security-headers.conf:ro
+      - ./nginx/docker-entrypoint.d/30-bootstrap-certs.sh:/docker-entrypoint.d/30-bootstrap-certs.sh:ro
+      - nginx_certs:/etc/nginx/certs
+      - acme_webroot:/var/www/certbot:ro
     networks:
       - app_net
     depends_on:
-      - client
+      client:
+        condition: service_healthy
+
+  certbot:
+    image: certbot/certbot:v4.1.1@sha256:263fe7ee9dde6440bf8baa957c0a8eb0118fc05ef86cf743c4cc84ca84303a21
+    container_name: goodspot-certbot
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
+      CERTBOT_STAGING: ${CERTBOT_STAGING:-}
+      CERTBOT_SERVER: ${CERTBOT_SERVER:-}
+      CERTBOT_NO_VERIFY_SSL: ${CERTBOT_NO_VERIFY_SSL:-}
+    # Shares the PID namespace with the nginx container so the renewal deploy
+    # hook can SIGHUP the nginx master after installing a fresh certificate.
+    pid: "service:proxy"
+    entrypoint: /usr/local/bin/entrypoint.sh
+    volumes:
+      - certbot_data:/etc/letsencrypt
+      - nginx_certs:/etc/nginx/certs
+      - acme_webroot:/var/www/certbot
+      - ./certbot/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
+      - ./certbot/reload-nginx.sh:/usr/local/bin/reload-nginx.sh:ro
+    networks:
+      - app_net
+    depends_on:
+      - proxy
 
   client:
     build:
@@ -176,5 +207,10 @@ volumes:
   postgres_data:
   server_uploads:
   quarantine_data:
-  caddy_data:
-  caddy_config:
+  nginx_certs:
+  certbot_data:
+  acme_webroot:
+  # NOTE: the old `caddy_data` and `caddy_config` volumes are no longer
+  # referenced. They still exist on hosts that ran the Caddy stack; remove
+  # them manually once you no longer need rollback data:
+  #   docker volume rm <project>_caddy_data <project>_caddy_config

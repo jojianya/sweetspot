@@ -235,7 +235,7 @@ func newUpdateHarness(t *testing.T, repo *stubRepo, dir string, roles users.Role
 
 func baseUpdateRepo() *stubRepo {
 	return &stubRepo{
-		detail:         PinDetail{UserID: mustUUID(testOwnerID), Photos: []PinPhoto{}},
+		detail:         PinDetail{Pin: Pin{UserID: mustUUID(testOwnerID)}, Photos: []PinPhoto{}},
 		categoryExists: true,
 		visible:        true,
 	}
@@ -464,7 +464,7 @@ func TestUpdatePinHiddenPinIsNotFound(t *testing.T) {
 
 func baseUpdateRepoOther() *stubRepo {
 	return &stubRepo{
-		detail:         PinDetail{UserID: mustUUID("223e4567-e89b-42d3-a456-426614174000"), Photos: []PinPhoto{}},
+		detail:         PinDetail{Pin: Pin{UserID: mustUUID("223e4567-e89b-42d3-a456-426614174000")}, Photos: []PinPhoto{}},
 		categoryExists: true,
 		visible:        true,
 	}

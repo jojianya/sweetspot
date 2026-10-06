@@ -25,7 +25,7 @@ func (r *recordingEvents) PinRemoved(_ context.Context, ev PinRemoved) {
 // already returned nil).
 func TestDeletePinPublishesRemoval(t *testing.T) {
 	dir := t.TempDir()
-	repo := &stubRepo{detail: PinDetail{Photos: []PinPhoto{}, Location: "POINT(25 15)"}}
+	repo := &stubRepo{detail: PinDetail{Photos: []PinPhoto{}, Pin: Pin{Location: "POINT(25 15)"}}}
 	events := &recordingEvents{}
 	h := &Handler{repo: repo, store: storage.NewLocal(dir, "http://api.test"), events: events}
 

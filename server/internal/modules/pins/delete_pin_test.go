@@ -152,7 +152,7 @@ func TestDeletePinRemovesPhotoFiles(t *testing.T) {
 		Photos: []PinPhoto{
 			{PhotoURL: photoURL, ThumbnailURL: thumbURL},
 		},
-		Location: "POINT(0 0)",
+		Pin: Pin{Location: "POINT(0 0)"},
 	}}, dir)
 
 	w := deletePin(r, "pin-1")
@@ -246,7 +246,7 @@ func TestDeletePinHandlesPinWithNoPhotos(t *testing.T) {
 // handler-side owner comparison, so the SQL predicate decides atomically.
 func TestDeletePinForwardsModeratorFlag(t *testing.T) {
 	dir := t.TempDir()
-	repo := &stubRepo{detail: PinDetail{Photos: []PinPhoto{}, Location: "POINT(0 0)"}}
+	repo := &stubRepo{detail: PinDetail{Photos: []PinPhoto{}, Pin: Pin{Location: "POINT(0 0)"}}}
 	h := &Handler{
 		repo:   repo,
 		store:  storage.NewLocal(dir, "http://api.test"),

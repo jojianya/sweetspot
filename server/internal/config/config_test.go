@@ -100,6 +100,19 @@ func TestDefaultStorageBaseURLDerivesFromPort(t *testing.T) {
   }
 }
 
+func TestValidateQuarantineDir(t *testing.T) {
+  for _, bad := range []string{"", "  ", "./uploads", "uploads", "."} {
+    if err := validateQuarantineDir(bad); err == nil {
+      t.Errorf("validateQuarantineDir(%q): expected rejection, got nil", bad)
+    }
+  }
+  for _, ok := range []string{"./quarantine", "/var/lib/goodspot/quarantine"} {
+    if err := validateQuarantineDir(ok); err != nil {
+      t.Errorf("validateQuarantineDir(%q): unexpected error: %v", ok, err)
+    }
+  }
+}
+
 func TestValidateStorageBase(t *testing.T) {
 	t.Run("LocalDevelopment", func(t *testing.T) {
 		if err := validateStorageBase("http://localhost:8081", "development"); err != nil {

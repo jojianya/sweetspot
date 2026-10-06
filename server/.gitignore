@@ -1,5 +1,6 @@
 .env
 /uploads
+/quarantine
 goodspot247-backend
 server
 /bin

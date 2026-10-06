@@ -7,6 +7,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 )
 
 const (
@@ -17,6 +18,9 @@ const (
 type Handler struct {
 	service Service
 	events  Publisher
+	// store and photos are nil unless WithQuarantine wires post-hide moves.
+	store  *storage.Local
+	photos PinPhotos
 }
 
 func NewHandler(service Service, events Publisher) *Handler {
@@ -106,11 +110,16 @@ func (h *Handler) Review(c *gin.Context) {
 		return
 	}
 
-	// If report was approved, publish pin_removed event for realtime updates.
-	// Best-effort: the review already committed; a publish failure is logged
-	// by the broker and never fails this request.
-	if req.Action == "approve" && h.events != nil && pinLocation != nil {
-		h.events.PublishRemoval(c.Request.Context(), report.PinID.String(), *pinLocation)
+	// If report was approved, quarantine the pin's files out of /uploads so
+	// the hidden bytes 404, then publish pin_removed for realtime updates.
+	// Both are best-effort: the review already committed, so a quarantine or
+	// publish failure is logged and never fails this request. A failed move
+	// keeps the pin hidden and is finished by the startup sweep.
+	if req.Action == "approve" {
+		h.quarantinePinFiles(c.Request.Context(), report.PinID.String())
+		if h.events != nil && pinLocation != nil {
+			h.events.PublishRemoval(c.Request.Context(), report.PinID.String(), *pinLocation)
+		}
 	}
 
 	response.OK(c, gin.H{"report": report})

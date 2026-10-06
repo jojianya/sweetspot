@@ -132,7 +132,8 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	pinHandler := pins.NewHandler(c.PinRepo, c.Store, c.Events, c.UserService)
 	pins.RegisterRoutes(uploadRoutes, pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
 
-	reportHandler := reports.NewHandler(reports.NewService(c.ReportRepo), c.Events)
+	reportHandler := reports.NewHandler(reports.NewService(c.ReportRepo), c.Events).
+		WithQuarantine(c.Store, c.PinRepo)
 	reports.RegisterRoutes(jsonRoutes, reportHandler, reports.RouteOptions{
 		JWTSecret:   cfg.JWTSecret,
 		Blacklist:   c.Blacklist,

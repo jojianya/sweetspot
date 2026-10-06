@@ -42,7 +42,7 @@ func Build(cfg *config.Config, pool *pgxpool.Pool) *Container {
 		CommentRepo:    comments.NewRepository(pool),
 		SocialRepo:     social.NewRepository(pool),
 		CollectionRepo: collections.NewRepository(pool),
-		Store:          storage.NewLocal("./uploads", cfg.StorageBase),
+		Store:          storage.NewLocalWithQuarantine("./uploads", cfg.StorageBase, cfg.QuarantineDir),
 		Blacklist:      cache.NewWithClient(redisClient),
 		Events:         realtime.NewBrokerWithClient(redisClient),
 		Redis:          redisClient,

@@ -14,10 +14,29 @@ var ErrUnsupportedContentType = errors.New("unsupported content type")
 type Local struct {
 	dir  string
 	base string
+	// quarantineDir holds files moved out of dir when their pin is hidden.
+	// It must sit outside the static root so /uploads/<file> 404s after
+	// the move; restores are a plain move back.
+	quarantineDir string
 }
 
 func NewLocal(dir, base string) *Local {
-	return &Local{dir: dir, base: strings.TrimSuffix(base, "/")}
+	return &Local{dir: dir, base: strings.TrimSuffix(base, "/"), quarantineDir: dir + "-quarantine"}
+}
+
+// NewLocalWithQuarantine pins the quarantine directory explicitly (production
+// wiring from QUARANTINE_DIR). An empty quarantineDir falls back to the
+// sibling default used by NewLocal.
+func NewLocalWithQuarantine(dir, base, quarantineDir string) *Local {
+	if strings.TrimSpace(quarantineDir) == "" {
+		return NewLocal(dir, base)
+	}
+	return &Local{dir: dir, base: strings.TrimSuffix(base, "/"), quarantineDir: quarantineDir}
+}
+
+// QuarantineDir reports where hidden pins' files are moved.
+func (l *Local) QuarantineDir() string {
+	return l.quarantineDir
 }
 
 func (l *Local) Save(data []byte, ext string) (string, error) {

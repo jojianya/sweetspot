@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -52,6 +53,13 @@ type Config struct {
 	JWTSecret          string
 	StorageBackend     string
 	StorageBase        string
+	// QuarantineDir holds files moved out of ./uploads when their pin is
+	// hidden. It must sit outside the static root so /uploads/<file> 404s
+	// after the move; restores are a plain move back.
+	QuarantineDir string
+	// QuarantineDryRun makes the startup sweep report hidden-pin files that
+	// would move without moving anything.
+	QuarantineDryRun bool
 	RedisAddr          string
 	RedisPassword      string
 	CORSAllowedOrigins []string
@@ -111,6 +119,8 @@ func Load() *Config {
 		JWTSecret:          getEnv("JWT_SECRET", ""),
 		StorageBackend:     getEnv("STORAGE_BACKEND", "local"),
 		StorageBase:        getEnv("STORAGE_BASE_URL", defaultStorageBaseURL(port)),
+		QuarantineDir:      getEnv("QUARANTINE_DIR", "./quarantine"),
+		QuarantineDryRun:   getEnvBool("QUARANTINE_SWEEP_DRY_RUN", false),
 		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
 		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
@@ -134,6 +144,9 @@ func Load() *Config {
 		log.Fatal(err)
 	}
 	if err := validateStorageBase(cfg.StorageBase, cfg.AppEnv); err != nil {
+		log.Fatal(err)
+	}
+	if err := validateQuarantineDir(cfg.QuarantineDir); err != nil {
 		log.Fatal(err)
 	}
 	if err := validateCookieSameSite(cfg.CookieSameSite); err != nil {
@@ -235,6 +248,22 @@ func validateStorageBase(raw, appEnv string) error {
 // validateDBSSLMode checks the Postgres sslmode. Unknown values always fail;
 // in production anything weaker than require fails too, so the DB password
 // and data never travel in cleartext off-host.
+// validateQuarantineDir keeps the hidden-pin quarantine outside the static
+// root: quarantined bytes must not be reachable via /uploads, and an empty
+// or uploads-equal value would either disable the quarantine or move files
+// onto themselves.
+func validateQuarantineDir(raw string) error {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return fmt.Errorf("QUARANTINE_DIR is required")
+	}
+	clean := filepath.Clean(v)
+	if clean == "." || clean == "./uploads" || clean == "uploads" {
+		return fmt.Errorf("QUARANTINE_DIR must sit outside the static uploads root, got %q", raw)
+	}
+	return nil
+}
+
 func validateDBSSLMode(mode, appEnv string) error {
 	switch mode {
 	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
@@ -392,4 +421,18 @@ func getEnvDuration(key string, fallback time.Duration) time.Duration {
 		}
 	}
 	return fallback
+}
+
+// getEnvBool reads a boolean flag: 1, true, yes (any case) enable it,
+// everything else (including unset) yields the fallback.
+func getEnvBool(key string, fallback bool) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	switch v {
+	case "1", "true", "yes":
+		return true
+	case "0", "false", "no":
+		return false
+	default:
+		return fallback
+	}
 }

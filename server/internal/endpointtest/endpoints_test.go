@@ -357,7 +357,7 @@ func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo 
 	users.RegisterRoutes(jsonRoutes, userH, users.RouteOptions{JWTSecret: testSecret, Blacklist: bl})
 
 	events := realtime.NewBrokerWithClient(redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}))
-	reportH := reports.NewHandler(reports.NewService(reportRepo), events)
+	reportH := reports.NewHandler(reports.NewService(reportRepo), events).WithQuarantine(store, nil)
 	reports.RegisterRoutes(jsonRoutes, reportH, reports.RouteOptions{
 		JWTSecret:   testSecret,
 		Blacklist:   bl,

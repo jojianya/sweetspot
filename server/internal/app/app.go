@@ -9,6 +9,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/config"
 	"github.com/jojianya/sweetspot247-backend/internal/di"
 	"github.com/jojianya/sweetspot247-backend/internal/http"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/observability/logger"
 	"github.com/jojianya/sweetspot247-backend/internal/observability/report"
 )
@@ -33,6 +34,21 @@ func Run(cfg *config.Config, pool *pgxpool.Pool, rep *report.Reporter) error {
 	lg := logger.FromContext(nil)
 
 	container := di.Build(cfg, pool)
+
+	// Sweep files of already-hidden pins out of /uploads (idempotent,
+	// best-effort). This heals pins hidden before quarantine wiring existed
+	// and finishes moves that failed at review time. A listing failure or a
+	// per-file error is logged, never fatal to boot.
+	func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		checked, moved, err := reports.SweepHiddenPinFiles(ctx, pool, container.Store, cfg.QuarantineDryRun)
+		if err != nil {
+			lg.Warn("quarantine sweep failed", "error", err.Error(), "dry_run", cfg.QuarantineDryRun)
+			return
+		}
+		lg.Info("quarantine sweep done", "checked", checked, "moved", moved, "dry_run", cfg.QuarantineDryRun)
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

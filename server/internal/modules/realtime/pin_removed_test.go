@@ -95,8 +95,8 @@ func TestStreamSetsNoTransformCacheControl(t *testing.T) {
 	}()
 
 	// Wait for handler to write initial headers to avoid data race
-	// CI runners can be slow; 50ms was insufficient on some runners
-	time.Sleep(200 * time.Millisecond)
+	// CI runners can be slow; 200ms was insufficient on some runners
+	time.Sleep(500 * time.Millisecond)
 
 	deadline := time.Now().Add(3 * time.Second)
 	for rec.Header().Get("Cache-Control") == "" && time.Now().Before(deadline) {

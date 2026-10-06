@@ -17,9 +17,9 @@ import { extractUploadsSuffix } from "./uploads";
  *
  * Contract (for `<img src>`): returns string, `""` means unusable.
  * Allowed: relative paths, `/uploads` rewrites (query/hash preserved),
- * http/https absolute URLs, `blob:` previews, `data:` URLs (tightened to
- * `data:image/*` in M5). Rejected (`""`): `javascript:`, protocol-relative
- * (`//host/...`), and any other scheme.
+ * http/https absolute URLs, `blob:` previews, `data:image/*` inline images.
+ * Rejected (`""`): `javascript:`, protocol-relative (`//host/...`),
+ * non-image `data:` types, and any other scheme.
  */
 export function resolveMediaUrl(value: string | null | undefined): string {
   if (typeof value !== "string") return "";
@@ -27,15 +27,31 @@ export function resolveMediaUrl(value: string | null | undefined): string {
   if (!trimmed) return "";
   if (trimmed.startsWith("//")) return "";
 
+  // M5: blob: previews (e.g. avatar file-picker object URLs) are explicitly
+  // allowed — not by accident of URL parsing. Validate the URL shape.
+  if (/^blob:/i.test(trimmed)) {
+    try {
+      new URL(trimmed);
+      return trimmed;
+    } catch {
+      return "";
+    }
+  }
+
+  // M5: only image inline data is safe for <img>; HTML/JS data: URLs are
+  // rejected even though <img> would not execute them, so the value can
+  // never be reused as a link/redirect target.
+  if (/^data:/i.test(trimmed)) {
+    if (/^data:image\//i.test(trimmed)) return trimmed;
+    return "";
+  }
+
   const uploads = extractUploadsSuffix(trimmed);
   if (uploads) return uploads;
 
   try {
     const url = new URL(trimmed);
     if (url.protocol === "http:" || url.protocol === "https:") return trimmed;
-    // Preserve pre-M5 behavior for blob:/data: previews; M5 narrows data:
-    // to image/* explicitly. Anything else (javascript:, ftp:, ...) is rejected.
-    if (url.protocol === "blob:" || url.protocol === "data:") return trimmed;
     return "";
   } catch {
     // Not an absolute URL: relative path, safe same-origin passthrough.

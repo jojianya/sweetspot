@@ -38,6 +38,18 @@ describe("resolveMediaUrl", () => {
     expect(resolveMediaUrl("//evil.com/uploads/x.webp")).toBe("");
   });
 
+  it("allows blob previews explicitly", () => {
+    const blob = "blob:http://localhost:3000/550e8400-e29b-41d4-a716-446655440000";
+    expect(resolveMediaUrl(blob)).toBe(blob);
+  });
+
+  it("allows data:image URLs but rejects other data: types", () => {
+    const png = "data:image/png;base64,iVBORw0KGgo=";
+    expect(resolveMediaUrl(png)).toBe(png);
+    expect(resolveMediaUrl("data:text/html,<h1>hi</h1>")).toBe("");
+    expect(resolveMediaUrl("data:application/javascript,alert(1)")).toBe("");
+  });
+
   it("returns empty for missing values", () => {
     expect(resolveMediaUrl(null)).toBe("");
     expect(resolveMediaUrl(undefined)).toBe("");

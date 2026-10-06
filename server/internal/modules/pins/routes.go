@@ -51,6 +51,12 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 	rg.POST("/pins/:id/view", validid.Middleware(), middleware.OptionalAuth(opts.JWTSecret, opts.Blacklist, opts.Sessions), viewBackstop.Middleware(), userCapped, h.RegisterView)
 
 	authRequired := middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions)
-	rg.PATCH("/pins/:id", validid.Middleware(), authRequired, h.UpdatePin)
+	// Upload-mutating PATCH has the same per-IP budget as createLimit (10/min).
+	// Dedicated instance (not shared with create or avatar) so photo-swap
+	// floods on one route cannot burn the budget of the other. Placed after
+	// validid so malformed IDs return 400 without consuming budget, and
+	// before auth like createLimit so unauthenticated floods still count.
+	patchLimit := middleware.New(10, time.Minute)
+	rg.PATCH("/pins/:id", validid.Middleware(), patchLimit.Middleware(), authRequired, h.UpdatePin)
 	rg.DELETE("/pins/:id", validid.Middleware(), authRequired, h.DeletePin)
 }

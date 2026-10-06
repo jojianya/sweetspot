@@ -30,6 +30,22 @@ function apiProxyTarget(): string {
   return target.replace(/\/+$/, "");
 }
 
+// Warn once at config load when the production proxy silently falls back to
+// the loopback default: every /api, /events and /uploads rewrite then points
+// at the Next server itself and historical images 404. Never throws and never
+// warns in development.
+if (
+  process.env.NODE_ENV === "production" &&
+  !process.env.API_INTERNAL_URL?.trim() &&
+  !process.env.NEXT_PUBLIC_API_URL?.trim()
+) {
+  console.warn(
+    "[next.config] API_INTERNAL_URL and NEXT_PUBLIC_API_URL are unset in production; " +
+      "/api, /events and /uploads will proxy to http://localhost:8081. " +
+      "Set API_INTERNAL_URL=http://server:8081."
+  );
+}
+
 const nextConfig: NextConfig = {
   output: "standalone",
   // SSE /events must stream uncompressed: Next's compressor buffers
@@ -57,6 +73,17 @@ const nextConfig: NextConfig = {
         // Must be proxied so the browser sends the httpOnly session cookie.
         source: "/events",
         destination: `${apiProxyTarget()}/events`,
+      },
+      {
+        // Uploaded pin photos and avatars live on the Go server's /uploads
+        // route (see server/internal/http/router.go). The DB stores absolute
+        // URLs with the STORAGE_BASE_URL host at upload time, so a LAN-IP
+        // change orphans every old URL. The client normalizes all media to
+        // same-origin /uploads/... paths (see lib/media.ts), and this rewrite
+        // serves them from the Go server without exposing the browser to the
+        // backend's host/port at all.
+        source: "/uploads/:path*",
+        destination: `${apiProxyTarget()}/uploads/:path*`,
       },
     ];
   },

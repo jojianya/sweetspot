@@ -111,10 +111,16 @@ describe("resolvePublicMediaUrl", () => {
     );
   });
 
-  it("keeps local media URLs for local development", () => {
+  it("returns the identical URL when the media host already matches the public API", () => {
     expect(resolvePublicMediaUrl("http://localhost:8081/uploads/pin.webp", "http://localhost:8081")).toBe(
       "http://localhost:8081/uploads/pin.webp"
     );
+  });
+
+  it("re-roots uploads pathnames onto a different API host (localhost media, LAN API)", () => {
+    expect(
+      resolvePublicMediaUrl("http://localhost:8081/uploads/p.webp", "http://192.168.1.5:8081")
+    ).toBe("http://192.168.1.5:8081/uploads/p.webp");
   });
 
   it("omits unusable or unconfigured media URLs", () => {

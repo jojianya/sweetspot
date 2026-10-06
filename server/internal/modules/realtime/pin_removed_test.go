@@ -94,6 +94,9 @@ func TestStreamSetsNoTransformCacheControl(t *testing.T) {
 		h.Stream(c)
 	}()
 
+	// Wait for handler to write initial headers to avoid data race
+	time.Sleep(50 * time.Millisecond)
+
 	deadline := time.Now().Add(3 * time.Second)
 	for rec.Header().Get("Cache-Control") == "" && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)

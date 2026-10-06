@@ -1,4 +1,4 @@
-# Runbook — Goodspot production (single VM + Caddy)
+# Runbook — Goodspot production (single VM + nginx)
 
 Audience: the on-call operator. All commands run from the repo root on the
 production VM unless noted. Domain and provider names marked `[FILL IN]`
@@ -23,9 +23,8 @@ must be replaced during first deploy.
 6. `docker compose -f docker-compose.prod.yml up -d` (migrations run
    automatically on server boot).
 7. Verify: `curl -sSf https://[FILL IN]/ready` reports `{status: ok}`
-   (via Caddy → client? No: `/ready` is served by the API; check
-   `http://127.0.0.1:8081/ready` on the VM if the API port is reachable, else
-   through the proxy path) and `https://[FILL IN]/` loads in a browser.
+   (via nginx → client; the API itself has no published port so always
+   go through the proxy) and `https://[FILL IN]/` loads in a browser.
    Confirm the session cookie carries `Secure`, HSTS is present, and
    `GET /events` streams (`curl -N https://[FILL IN]/events?bbox=...` shows
    `: heartbeat` lines).
@@ -51,6 +50,23 @@ must be replaced during first deploy.
    down scripts (`RollbackLastMigration` skips the rest), so a rollback that
    must undo a migration requires restoring from a backup (§3) instead.
    Prefer forward fixes for schema mistakes.
+
+### Rollback to Caddy (if the nginx migration must be reverted)
+
+The `Caddyfile` and Caddy service definition remain in git history (branch
+`development`). To revert:
+
+1. `git checkout development -- docker-compose.prod.yml Caddyfile`
+2. `docker compose -f docker-compose.prod.yml up -d` (Caddy will use the
+   existing `caddy_data`/`caddy_config` volumes if they still exist; if not,
+   it will obtain fresh certificates automatically).
+3. If you already removed the old volumes, the old Caddy data is gone; the
+   new Caddy will issue fresh certificates.
+
+The named volumes `caddy_data` and `caddy_config` are not deleted by the
+nginx compose file, so they persist unless explicitly removed. The `nginx_certs`,
+`certbot_data`, and `acme_webroot` volumes are the new ones; they can be
+cleaned up after confirming the nginx migration is stable.
 
 ## 3. Backup and restore
 
@@ -136,6 +152,21 @@ that is the trigger to move to managed Postgres + R2 object storage
   placeholder).
 * DB TLS certs: re-run `./scripts/generate-db-certs.sh`, restart `postgres`
   then `server`. `verify-full` is required if the DB ever moves off-host.
+* TLS certificates (Let's Encrypt via certbot): the `certbot` sidecar handles
+  issuance and renewal automatically. On first boot (empty `nginx_certs`
+  volume), nginx starts with a self-signed bootstrap cert and certbot obtains
+  the real certificate via HTTP-01 webroot, then reloads nginx. Renewal runs
+  every 12h; the deploy hook copies the new cert to the shared volume and
+  HUPs nginx (zero-downtime reload). To test renewal without touching the
+  production CA, set `CERTBOT_STAGING=1` in `.env` and restart the certbot
+  container. To force a renewal: `docker compose -f docker-compose.prod.yml
+  exec certbot certbot renew --force-renewal`. The real cert/key live in the
+  `nginx_certs` named volume; the ACME webroot is in `acme_webroot`. The old
+  `caddy_data` and `caddy_config` volumes are no longer used; remove them
+  manually when you no longer need rollback data:
+  ```
+  docker volume rm <project>_caddy_data <project>_caddy_config
+  ```
 
 ## 5. Uptime monitoring
 
@@ -146,8 +177,9 @@ Monitor: `[PROVIDER, FILL IN, or documentation only]`.
   carries a `quarantine` field (`ok`/`unwritable`): `unwritable` stays HTTP
   200 but means hidden-pin files cannot leave `/uploads` — treat it as an
   ERROR-level signal and fix the volume ownership (see §3). Alert on
-  non-200 for 2 consecutive minutes, and on Caddy 5xx rate from its access
-  logs. This is the user-facing signal.
+  non-200 for 2 consecutive minutes, and on nginx 5xx rate from its access
+  logs (`docker compose -f docker-compose.prod.yml logs proxy`). This is the
+  user-facing signal.
 * Liveness: `GET /health` returns 200 whenever the process is alive
   (dependency-free by design). Container healthchecks and any restart policy
   key off liveness, never readiness.
@@ -172,7 +204,7 @@ high/critical), migration test. `development` remains the integration branch.
 2. Redis down: auth fails closed (401 `session verification unavailable`) —
    users cannot log in until Redis recovers; logged-out tokens stay revoked
    only after recovery. Restart `redis`; sessions resume without a deploy.
-3. Postgres down: API 503s; Caddy serves errors. Restore §3 if data is at
+3. Postgres down: API 503s; nginx serves errors. Restore §3 if data is at
    risk, otherwise restart and watch migrations.
 4. Flood/abuse: per-IP limits (register/login/pins/comments/`/errors`) plus
    global caps and the login identifier lockout hold; all users behind one
@@ -186,6 +218,6 @@ high/critical), migration test. `development` remains the integration branch.
 * Compose render (`docker compose config` with dummy env): verified.
 * Caddyfile syntax: brace balance + directive review only — `caddy validate`
   needs the binary; run `docker run caddy:2-alpine caddy validate` on the VM.
-* TLS to Postgres, SSE through Caddy, Secure/HSTS end to end, and the §3
-  restore drill: **must be run on the real VM** (no Docker/Postgres/Caddy on
+* TLS to Postgres, SSE through nginx, Secure/HSTS end to end, and the §3
+  restore drill: **must be run on the real VM** (no Docker/Postgres/nginx on
   the authoring machine). Check them off below on first deploy.

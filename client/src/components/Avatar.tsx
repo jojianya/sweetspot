@@ -1,3 +1,5 @@
+import { resolveMediaUrl } from "@/lib/media";
+
 const FALLBACK_CLASS =
   "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
 
@@ -16,7 +18,8 @@ export default function Avatar({
   className = "h-8 w-8",
   fallbackClassName = FALLBACK_CLASS,
 }: AvatarProps) {
-  if (!src) {
+  const normalized = resolveMediaUrl(src);
+  if (!normalized) {
     return (
       <span
         className={`flex items-center justify-center rounded-full text-sm font-semibold ${className} ${fallbackClassName}`}
@@ -27,6 +30,6 @@ export default function Avatar({
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element -- avatars are hosted media, <img> is fine here
-    <img src={src} alt="" className={`rounded-full object-cover ${className}`} />
+    <img src={normalized} alt="" className={`rounded-full object-cover ${className}`} />
   );
 }

@@ -12,16 +12,41 @@
 set -eu
 
 CERT_DIR=/etc/nginx/certs
+FULLCHAIN="$CERT_DIR/fullchain.pem"
+PRIVKEY="$CERT_DIR/privkey.pem"
 
-if [ ! -s "$CERT_DIR/fullchain.pem" ] || [ ! -s "$CERT_DIR/privkey.pem" ]; then
+# Check for inconsistent state: exactly one file exists
+if [ -e "$FULLCHAIN" ] && [ ! -e "$PRIVKEY" ]; then
+  echo "[bootstrap] ERROR: $FULLCHAIN exists but $PRIVKEY is missing — refusing to start"
+  exit 1
+fi
+if [ ! -e "$FULLCHAIN" ] && [ -e "$PRIVKEY" ]; then
+  echo "[bootstrap] ERROR: $PRIVKEY exists but $FULLCHAIN is missing — refusing to start"
+  exit 1
+fi
+
+# Both missing: generate bootstrap self-signed cert
+if [ ! -s "$FULLCHAIN" ] && [ ! -s "$PRIVKEY" ]; then
   echo "[bootstrap] no cert found; generating self-signed bootstrap cert for ${DOMAIN:-unknown}"
   mkdir -p "$CERT_DIR"
   openssl req -x509 -newkey rsa:2048 -nodes \
-    -keyout "$CERT_DIR/privkey.pem" \
-    -out "$CERT_DIR/fullchain.pem" \
+    -keyout "$PRIVKEY" \
+    -out "$FULLCHAIN" \
     -days 30 -sha256 \
     -subj "/CN=${DOMAIN:-localhost}" \
     -addext "subjectAltName=DNS:${DOMAIN:-localhost}"
-  chmod 644 "$CERT_DIR/fullchain.pem"
-  chmod 600 "$CERT_DIR/privkey.pem"
+  chmod 644 "$FULLCHAIN"
+  chmod 600 "$PRIVKEY"
+fi
+
+# Both exist: verify they are a matching pair
+if [ -s "$FULLCHAIN" ] && [ -s "$PRIVKEY" ]; then
+  echo "[bootstrap] existing certificate found, verifying key matches cert"
+  CERT_PUB=$(openssl x509 -noout -pubkey -in "$FULLCHAIN" 2>/dev/null | openssl pkey -pubin -outform der 2>/dev/null | openssl dgst -sha256 | cut -d' ' -f2)
+  KEY_PUB=$(openssl pkey -pubout -in "$PRIVKEY" -outform der 2>/dev/null | openssl dgst -sha256 | cut -d' ' -f2)
+  if [ "$CERT_PUB" != "$KEY_PUB" ]; then
+    echo "[bootstrap] ERROR: certificate and private key do not match — refusing to start"
+    exit 1
+  fi
+  echo "[bootstrap] certificate and key match"
 fi

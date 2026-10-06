@@ -25,24 +25,33 @@ fi
 echo "[certbot] starting (DOMAIN=${DOMAIN})"
 
 # Initial issuance, with retry: nginx may not be serving the webroot yet.
+# Retry every 1 hour on failure, log clearly.
 if [ ! -e "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
   while true; do
     # shellcheck disable=SC2086
-    certbot certonly --webroot -w /var/www/certbot -d "${DOMAIN}" \
-      --non-interactive --agree-tos $EXTRA_ARGS && break
-    echo "[certbot] initial issuance failed, retrying in 30s"
-    sleep 30
+    if certbot certonly --webroot -w /var/www/certbot -d "${DOMAIN}" \
+      --non-interactive --agree-to $EXTRA_ARGS; then
+      echo "[certbot] initial issuance succeeded"
+      break
+    else
+      echo "[certbot] ERROR: initial issuance failed, retrying in 1 hour"
+      sleep 1h
+    fi
   done
 fi
 
 # Install + reload right away (also covers "nginx_certs volume was wiped but
 # certbot_data survived" restarts).
-/usr/local/bin/reload-nginx.sh || echo "[certbot] reload failed (nginx mid-start?), continuing"
+/usr/local/bin/reload-nginx.sh || echo "[certbot] WARN: reload failed (nginx mid-start?), continuing"
 
 echo "[certbot] entering 12h renewal loop"
 while true; do
   sleep 12h
   # shellcheck disable=SC2086
-  certbot renew --webroot -w /var/www/certbot $EXTRA_ARGS \
-    --deploy-hook /usr/local/bin/reload-nginx.sh || true
+  if certbot renew --webroot -w /var/www/certbot $EXTRA_ARGS \
+    --deploy-hook /usr/local/bin/reload-nginx.sh; then
+    echo "[certbot] renewal succeeded"
+  else
+    echo "[certbot] ERROR: renewal failed, will retry in 12h"
+  fi
 done

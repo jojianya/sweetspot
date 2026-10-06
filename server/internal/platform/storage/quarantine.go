@@ -103,10 +103,15 @@ func (l *Local) Quarantine(rawURL string) (bool, error) {
 		}
 		return false, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 		return false, err
 	}
 	if err := renameFn(src, dst); err == nil {
+		// Quarantined bytes are sensitive: lock the moved file down even
+		// though the source arrived world-readable.
+		if err := os.Chmod(dst, 0o600); err != nil {
+			return false, err
+		}
 		return true, nil
 	} else if os.IsNotExist(err) {
 		return false, nil
@@ -170,15 +175,16 @@ func (l *Local) quarantineCopy(src, dst string) (bool, error) {
 	return true, nil
 }
 
-// copyFileSynced copies src to the existing temp path, preserves the source
-// mode, and fsyncs before returning.
-func copyFileSynced(src, tmp string, mode os.FileMode) error {
+// copyFileSynced copies src to the existing temp path with owner-only
+// permissions and fsyncs before returning. Quarantined bytes are sensitive,
+// so the copy is always 0600 regardless of the source mode.
+func copyFileSynced(src, tmp string, _ os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_TRUNC, mode)
+	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
@@ -186,8 +192,9 @@ func copyFileSynced(src, tmp string, mode os.FileMode) error {
 		out.Close()
 		return err
 	}
-	// CreateTemp pins 0600; restore the source mode explicitly.
-	if err := out.Chmod(mode); err != nil {
+	// CreateTemp pins 0600; enforce it explicitly so the mode never depends
+	// on the source or the process umask.
+	if err := out.Chmod(0o600); err != nil {
 		out.Close()
 		return err
 	}
@@ -205,6 +212,18 @@ func fsyncDir(dir string) error {
 	}
 	defer d.Close()
 	return d.Sync()
+}
+
+// EnsureQuarantineDir creates the quarantine directory owner-only and
+// tightens a pre-existing one to 0700 (volumes created before the 0700
+// default keep their old bits otherwise). It returns any failure so boot can
+// treat an unusable quarantine as a startup failure instead of silently
+// leaving hidden pins public.
+func (l *Local) EnsureQuarantineDir() error {
+	if err := os.MkdirAll(l.quarantineDir, 0o700); err != nil {
+		return err
+	}
+	return os.Chmod(l.quarantineDir, 0o700)
 }
 
 // CleanStaleTemps removes interrupted-copy temp files from the quarantine

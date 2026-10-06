@@ -52,6 +52,11 @@ func TestQuarantineMovesFileAndServes404(t *testing.T) {
 	if string(got) != "hidden bytes" {
 		t.Fatalf("quarantined content = %q, want %q", got, "hidden bytes")
 	}
+	if st, err := os.Stat(filepath.Join(root, "quarantine", name)); err != nil {
+		t.Fatalf("stat quarantine copy: %v", err)
+	} else if st.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %o, want 600", st.Mode().Perm())
+	}
 
 	r := gin.New()
 	r.Static("/uploads", uploads)

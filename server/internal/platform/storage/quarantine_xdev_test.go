@@ -15,7 +15,8 @@ func exdevRename(_, _ string) error {
 // TestQuarantineCrossFilesystemFallback proves separate volumes don't strand
 // files: when rename fails with EXDEV the file is copied (temp name in the
 // destination, fsynced, atomically renamed, size-verified) and only then is
-// the source removed. Permissions survive the trip.
+// the source removed. The copy is always owner-only (0600), never preserving
+// the world-readable source mode.
 func TestQuarantineCrossFilesystemFallback(t *testing.T) {
 	root := t.TempDir()
 	uploads := filepath.Join(root, "uploads")
@@ -35,13 +36,6 @@ func TestQuarantineCrossFilesystemFallback(t *testing.T) {
 		return os.Rename(oldpath, newpath)
 	}
 	defer func() { renameFn = oldRename }()
-	srcMode := func() os.FileMode {
-		st, err := os.Stat(filepath.Join(uploads, name))
-		if err != nil {
-			t.Fatalf("stat source: %v", err)
-		}
-		return st.Mode()
-	}()
 
 	moved, err := l.Quarantine(url)
 	if err != nil {
@@ -63,8 +57,8 @@ func TestQuarantineCrossFilesystemFallback(t *testing.T) {
 	}
 	if st, err := os.Stat(dst); err != nil {
 		t.Fatalf("stat quarantine copy: %v", err)
-	} else if st.Mode().Perm() != srcMode.Perm() {
-		t.Fatalf("mode = %o, want %o", st.Mode().Perm(), srcMode.Perm())
+	} else if st.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %o, want 600", st.Mode().Perm())
 	}
 	// No temp file may remain under any name.
 	entries, err := os.ReadDir(qdir)
@@ -141,5 +135,27 @@ func TestCleanStaleTemps(t *testing.T) {
 	}
 	if got, err := os.ReadFile(legit); err != nil || string(got) != "real" {
 		t.Fatalf("legit file must survive: %q %v", got, err)
+	}
+}
+
+// TestEnsureQuarantineDirTightensExisting proves boot heals volumes created
+// before the 0700 default: a pre-existing 0755 dir comes back 0700.
+func TestEnsureQuarantineDirTightensExisting(t *testing.T) {
+	root := t.TempDir()
+	qdir := filepath.Join(root, "quarantine")
+	if err := os.MkdirAll(qdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(qdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	l := NewLocalWithQuarantine(filepath.Join(root, "uploads"), "http://api.test", qdir)
+	if err := l.EnsureQuarantineDir(); err != nil {
+		t.Fatalf("EnsureQuarantineDir: %v", err)
+	}
+	if st, err := os.Stat(qdir); err != nil {
+		t.Fatal(err)
+	} else if st.Mode().Perm() != 0o700 {
+		t.Fatalf("mode = %o, want 700", st.Mode().Perm())
 	}
 }

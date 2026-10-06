@@ -25,7 +25,10 @@ func (l *Local) Save(data []byte, ext string) (string, error) {
 		return "", err
 	}
 
-	id := newFileID()
+	id, err := newFileID()
+	if err != nil {
+		return "", err
+	}
 	name := fmt.Sprintf("%s.%s", hex.EncodeToString(id[:]), ext)
 	path := filepath.Join(l.dir, name)
 

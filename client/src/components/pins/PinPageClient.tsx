@@ -17,6 +17,7 @@ import { useOptimisticSave } from "@/hooks/useOptimisticSave";
 import { usePinView } from "@/hooks/usePinView";
 import { usePinShare } from "@/hooks/usePinShare";
 import { formatTime, parsePoint } from "@/lib/utils";
+import { resolveMediaUrl } from "@/lib/media";
 import { categorySlug } from "@/lib/utils/category";
 import { useAuth } from "@/store/auth";
 import type { PinDetail } from "@/lib/types";
@@ -49,6 +50,8 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
 
   const photo = pin.photos[index];
   const count = pin.photos.length;
+  const heroSrc = photo ? resolveMediaUrl(photo.photo_url) : "";
+  const lightboxSrc = photo ? resolveMediaUrl(photo.photo_url) : "";
   const point = useMemo(() => parsePoint(pin.location), [pin.location]);
 
   const isOwner =
@@ -71,7 +74,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
       <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-16 pt-20">
         {/* Hero */}
         <div className="overflow-hidden rounded-2xl bg-zinc-100 shadow-sm ring-1 ring-zinc-200/60 dark:bg-zinc-900 dark:ring-zinc-800">
-          {photo ? (
+          {heroSrc ? (
             <button
               type="button"
               onClick={() => setLightbox(true)}
@@ -79,7 +82,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
               aria-label="View photo full screen"
             >
               <img
-                src={photo.photo_url}
+                src={heroSrc}
                 alt={name ?? "Pin photo"}
                 className="max-h-[60dvh] w-full object-cover"
               />
@@ -92,28 +95,34 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
 
           {count > 1 && (
             <div className="flex gap-2 overflow-x-auto p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {pin.photos.map((p, i) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setIndex(i)}
-                  aria-label={`Photo ${i + 1} of ${count}`}
-                  aria-pressed={i === index}
-                  className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
-                    i === index
-                      ? "border-sky-500"
-                      : "border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
-                  }`}
-                >
-                  <img
-                    src={p.thumbnail_url}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover"
-                  />
-                </button>
-              ))}
+              {pin.photos.map((p, i) => {
+                const thumbSrc =
+                  resolveMediaUrl(p.thumbnail_url) || resolveMediaUrl(p.photo_url);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setIndex(i)}
+                    aria-label={`Photo ${i + 1} of ${count}`}
+                    aria-pressed={i === index}
+                    className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
+                      i === index
+                        ? "border-sky-500"
+                        : "border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
+                    }`}
+                  >
+                    {thumbSrc ? (
+                      <img
+                        src={thumbSrc}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -231,16 +240,16 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
         </div>
       </div>
 
-      {lightbox && photo && (
+      {lightbox && lightboxSrc ? (
         <PhotoLightbox
-          src={photo.photo_url}
+          src={lightboxSrc}
           alt={name ?? "Pin photo"}
           count={count}
           index={index}
           onNavigate={setIndex}
           onClose={() => setLightbox(false)}
         />
-      )}
+      ) : null}
 
       {editOpen && (
         <PinEditSheet

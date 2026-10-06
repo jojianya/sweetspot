@@ -6,6 +6,7 @@ import { CloseIcon } from "@/components/icons";
 import { deletePin, updatePin } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 import type { Category, PinDetail } from "@/lib/types";
+import { resolveMediaUrl } from "@/lib/media";
 
 const MAX_PHOTOS = 5;
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024;
@@ -151,14 +152,18 @@ export default function PinEditSheet({
                 Current photos
               </p>
               <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {pin.photos.map((p) => (
-                  <img
-                    key={p.id}
-                    src={p.thumbnail_url}
-                    alt=""
-                    className="h-16 w-16 shrink-0 rounded-lg border border-zinc-200 object-cover dark:border-zinc-700"
-                  />
-                ))}
+                {pin.photos.map((p) => {
+                  const src = resolveMediaUrl(p.thumbnail_url);
+                  if (!src) return null;
+                  return (
+                    <img
+                      key={p.id}
+                      src={src}
+                      alt=""
+                      className="h-16 w-16 shrink-0 rounded-lg border border-zinc-200 object-cover dark:border-zinc-700"
+                    />
+                  );
+                })}
               </div>
             </div>
           )}

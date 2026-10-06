@@ -19,6 +19,7 @@ import PinEditSheet from "./PinEditSheet";
 import AddToCollectionSheet from "./AddToCollectionSheet";
 import ReportSheet from "./ReportSheet";
 import type { PinDetail } from "@/lib/types";
+import { resolveMediaUrl } from "@/lib/media";
 import { parsePoint } from "@/lib/utils";
 import { categorySlug } from "@/lib/utils/category";
 import { useCategories } from "@/hooks/useCategories";
@@ -59,6 +60,8 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
 
   const photo = pin.photos[index];
   const count = pin.photos.length;
+  const heroSrc = photo ? resolveMediaUrl(photo.photo_url) : "";
+  const lightboxSrc = photo ? resolveMediaUrl(photo.photo_url) : "";
   const point = useMemo(() => parsePoint(pin.location), [pin.location]);
 
   const isOwner =
@@ -79,7 +82,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
       <PanelSheet role="dialog" aria-label="Pin details" onClose={onClose}>
         {/* Hero photo — plain image, no overlays */}
         <div className="relative h-[210px] shrink-0 overflow-hidden rounded-t-2xl sm:rounded-t-none sm:rounded-tr-2xl">
-          {photo ? (
+          {heroSrc ? (
             <button
               type="button"
               onClick={() => setLightbox(true)}
@@ -87,7 +90,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
               aria-label="View photo full screen"
             >
               <img
-                src={photo.photo_url}
+                src={heroSrc}
                 alt={name ?? "Pin photo"}
                 loading="lazy"
                 decoding="async"
@@ -197,26 +200,32 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
             <div className="mt-5 border-t border-zinc-100 pt-4 dark:border-zinc-800">
               <p className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Photos</p>
               <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {pin.photos.map((p, i) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setIndex(i)}
-                    aria-label={`Photo ${i + 1} of ${count}`}
-                    aria-pressed={i === index}
-                    className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 transition-colors ${
-                      i === index ? "border-sky-500" : "border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
-                    }`}
-                  >
-                    <img
-                      src={p.thumbnail_url}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full object-cover"
-                    />
-                  </button>
-                ))}
+                {pin.photos.map((p, i) => {
+                  const thumbSrc =
+                    resolveMediaUrl(p.thumbnail_url) || resolveMediaUrl(p.photo_url);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setIndex(i)}
+                      aria-label={`Photo ${i + 1} of ${count}`}
+                      aria-pressed={i === index}
+                      className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 transition-colors ${
+                        i === index ? "border-sky-500" : "border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
+                      }`}
+                    >
+                      {thumbSrc ? (
+                        <img
+                          src={thumbSrc}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -282,16 +291,16 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
         </div>
       </PanelSheet>
 
-      {lightbox && photo && (
+      {lightbox && lightboxSrc ? (
         <PhotoLightbox
-          src={photo.photo_url}
+          src={lightboxSrc}
           alt={name ?? "Pin photo"}
           count={count}
           index={index}
           onNavigate={setIndex}
           onClose={() => setLightbox(false)}
         />
-      )}
+      ) : null}
 
       {editOpen && (
         <PinEditSheet

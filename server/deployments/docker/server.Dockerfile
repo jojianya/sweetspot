@@ -13,7 +13,8 @@ ENV APP_ENV=production
 # The uploads directory is owned by appuser so the named volume inherits
 # writable ownership on first mount.
 RUN apk add --no-cache vips \
-  && adduser -S -h /app appuser \
+  && addgroup -S appuser \
+  && adduser -S -G appuser -h /app appuser \
   && mkdir -p /app/uploads /app/quarantine \
   && chown -R appuser:appuser /app
 COPY --from=builder --chown=appuser:appuser /app/server .

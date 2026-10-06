@@ -38,6 +38,9 @@ must be replaced during first deploy.
 2. `docker compose -f docker-compose.prod.yml build client server`
 3. `docker compose -f docker-compose.prod.yml up -d` (rolling: server first,
    then client; SSE connections drain via `CloseAllSSE` + 5s shutdown).
+   On the first deploy after the M1 quarantine upgrade, set
+   `QUARANTINE_SWEEP_DRY_RUN=true`, read the logged `checked`/`moved`
+   counts, then set it back to `false` and redeploy.
 4. Watch `docker compose -f docker-compose.prod.yml ps` until all
    `healthy`, then smoke-test §0 step 7.
 

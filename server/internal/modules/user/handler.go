@@ -125,10 +125,16 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 			response.Internal(c, "user: open avatar", err)
 			return
 		}
-		data, readErr := io.ReadAll(src)
+		// Cap at max+1 so the length check below enforces actual bytes, not
+		// the client-claimed FileHeader.Size.
+		data, readErr := io.ReadAll(io.LimitReader(src, maxAvatarSize+1))
 		src.Close()
 		if readErr != nil {
 			response.Internal(c, "user: read avatar", readErr)
+			return
+		}
+		if len(data) > maxAvatarSize {
+			response.BadRequest(c, "avatar exceeds 5MB")
 			return
 		}
 		if err := imaging.Validate(data); err != nil {

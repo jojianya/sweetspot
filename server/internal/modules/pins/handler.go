@@ -396,10 +396,15 @@ func processPhotos(files []*multipart.FileHeader) ([]validatedFile, *photoErr) {
 		if err != nil {
 			return nil, &photoErr{http.StatusInternalServerError, "could not read uploaded file"}
 		}
-		data, err := io.ReadAll(src)
+		// Cap the read at max+1 so a lied-about FileHeader.Size cannot push
+		// an unbounded body into memory; the length check below is authoritative.
+		data, err := io.ReadAll(io.LimitReader(src, maxPhotoSize+1))
 		src.Close()
 		if err != nil {
 			return nil, &photoErr{http.StatusInternalServerError, "could not read uploaded file"}
+		}
+		if len(data) > maxPhotoSize {
+			return nil, &photoErr{http.StatusBadRequest, "one or more photos exceed 10MB"}
 		}
 
 		if err := imaging.Validate(data); err != nil {

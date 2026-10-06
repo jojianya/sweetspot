@@ -14,7 +14,7 @@ ENV APP_ENV=production
 # writable ownership on first mount.
 RUN apk add --no-cache vips \
   && adduser -S -h /app appuser \
-  && mkdir -p /app/uploads \
+  && mkdir -p /app/uploads /app/quarantine \
   && chown -R appuser:appuser /app
 COPY --from=builder --chown=appuser:appuser /app/server .
 COPY --from=builder --chown=appuser:appuser /app/internal/platform/database/migrations ./internal/platform/database/migrations

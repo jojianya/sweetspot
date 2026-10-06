@@ -96,8 +96,15 @@ func defaultStorageBaseURL(port string) string {
 }
 
 func Load() *Config {
-	if err := godotenv.Load(); err != nil {
-		log.Println("no .env file found, reading from environment")
+	// Single source of truth: the repo-root .env (the same file docker compose
+	// interpolates from). A server-local .env is only consulted when the root
+	// file is absent (legacy fallback). "../" resolves to the repo root when
+	// running from server/ (`make run`); in containers compose injects env and
+	// neither file exists.
+	if err := godotenv.Load("../.env"); err != nil {
+		if err := godotenv.Load(".env"); err != nil {
+			log.Println("no .env file found, reading from environment")
+		}
 	}
 
 	port := getEnv("PORT", "8080")

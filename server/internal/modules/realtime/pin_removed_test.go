@@ -2,9 +2,10 @@ package realtime
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -68,12 +69,58 @@ func TestRunStreamLoopRemovalBboxFilter(t *testing.T) {
 	}
 }
 
+// TestMatchesRemoved covers the bbox predicate directly, including the
+// malformed-location rule (dropped when a bbox is set, passed when unset).
+func TestMatchesRemoved(t *testing.T) {
+	bbox := [4]float64{10, 20, 30, 40}
+	inside := pins.PinRemoved{ID: "x", Location: "POINT(25 15)"}
+	outside := pins.PinRemoved{ID: "x", Location: "POINT(100 100)"}
+	bad := pins.PinRemoved{ID: "x", Location: "not-a-point"}
+
+	if !matchesRemoved(inside, &bbox) {
+		t.Errorf("expected inside bbox to match")
+	}
+	if matchesRemoved(outside, &bbox) {
+		t.Errorf("expected outside bbox to not match")
+	}
+	if matchesRemoved(bad, &bbox) {
+		t.Errorf("expected malformed location to not match with bbox set")
+	}
+	if !matchesRemoved(bad, nil) {
+		t.Errorf("expected malformed location to match when bbox is unset")
+	}
+}
+
+// signalingRecorder wraps httptest.ResponseRecorder and signals when headers are first written.
+type signalingRecorder struct {
+	*httptest.ResponseRecorder
+	headersWritten chan struct{}
+	once           sync.Once
+}
+
+func newSignalingRecorder() *signalingRecorder {
+	return &signalingRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		headersWritten:   make(chan struct{}),
+	}
+}
+
+func (sr *signalingRecorder) WriteHeader(code int) {
+	sr.ResponseRecorder.WriteHeader(code)
+	// Signal that headers are written (WriteHeader is called after headers are set)
+	sr.once.Do(func() { close(sr.headersWritten) })
+}
+
+func (sr *signalingRecorder) Header() http.Header {
+	return sr.ResponseRecorder.Header()
+}
+
 // TestStreamSetsNoTransformCacheControl proves the SSE response opts out of
 // compression at every hop: proxies (Next rewrites, nginx gzip) must
 // not buffer the stream, or browsers never receive events live.
 // Needs a reachable Redis (same bar as the DB-backed endpoint tests).
 func TestStreamSetsNoTransformCacheControl(t *testing.T) {
-	broker := NewBroker("127.0.0.1:6379", os.Getenv("REDIS_PASSWORD"))
+	broker := NewBroker("127.0.0.1:6379", "")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := broker.Ping(ctx); err != nil {
@@ -82,7 +129,7 @@ func TestStreamSetsNoTransformCacheControl(t *testing.T) {
 
 	h := NewHandler(broker, 0)
 
-	rec := httptest.NewRecorder()
+	rec := newSignalingRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	reqCtx, stop := context.WithCancel(context.Background())
 	defer stop()
@@ -94,14 +141,14 @@ func TestStreamSetsNoTransformCacheControl(t *testing.T) {
 		h.Stream(c)
 	}()
 
-	// Wait for handler to write status (which happens after headers) to avoid data race
-	// Poll for status code instead of fixed delay — reliable on slow CI runners
-	deadline := time.Now().Add(3 * time.Second)
-	for rec.Code == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+	// Wait for handler to write headers (signaled by WriteHeader) to avoid data race
+	select {
+	case <-rec.headersWritten:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for headers to be written")
 	}
 
-	deadline = time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(3 * time.Second)
 	for rec.Header().Get("Cache-Control") == "" && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -113,32 +160,11 @@ func TestStreamSetsNoTransformCacheControl(t *testing.T) {
 	}
 
 	cc := rec.Header().Get("Cache-Control")
-	if !strings.Contains(cc, "no-transform") {
+	if !contains(cc, "no-transform") {
 		t.Errorf("expected Cache-Control to contain no-transform, got %q", cc)
 	}
 }
 
-// TestMatchesRemoved covers the bbox predicate directly, including the
-// malformed-location rule (dropped when a bbox is set, passed when unset).
-func TestMatchesRemoved(t *testing.T) {
-	bbox := [4]float64{10, 20, 30, 40}
-	inside := pins.PinRemoved{ID: "x", Location: "POINT(25 15)"}
-	outside := pins.PinRemoved{ID: "x", Location: "POINT(100 100)"}
-	bad := pins.PinRemoved{ID: "x", Location: "not-a-point"}
-
-	if !matchesRemoved(inside, &bbox) {
-		t.Error("expected inside-bbox removal to match")
-	}
-	if matchesRemoved(outside, &bbox) {
-		t.Error("expected outside-bbox removal to be filtered")
-	}
-	if matchesRemoved(bad, &bbox) {
-		t.Error("expected malformed location to be filtered when bbox is set")
-	}
-	if !matchesRemoved(bad, nil) {
-		t.Error("expected malformed location to pass when no bbox is set")
-	}
-	if !matchesRemoved(outside, nil) {
-		t.Error("expected removal to pass when no bbox is set")
-	}
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || contains(s[1:], substr)))
 }

@@ -86,8 +86,8 @@ services:
       #   PUBLIC_BASE_URL=https://yourdomain.com
       #   MAILER_WEBHOOK_URL=https://your-mailer-webhook
       #   MAILER_WEBHOOK_KEY=your-secret-key
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
-      MAILER_WEBHOOK_URL: ${MAILER_WEBHOOK_URL:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env}
+      MAILER_WEBHOOK_URL: ${MAILER_WEBHOOK_URL:?set MAILER_WEBHOOK_URL in .env}
       MAILER_WEBHOOK_KEY: ${MAILER_WEBHOOK_KEY:-}
       # Set this to true for the first deploy after upgrading to quarantined
       # hidden pins: the sweep logs checked/moved counts without moving files.

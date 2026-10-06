@@ -4,6 +4,13 @@ Audience: the on-call operator. All commands run from the repo root on the
 production VM unless noted. Domain and provider names marked `[FILL IN]`
 must be replaced during first deploy.
 
+**Important:** The `.env` file must be created and populated before running
+ANY `docker compose` command, including `logs`, `ps`, `config`, and rollback
+procedures. Compose validates required variables (marked with `:?` in
+`docker-compose.prod.yml`) before executing any subcommand. Without a valid
+`.env`, even `docker compose logs` will fail with "required variable ... is
+missing a value".
+
 ## 0. First deploy (one time)
 
 1. Provision the VM (2 vCPU / 4 GiB RAM minimum; 20 GiB+ disk for DB and

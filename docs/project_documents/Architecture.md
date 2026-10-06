@@ -73,7 +73,7 @@ Implemented as `GET /events` in the same Go binary. One global stream per proces
 
 - `Broker.PinCreated` publishes `pins.Event` JSON to Redis channel `goodspot:pins` (`broker.go:9,36-51`).
 - Each connection subscribes; `runStreamLoop` (`realtime/handler.go:198`) filters by bbox (`matches`, handler.go:237-250) and category.
-- 20 s `: heartbeat` comment keeps intermediaries alive (`handler.go:65`); capped by `MAX_SSE_CONNECTIONS` (`handler.go:78-95`); Caddy sets `flush_interval -1` for `/events`.
+- 20 s `: heartbeat` comment keeps intermediaries alive (`handler.go:65`); capped by `MAX_SSE_CONNECTIONS` (`handler.go:78-95`); nginx disables buffering for `/events`.
 
 Used for:
 

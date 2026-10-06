@@ -31,7 +31,7 @@ server {
 
     server_tokens off;
 
-    # Matches the Go BodyLimit of 64<<20 on the upload routes. Caddy applied no
+    # Matches the Go BodyLimit of 64<<20 on the upload routes. The previous proxy applied no
     # limit, so a smaller value here would 413 photo uploads before the Go
     # handler ever saw them.
     client_max_body_size 64m;
@@ -59,7 +59,7 @@ server {
 
     # The Go API's SecurityHeaders middleware and this config enforce the same
     # four headers. Hide the upstream copies so proxy_pass responses carry
-    # each header exactly once (Caddy's `header` block replaced, not appended).
+    # each header exactly once (the previous proxy's `header` block replaced, not appended).
     proxy_hide_header Strict-Transport-Security;
     proxy_hide_header X-Content-Type-Options;
     proxy_hide_header X-Frame-Options;

@@ -49,11 +49,21 @@ server {
     set $client_upstream http://client:3000;
 
     # gzip covers everything EXCEPT /events (overrides with `gzip off` below).
-    # nginx only gzips text/html by default; the rest must be listed.
+    # nginx only gzips text/html by default; the rest must be listed in
+    # gzip_types. Listing "text/html" explicitly is a duplicate-MIME warning
+    # (`nginx -t` warns), so html is NOT repeated here.
     gzip on;
     gzip_vary on;
     gzip_proxied any;
-    gzip_types text/html text/css text/plain text/xml application/xml application/json application/javascript text/javascript image/svg+xml;
+    gzip_types text/css text/plain text/xml application/xml application/json application/javascript text/javascript image/svg+xml;
+
+    # The Go API's SecurityHeaders middleware and this config enforce the same
+    # four headers. Hide the upstream copies so proxy_pass responses carry
+    # each header exactly once (Caddy's `header` block replaced, not appended).
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Referrer-Policy;
 
     # Buffered locations: sensible timeouts.
     proxy_connect_timeout 5s;

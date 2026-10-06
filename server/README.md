@@ -23,8 +23,8 @@ scripts/                    helper scripts
 ## Quick start
 
 ```sh
-# 1. copy env vars
-cp .env.example .env
+# 1. env vars: one template at the repo root (there is no server/.env any more)
+cp ../.env.example ../.env   # fill in real values; make run loads ../.env
 
 # 2. run postgres + redis
 docker compose up -d postgres redis

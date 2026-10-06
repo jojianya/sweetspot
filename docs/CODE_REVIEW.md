@@ -390,10 +390,14 @@ Everything compiles — the findings below are logic, security, and robustness i
       so the containerized app always uses the `cors.go:16` localhost fallback, and Sentry can't be
       enabled in Docker at all. Combined with `AllowCredentials: true` (`cors.go:24`), a misconfigured
       production deploy fails closed (safe) but *silently*, which is worse than failing loudly.
-- [ ] Add `CORS_ALLOWED_ORIGINS` / `SENTRY_DSN` / `SENTRY_ENV` to the compose server service
-- [ ] **Consolidate env examples** — there are **three** `.env.example` files with overlapping,
-      conflicting keys and **conflicting ports**: root (`PORT=8081`), `server/.env.example` (`8081`),
-      `server/internal/config/.env.example` (`8080`). Reduce to a single source of truth at the repo root.
+- [x] Add `CORS_ALLOWED_ORIGINS` / `SENTRY_DSN` / `SENTRY_ENV` to the compose server service —
+      `CORS_ALLOWED_ORIGINS` was already passed through; `SENTRY_DSN`/`SENTRY_ENV` (plus `LOG_FORMAT`,
+      `PUBLIC_BASE_URL`, `MAILER_WEBHOOK_*`, `QUARANTINE_SWEEP_DRY_RUN`, `TRUSTED_PROXIES`, `DB_POOL_*`)
+      were added with defaults equal to the previous effective values.
+- [x] **Consolidate env examples** — done: the repo-root `.env.example` is now the only template (it
+      absorbed `PORT`/`DB_*`/`REDIS_ADDR`/`STORAGE_BACKEND` and dropped the unread `NEXT_PUBLIC_TILES_URL`),
+      `server/.env.example` and `server/internal/config/.env.example` are deleted, and
+      `server/internal/config/config.go` loads the repo-root `../.env` first.
 
 ### P2.16 `Logout` hard-fails with a 500 when Redis is down, and the token is never revoked
 

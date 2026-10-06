@@ -136,10 +136,11 @@ const LIGHT_STYLE = `https://api.maptiler.com/maps/streets-v2/style.json?key=${M
 const DARK_STYLE  = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`;
 ```
 
-**Heads-up:** the root `.env.example` still carries two artefacts of the deleted self-hosted branch — a
-`NEXT_PUBLIC_TILES_URL` line that **nothing on this branch reads**, and a comment on
-`NEXT_PUBLIC_MAPTILER_API_KEY` claiming "base map tiles are self-hosted (see below)", which is **false on
-this branch**. Both are stale; see [§9.2](#92-stale-env-example--documentation-drift).
+**Heads-up:** the root `.env.example` used to carry two artefacts of the deleted self-hosted branch — a
+`NEXT_PUBLIC_TILES_URL` line that **nothing on this branch reads** (removed when the env templates were
+consolidated into the single root `.env.example`; an untracked root `.env` may still carry it), and a
+comment on `NEXT_PUBLIC_MAPTILER_API_KEY` claiming "base map tiles are self-hosted (see below)" (since
+corrected). See [§9.2](#92-stale-env-example--documentation-drift).
 
 ---
 
@@ -976,15 +977,22 @@ dedicated, looser schema for stream events. Right now the failure is invisible �
 
 ### 9.2 Stale `.env.example` / documentation drift
 
-- Root `.env.example` documents `NEXT_PUBLIC_TILES_URL`, which **nothing on this branch reads**.
+- ~~Root `.env.example` documents `NEXT_PUBLIC_TILES_URL`, which **nothing on this branch reads**.~~
+  Fixed: the key was dropped when the templates were consolidated (a developer's untracked root `.env`
+  may still contain it — nothing reads it).
 - Its comment says `NEXT_PUBLIC_MAPTILER_API_KEY` is "for address geocoding only; base map tiles are
   self-hosted (see below)" — **false on `main`/`development`**, where the same key serves the tiles.
-- **Three `.env.example` files with conflicting keys and conflicting ports:** root (`PORT` unset / default
+- ~~**Three `.env.example` files with conflicting keys and conflicting ports:** root (`PORT` unset / default
   8080), `server/.env.example` (`PORT=8081`), `server/internal/config/.env.example` (`PORT=8080`).
-  `docker-compose.yml` only reads the root one.
-- `docker-compose.yml` does **not** pass `CORS_ALLOWED_ORIGINS`, `SENTRY_DSN`, or `SENTRY_ENV` to the server
+  `docker-compose.yml` only reads the root one.~~ Fixed: one root `.env.example` now (documents
+  `PORT=8081`); `server/.env.example` and `server/internal/config/.env.example` are deleted, the real
+  `server/.env` and `client/.env.local` are removed (backed up outside the repo), and the Go server
+  loads the repo-root `.env` via `godotenv.Load("../.env")`.
+- ~~`docker-compose.yml` does **not** pass `CORS_ALLOWED_ORIGINS`, `SENTRY_DSN`, or `SENTRY_ENV` to the server
   service, so a containerised deployment silently falls back to the localhost CORS list and can never enable
-  Sentry.
+  Sentry.~~ Fixed: the dev server service now passes `CORS_ALLOWED_ORIGINS`, `SENTRY_DSN`, `SENTRY_ENV`
+  (and `LOG_FORMAT`, `PUBLIC_BASE_URL`, `MAILER_WEBHOOK_*`, `QUARANTINE_SWEEP_DRY_RUN`, `TRUSTED_PROXIES`,
+  `DB_POOL_*`) through from the root `.env`.
 - `docs/TECH_STACK.md`, `docs/project_documents/{Architecture,API}.md` and `docs/DEVELOPMENT.md` are behind the
   code (`docs/roadmap.md` item **J** tracks this).
 - `docs/SECURITY.md` still states "there is no cookie-based session, so CSRF does not apply". There **is** now.
@@ -1161,8 +1169,9 @@ Read by the **Next server**: `API_INTERNAL_URL` (**required in production or SSR
 `http://server:8081` in Docker), `NEXT_PUBLIC_API_URL` (SSR metadata + SSR fallback only),
 `SITE_URL` (`client/Dockerfile` does `RUN test -n "$SITE_URL"`), `NEXT_PUBLIC_MAPTILER_API_KEY`.
 
-The server also does `godotenv.Load()` and logs `no .env file found, reading from environment` if there isn't
-one — so env-only works, but compose interpolates from the **root** `.env`.
+The server also does `godotenv.Load("../.env")` (repo root, with a server-local `.env` as legacy
+fallback) and logs `no .env file found, reading from environment` if there isn't one — so env-only
+works, and compose interpolates from the same **root** `.env`.
 
 ### 10.3 Running the pieces without Docker
 
@@ -1171,7 +1180,7 @@ one — so env-only works, but compose interpolates from the **root** `.env`.
 docker compose up -d postgres redis
 
 # Server (needs libvips for bimg)
-cd server && cp .env.example .env && make run      # or: go run ./cmd/api
+cd server && cp ../.env.example ../.env && make run   # or: go run ./cmd/api (loads ../.env)
 
 # Client
 cd client && pnpm install

@@ -47,6 +47,12 @@ services:
       retries: 5
 
   server:
+    # Distinct tag: docker-compose.prod.yml builds ./server with
+    # server.Dockerfile into the implicit `<project>-server` image. Sharing a
+    # tag let a prod build overwrite this dev image; `up -d` (no --build) then
+    # reused it and ran the prod `CMD ["./server"]`, which is absent under the
+    # ./server:/app bind mount ("exec: \"./server\": no such file or directory").
+    image: sweetspot-server-dev
     build:
       context: ./server
       dockerfile: deployments/docker/server.Dockerfile.dev
@@ -94,6 +100,9 @@ services:
         condition: service_healthy
 
   client:
+    # See the server note above: keep the dev image out of the implicit
+    # `<project>-client` tag that docker-compose.prod.yml builds into.
+    image: sweetspot-client-dev
     build:
       context: ./client
       dockerfile: Dockerfile.dev

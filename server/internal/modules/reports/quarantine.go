@@ -43,7 +43,7 @@ func (h *Handler) quarantinePinFiles(ctx context.Context, pinID string) {
 				continue
 			}
 			if _, err := h.store.Quarantine(u); err != nil {
-				slog.Warn("quarantine: move file", "error", err.Error(), "url", u, "pin_id", pinID)
+				slog.Error("quarantine: move file", "error", err.Error(), "url", u, "pin_id", pinID)
 			}
 		}
 	}
@@ -66,7 +66,7 @@ func SweepURLs(_ context.Context, urls []string, store *storage.Local, dryRun bo
 		}
 		m, qerr := store.Quarantine(u)
 		if qerr != nil {
-			slog.Warn("quarantine sweep: move file", "error", qerr.Error(), "url", u)
+			slog.Error("quarantine sweep: move file", "error", qerr.Error(), "url", u)
 			continue
 		}
 		if m {

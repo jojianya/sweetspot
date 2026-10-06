@@ -226,6 +226,30 @@ func (l *Local) EnsureQuarantineDir() error {
 	return os.Chmod(l.quarantineDir, 0o700)
 }
 
+// VerifyQuarantineWritable proves the quarantine directory can actually take
+// files: ensure (mkdir + tighten to 0700) plus a write probe (create, sync,
+// remove a temp file). Boot treats any failure as a startup failure so a
+// broken setup can never silently leave hidden pins public.
+func (l *Local) VerifyQuarantineWritable() error {
+	if err := l.EnsureQuarantineDir(); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(l.quarantineDir, ".wprobe-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	defer os.Remove(name)
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // CleanStaleTemps removes interrupted-copy temp files from the quarantine
 // directory. Final-name files are never touched. The sweep calls this in real
 // mode; dry-run leaves the filesystem alone.

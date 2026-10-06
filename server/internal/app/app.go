@@ -35,20 +35,38 @@ func Run(cfg *config.Config, pool *pgxpool.Pool, rep *report.Reporter) error {
 
 	container := di.Build(cfg, pool)
 
+	// Prove the quarantine directory can take files before serving traffic.
+	// A broken quarantine would silently leave hidden pins public, so any
+	// failure is an ERROR (Sentry) plus an unwritable /ready field — but
+	// /ready stays 200 and boot continues, because quarantine health must
+	// not take all traffic down. The sweep is skipped when unwritable since
+	// every move would fail anyway.
+	quarantineStatus := "ok"
+	if err := container.Store.VerifyQuarantineWritable(); err != nil {
+		lg.Error("quarantine dir not writable, hidden pins may stay public",
+			"error", err.Error(), "dir", container.Store.QuarantineDir())
+		if rep != nil {
+			rep.Report(context.Background(), err, "component", "quarantine", "dir", container.Store.QuarantineDir())
+		}
+		quarantineStatus = "unwritable"
+	}
+
 	// Sweep files of already-hidden pins out of /uploads (idempotent,
 	// best-effort). This heals pins hidden before quarantine wiring existed
 	// and finishes moves that failed at review time. A listing failure or a
 	// per-file error is logged, never fatal to boot.
-	func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		checked, moved, err := reports.SweepHiddenPinFiles(ctx, pool, container.Store, cfg.QuarantineDryRun)
-		if err != nil {
-			lg.Warn("quarantine sweep failed", "error", err.Error(), "dry_run", cfg.QuarantineDryRun)
-			return
-		}
-		lg.Info("quarantine sweep done", "checked", checked, "moved", moved, "dry_run", cfg.QuarantineDryRun)
-	}()
+	if quarantineStatus == "ok" {
+		func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			checked, moved, err := reports.SweepHiddenPinFiles(ctx, pool, container.Store, cfg.QuarantineDryRun)
+			if err != nil {
+				lg.Warn("quarantine sweep failed", "error", err.Error(), "dry_run", cfg.QuarantineDryRun)
+				return
+			}
+			lg.Info("quarantine sweep done", "checked", checked, "moved", moved, "dry_run", cfg.QuarantineDryRun)
+		}()
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -58,7 +76,7 @@ func Run(cfg *config.Config, pool *pgxpool.Pool, rep *report.Reporter) error {
 		lg.Info("redis connected", "addr", cfg.RedisAddr)
 	}
 
-	router := http.NewRouter(cfg, pool, container, lg, rep)
+	router := http.NewRouter(cfg, pool, container, lg, rep, quarantineStatus)
 
 	// WriteTimeout is deliberately unset: the realtime SSE endpoint
 	// (internal/modules/realtime/handler.go) holds responses open for the life

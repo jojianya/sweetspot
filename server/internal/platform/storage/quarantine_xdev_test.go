@@ -159,3 +159,33 @@ func TestEnsureQuarantineDirTightensExisting(t *testing.T) {
 		t.Fatalf("mode = %o, want 700", st.Mode().Perm())
 	}
 }
+
+// TestVerifyQuarantineWritableOK proves a healthy dir passes the boot probe.
+func TestVerifyQuarantineWritableOK(t *testing.T) {
+	root := t.TempDir()
+	l := NewLocalWithQuarantine(filepath.Join(root, "uploads"), "http://api.test", filepath.Join(root, "quarantine"))
+	if err := l.VerifyQuarantineWritable(); err != nil {
+		t.Fatalf("VerifyQuarantineWritable: %v", err)
+	}
+}
+
+// TestVerifyQuarantineWritableFails proves a read-only location fails the boot
+// probe instead of silently leaving hidden pins public. The parent is
+// read-only and the quarantine subdir does not exist yet, so Ensure cannot
+// create it (a pre-existing dir would first be tightened to 0700 by Ensure,
+// which is the healthy path above).
+func TestVerifyQuarantineWritableFails(t *testing.T) {
+	root := t.TempDir()
+	parent := filepath.Join(root, "ro")
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(parent, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(parent, 0o755)
+	l := NewLocalWithQuarantine(filepath.Join(root, "uploads"), "http://api.test", filepath.Join(parent, "quarantine"))
+	if err := l.VerifyQuarantineWritable(); err == nil {
+		t.Fatal("expected an error for an uncreatable quarantine dir, got nil")
+	}
+}

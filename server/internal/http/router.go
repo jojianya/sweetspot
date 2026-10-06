@@ -26,7 +26,11 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/observability/report"
 )
 
-func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog.Logger, rep *report.Reporter) *gin.Engine {
+// quarantineStatus is "ok" or "unwritable" as probed once at boot (see
+// app.Run): whether hidden pins' files can actually leave /uploads. It rides
+// along in /ready without affecting its HTTP status — unlike DB/Redis, a
+// broken quarantine must be loud but must not take all traffic down.
+func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog.Logger, rep *report.Reporter, quarantineStatus string) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	// TrustedProxies comes from TRUSTED_PROXIES and is validated at startup.
@@ -74,13 +78,14 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 
 		if dbStatus != "connected" || redisStatus == "unreachable" {
 			response.JSON(c, stdhttp.StatusServiceUnavailable, gin.H{
-				"status": "degraded",
-				"db":     dbStatus,
-				"redis":  redisStatus,
+				"status":     "degraded",
+				"db":         dbStatus,
+				"redis":      redisStatus,
+				"quarantine": quarantineStatus,
 			})
 			return
 		}
-		response.JSON(c, stdhttp.StatusOK, gin.H{"status": "ok", "db": dbStatus, "redis": redisStatus})
+		response.JSON(c, stdhttp.StatusOK, gin.H{"status": "ok", "db": dbStatus, "redis": redisStatus, "quarantine": quarantineStatus})
 	})
 
 	jsonRoutes := r.Group("")

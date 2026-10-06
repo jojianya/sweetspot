@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { PinDetail } from "@/lib/types";
+import { extractUploadsSuffix, isUploadsPath } from "@/lib/uploads";
 
 const SITE_NAME = "Goodspot";
 const TITLE_MAX_LENGTH = 70;
@@ -15,13 +16,6 @@ function truncate(value: string, maxLength: number): string {
   return `${characters.slice(0, Math.max(1, maxLength - 1)).join("")}…`;
 }
 
-function isLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
-  if (normalized === "localhost" || normalized.endsWith(".localhost")) return true;
-  if (normalized === "::1" || normalized === "[::1]") return true;
-  return /^127(?:\.\d{1,3}){3}$/.test(normalized);
-}
-
 function parseHttpUrl(value: string | undefined): URL | null {
   if (!value) return null;
   try {
@@ -33,27 +27,41 @@ function parseHttpUrl(value: string | undefined): URL | null {
 }
 
 /**
- * Converts API media values into crawler-safe absolute URLs. Relative values
- * and legacy localhost URLs are rooted at the public API because local storage
- * is served by the backend's /uploads route.
+ * Converts API media values into crawler-safe absolute URLs. Any stored
+ * /uploads URL — relative, localhost, or a stale LAN IP from a previous
+ * STORAGE_BASE_URL — is rooted at the public API because local storage
+ * is served by the backend's /uploads route. Non-uploads absolute URLs pass
+ * through unchanged.
+ *
+ * Contract (for OG tags and links): returns string | null, null means omit.
+ * Allowed: http/https only. Everything else (relative without apiUrl,
+ * blob:, data:, javascript:, protocol-relative) is null. Uploads handling
+ * shares isUploadsPath/extractUploadsSuffix with lib/media.ts.
  */
 export function resolvePublicMediaUrl(
   value: string | undefined,
   publicApiUrl: string | undefined
 ): string | null {
-  const apiUrl = parseHttpUrl(publicApiUrl);
-  const directUrl = parseHttpUrl(value);
+  const trimmedValue = value?.trim();
+  const trimmedApi = publicApiUrl?.trim();
+  const apiUrl = parseHttpUrl(trimmedApi);
+  const directUrl = parseHttpUrl(trimmedValue);
 
   if (directUrl) {
-    if (!isLoopbackHostname(directUrl.hostname)) return directUrl.toString();
+    if (!isUploadsPath(directUrl.pathname)) return directUrl.toString();
     if (!apiUrl) return null;
-    if (isLoopbackHostname(apiUrl.hostname)) return directUrl.toString();
     return new URL(`${directUrl.pathname}${directUrl.search}${directUrl.hash}`, apiUrl).toString();
   }
 
-  if (!value || !apiUrl) return null;
+  // Protocol-relative must not launder through the base into an evil host.
+  if (trimmedValue?.startsWith("//")) return null;
+  if (!trimmedValue || !apiUrl) return null;
+  const uploads = extractUploadsSuffix(trimmedValue);
+  if (uploads) {
+    return new URL(uploads, apiUrl).toString();
+  }
   try {
-    const resolved = new URL(value, apiUrl);
+    const resolved = new URL(trimmedValue, apiUrl);
     return resolved.protocol === "http:" || resolved.protocol === "https:"
       ? resolved.toString()
       : null;

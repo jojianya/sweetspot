@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PinDetail } from "@/lib/types";
+import { resolveMediaUrl } from "@/lib/media";
 import { buildPinMetadata, resolvePublicMediaUrl } from "./pin";
 
 function pin(overrides: Partial<PinDetail> = {}): PinDetail {
@@ -120,5 +121,31 @@ describe("resolvePublicMediaUrl", () => {
     expect(resolvePublicMediaUrl("javascript:alert(1)", "https://api.goodspot.example")).toBeNull();
     expect(resolvePublicMediaUrl("/uploads/pin.webp", undefined)).toBeNull();
     expect(resolvePublicMediaUrl("http://localhost:8081/uploads/pin.webp", undefined)).toBeNull();
+  });
+
+  it("rejects protocol-relative URLs instead of laundering the host", () => {
+    expect(
+      resolvePublicMediaUrl("//evil.com/uploads/x.webp", "https://api.goodspot.example")
+    ).toBeNull();
+  });
+
+  it("keeps query and hash when re-rooting uploads URLs", () => {
+    expect(
+      resolvePublicMediaUrl(
+        "http://192.168.68.112:8081/uploads/a.webp?v=2#h",
+        "https://api.goodspot.example"
+      )
+    ).toBe("https://api.goodspot.example/uploads/a.webp?v=2#h");
+  });
+
+  it("yields the same canonical uploads path as resolveMediaUrl", () => {
+    const sameOrigin = resolveMediaUrl("/uploads/a.webp?v=2#h");
+    const publicUrl = resolvePublicMediaUrl(
+      "/uploads/a.webp?v=2#h",
+      "https://api.goodspot.example"
+    );
+    expect(sameOrigin).toBe("/uploads/a.webp?v=2#h");
+    expect(publicUrl).toBe("https://api.goodspot.example/uploads/a.webp?v=2#h");
+    expect(new URL(publicUrl!).pathname).toBe(new URL(sameOrigin, "https://any.test").pathname);
   });
 });

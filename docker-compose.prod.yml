@@ -45,6 +45,10 @@ services:
     environment:
       SITE_URL: ${SITE_URL:?set SITE_URL in .env}
       API_INTERNAL_URL: http://server:8081
+      # Docker sets HOSTNAME to the container id and Next's standalone server
+      # would bind only to that address, making the /healthcheck fail and the
+      # server unreachable as client:3000. Force the listen address.
+      HOSTNAME: 0.0.0.0
     networks:
       - app_net
     depends_on:

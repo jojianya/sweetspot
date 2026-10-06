@@ -153,7 +153,8 @@ export default function PinEditSheet({
               </p>
               <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {pin.photos.map((p) => {
-                  const src = resolveMediaUrl(p.thumbnail_url);
+                  const src =
+                    resolveMediaUrl(p.thumbnail_url) || resolveMediaUrl(p.photo_url);
                   if (!src) return null;
                   return (
                     <img

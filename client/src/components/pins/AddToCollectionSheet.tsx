@@ -7,6 +7,7 @@ import { CloseIcon } from "@/components/icons";
 import { useCollections } from "@/hooks/useCollections";
 import { errorMessage } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
+import { resolveMediaUrl } from "@/lib/media";
 
 interface AddToCollectionSheetProps {
   pinId: string;
@@ -158,17 +159,20 @@ export default function AddToCollectionSheet({ pinId, onClose }: AddToCollection
                     disabled={added || busy === c.id}
                     className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-zinc-50 disabled:opacity-60 dark:hover:bg-zinc-800"
                   >
-                    {c.cover_url ? (
-                      <img
-                        src={c.cover_url}
-                        alt=""
-                        className="h-11 w-11 shrink-0 rounded-lg object-cover"
-                      />
-                    ) : (
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-300 dark:bg-zinc-800 dark:text-zinc-600">
-                        <CloseIcon className="h-4 w-4 rotate-45" />
-                      </span>
-                    )}
+                    {(() => {
+                      const cover = resolveMediaUrl(c.cover_url);
+                      return cover ? (
+                        <img
+                          src={cover}
+                          alt=""
+                          className="h-11 w-11 shrink-0 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-300 dark:bg-zinc-800 dark:text-zinc-600">
+                          <CloseIcon className="h-4 w-4 rotate-45" />
+                        </span>
+                      );
+                    })()}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {c.name}

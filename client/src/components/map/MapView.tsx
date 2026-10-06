@@ -24,6 +24,7 @@ import { neighborhoodBounds } from "@/lib/utils/geo";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import type { Theme } from "@/store/theme";
 import { ensurePinLayers, notCluster, type GeoFeature } from "./pinLayers";
+import { resolveMediaUrl } from "@/lib/media";
 
 // MapTiler-hosted basemap styles (light + dark). The key is NEXT_PUBLIC_
 // (sent to the browser), so it MUST be scoped to your domains and the
@@ -442,17 +443,20 @@ export default function MapView({
       />
       <div ref={containerRef} className="h-full w-full" />
       <PinList pins={pins} onSelectPin={onSelectPin} />
-      {hover && hover.pin.cover_url && (
-        <div
-          className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+12px)]"
-          style={{ left: hover.x + 18, top: hover.y }}
-        >
-          <div className="flex w-56 items-center gap-2.5 rounded-xl bg-white/95 p-2 shadow-lg ring-1 ring-zinc-200 backdrop-blur dark:bg-zinc-900/95 dark:ring-zinc-700">
-            <img
-              src={hover.pin.cover_url}
-              alt=""
-              className="h-11 w-11 shrink-0 rounded-lg object-cover"
-            />
+      {hover && (() => {
+        const cover = resolveMediaUrl(hover.pin.cover_url);
+        if (!cover) return null;
+        return (
+          <div
+            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+12px)]"
+            style={{ left: hover.x + 18, top: hover.y }}
+          >
+            <div className="flex w-56 items-center gap-2.5 rounded-xl bg-white/95 p-2 shadow-lg ring-1 ring-zinc-200 backdrop-blur dark:bg-zinc-900/95 dark:ring-zinc-700">
+              <img
+                src={cover}
+                alt=""
+                className="h-11 w-11 shrink-0 rounded-lg object-cover"
+              />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                 {hover.pin.caption ?? "Untitled"}
@@ -465,7 +469,8 @@ export default function MapView({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
       {clusterHover && (
         <div
           className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+8px)]"

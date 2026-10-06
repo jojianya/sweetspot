@@ -87,6 +87,19 @@ func TestCookieSameSiteDefaultsToStrict(t *testing.T) {
 	}
 }
 
+// TestDefaultStorageBaseURLDerivesFromPort pins the local-dev default: when
+// STORAGE_BASE_URL is unset the minted URLs must land on the same port the
+// router serves /uploads on. `go run` listens on PORT=8080 by default while
+// compose sets PORT=8081, so a hardcoded 8081 default orphans one of them.
+func TestDefaultStorageBaseURLDerivesFromPort(t *testing.T) {
+  if got := defaultStorageBaseURL("8080"); got != "http://localhost:8080" {
+    t.Errorf("port 8080: got %q, want %q", got, "http://localhost:8080")
+  }
+  if got := defaultStorageBaseURL("8081"); got != "http://localhost:8081" {
+    t.Errorf("port 8081: got %q, want %q", got, "http://localhost:8081")
+  }
+}
+
 func TestValidateStorageBase(t *testing.T) {
 	t.Run("LocalDevelopment", func(t *testing.T) {
 		if err := validateStorageBase("http://localhost:8081", "development"); err != nil {

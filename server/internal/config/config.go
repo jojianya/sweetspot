@@ -74,13 +74,27 @@ type Config struct {
 	MailerWebhookKey string
 }
 
+// defaultStorageBaseURL derives the local-dev STORAGE_BASE_URL default from
+// the API port so minted URLs land where router.go serves /uploads.
+// `go run` listens on PORT=8080 by default while compose sets PORT=8081, so a
+// hardcoded port orphans one of them. Production never uses this: compose
+// requires STORAGE_BASE_URL explicitly (public https origin).
+func defaultStorageBaseURL(port string) string {
+	port = strings.TrimSpace(port)
+	if port == "" {
+		port = "8080"
+	}
+	return "http://localhost:" + port
+}
+
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		log.Println("no .env file found, reading from environment")
 	}
 
+	port := getEnv("PORT", "8080")
 	cfg := &Config{
-		Port:               getEnv("PORT", "8080"),
+		Port:               port,
 		AppEnv:             strings.ToLower(getEnv("APP_ENV", "development")),
 		DBHost:             getEnv("DB_HOST", "localhost"),
 		DBPort:             getEnv("DB_PORT", "5432"),
@@ -96,7 +110,7 @@ func Load() *Config {
 		LogFormat:          getEnv("LOG_FORMAT", "text"),
 		JWTSecret:          getEnv("JWT_SECRET", ""),
 		StorageBackend:     getEnv("STORAGE_BACKEND", "local"),
-		StorageBase:        getEnv("STORAGE_BASE_URL", "http://localhost:8081"),
+		StorageBase:        getEnv("STORAGE_BASE_URL", defaultStorageBaseURL(port)),
 		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
 		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),

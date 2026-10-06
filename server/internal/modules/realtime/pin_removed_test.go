@@ -69,7 +69,7 @@ func TestRunStreamLoopRemovalBboxFilter(t *testing.T) {
 }
 
 // TestStreamSetsNoTransformCacheControl proves the SSE response opts out of
-// compression at every hop: proxies (Next rewrites, Caddy encode gzip) must
+// compression at every hop: proxies (Next rewrites, nginx gzip) must
 // not buffer the stream, or browsers never receive events live.
 // Needs a reachable Redis (same bar as the DB-backed endpoint tests).
 func TestStreamSetsNoTransformCacheControl(t *testing.T) {
@@ -94,11 +94,14 @@ func TestStreamSetsNoTransformCacheControl(t *testing.T) {
 		h.Stream(c)
 	}()
 
-	// Wait for handler to write initial headers to avoid data race
-	// CI runners can be slow; fixed delays are unreliable but 2s is very safe
-	time.Sleep(2 * time.Second)
-
+	// Wait for handler to write status (which happens after headers) to avoid data race
+	// Poll for status code instead of fixed delay — reliable on slow CI runners
 	deadline := time.Now().Add(3 * time.Second)
+	for rec.Code == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	deadline = time.Now().Add(3 * time.Second)
 	for rec.Header().Get("Cache-Control") == "" && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}

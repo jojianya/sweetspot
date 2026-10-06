@@ -2,3 +2,4 @@
 server/tmp/
 backups/
 secrets/
+*.log

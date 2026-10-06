@@ -56,17 +56,31 @@ must be replaced during first deploy.
 The `Caddyfile` and Caddy service definition remain in git history (branch
 `development`). To revert:
 
-1. `git checkout development -- docker-compose.prod.yml Caddyfile`
-2. `docker compose -f docker-compose.prod.yml up -d` (Caddy will use the
-   existing `caddy_data`/`caddy_config` volumes if they still exist; if not,
-   it will obtain fresh certificates automatically).
-3. If you already removed the old volumes, the old Caddy data is gone; the
-   new Caddy will issue fresh certificates.
+1. **Stop nginx and certbot first** (port 80/443 conflict):
+   ```sh
+   docker compose -f docker-compose.prod.yml stop proxy certbot
+   ```
 
-The named volumes `caddy_data` and `caddy_config` are not deleted by the
-nginx compose file, so they persist unless explicitly removed. The `nginx_certs`,
-`certbot_data`, and `acme_webroot` volumes are the new ones; they can be
-cleaned up after confirming the nginx migration is stable.
+2. **Restore Caddy compose and Caddyfile:**
+   ```sh
+   git checkout development -- docker-compose.prod.yml Caddyfile
+   ```
+
+3. **Start Caddy** (requires `caddy_data`/`caddy_config` volumes intact):
+   ```sh
+   docker compose -f docker-compose.prod.yml up -d
+   ```
+   Caddy will use the existing `caddy_data`/`caddy_config` volumes if they
+   still exist and serve the valid certificates immediately. If the volumes
+   were removed, Caddy will obtain fresh certificates automatically (causing
+   a brief period of self-signed certificates if the cutover copy step was
+   skipped).
+
+**Rollback requires `caddy_data` and `caddy_config` volumes to be intact.**
+Do not remove these volumes until nginx has run stably for at least one week
+(see §0 step 6). The `nginx_certs`, `certbot_data`, and `acme_webroot`
+volumes are the new ones; they can be cleaned up after confirming the nginx
+migration is stable.
 
 ### Cutover from Caddy to nginx (zero-downtime certificate transfer)
 
@@ -89,6 +103,8 @@ would pin clients to an invalid certificate and break access.
    ```
 
 2. **Copy the live certificate from Caddy's volume to nginx's volume:**
+   Caddy stores certificates under `/data/caddy/certificates/<acme-directory>/<domain>/`.
+   For Let's Encrypt production the directory is `acme-v02.api.letsencrypt.org-directory`.
    ```sh
    # Create a temporary container to access both volumes
    docker run --rm \
@@ -96,14 +112,18 @@ would pin clients to an invalid certificate and break access.
      -v $(docker volume inspect -f '{{.Mountpoint}}' <project>_nginx_certs):/nginx_certs \
      alpine:3.20 sh -c '
        mkdir -p /nginx_certs &&
-       cp /caddy_data/acme/acme-v02.api.letsencrypt.org-directory/.../fullchain.pem /nginx_certs/fullchain.pem &&
-       cp /caddy_data/acme/acme-v02.api.letsencrypt.org-directory/.../privkey.pem /nginx_certs/privkey.pem &&
+       cp /caddy_data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/<your-domain>/fullchain.pem /nginx_certs/fullchain.pem &&
+       cp /caddy_data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/<your-domain>/<your-domain>.key /nginx_certs/privkey.pem &&
        chmod 644 /nginx_certs/fullchain.pem &&
        chmod 600 /nginx_certs/privkey.pem
      '
    ```
-   *Note: The exact Caddy certificate path depends on the ACME directory.
-   Use `docker run --rm -v <project>_caddy_data:/data alpine find /data -name fullchain.pem` to locate it.*
+   *Note: Replace `<your-domain>` with your actual domain (e.g., `goodspot.example.com`).
+   If using Let's Encrypt staging, the directory is `acme-staging-v02.api.letsencrypt.org-directory`.
+   Verify the exact path first:*
+   ```sh
+   docker run --rm -v <project>_caddy_data:/data alpine find /data -name "fullchain.pem"
+   ```
 
 3. **Start nginx + certbot:**
    ```sh
@@ -113,11 +133,23 @@ would pin clients to an invalid certificate and break access.
 4. **Verify in the first 10 minutes:**
    - `curl -sSf https://$DOMAIN/ready` → `{status: ok}`
    - `curl -skI https://$DOMAIN/ | grep -i "strict-transport-security"` → HSTS present
-   - `openssl s_client -connect $DOMAIN:443 -servername $DOMAIN </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -enddate` → valid Let's Encrypt cert, not self-signed
+   - `openssl s_client -connect $DOMAIN:443 -servername $DOMAIN </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -enddate` → valid Let's Encrypt cert, not self-signed (issuer must be "R3" or "E1", not "Caddy" or self-signed)
    - `docker compose -f docker-compose.prod.yml logs proxy | tail -20` → no TLS errors
    - Check that `acme_webroot` is writable: `docker compose -f docker-compose.prod.yml exec proxy ls /var/www/certbot/.well-known/acme-challenge/`
 
-5. **Monitor for 1 week before cleaning up Caddy volumes:**
+5. **Confirm certbot's first issuance replaces the copied certificate:**
+   - certbot will attempt its first issuance within the first hour (random delay up to 1h).
+   - **By 2 hours after step 3**, verify the certificate has been renewed:
+     ```sh
+     openssl s_client -connect $DOMAIN:443 -servername $DOMAIN </dev/null 2>/dev/null | openssl x509 -noout -serial -notBefore -notAfter
+     ```
+     The `notBefore` date should be after the cutover time, and the serial should differ from the copied certificate.
+   - If certbot has not issued a new cert within 2 hours, check logs:
+     ```sh
+     docker compose -f docker-compose.prod.yml logs certbot | tail -50
+     ```
+
+6. **Monitor for 1 week before cleaning up Caddy volumes:**
    - Verify certbot renewal works: `docker compose -f docker-compose.prod.yml exec certbot certbot renew --dry-run`
    - Check `docker compose -f docker-compose.prod.yml logs certbot` for successful renewals
    - After 1 week of stable operation:
@@ -125,22 +157,31 @@ would pin clients to an invalid certificate and break access.
      docker volume rm <project>_caddy_data <project>_caddy_config
      ```
 
-**IPv6 Client Address Note:**
+**IPv6 Client Address Check:**
 The Docker userland proxy (`docker-proxy`) can hide the real IPv6 client
-address. On the VM, check:
+address. To verify:
 ```sh
-# If you see ::ffff:10.89.0.x or 127.0.0.1 in Go logs instead of real client IPv6:
-cat /proc/sys/net/ipv6/conf/all/disable_ipv6  # should be 0
-# Disable userland proxy for IPv6 in /etc/docker/daemon.json:
-#   { "userland-proxy": false }
-# Then restart Docker daemon.
+# From an external IPv6 client (e.g., your laptop with IPv6):
+curl -6 -k https://$DOMAIN/api/categories
 ```
-With `userland-proxy: false`, the real client IPv6 reaches nginx directly.
-nginx's `$remote_addr` will then be the true client IPv6, which is passed
-to Go via `X-Real-IP` and `X-Forwarded-For`. The Go `TRUSTED_PROXIES`
-(10.89.0.0/24) only covers the Docker bridge subnet; for IPv6 you must
-add the Docker bridge IPv6 subnet (e.g., `fd00::/80`) to `TRUSTED_PROXIES`
-if you need IPv6 client IP preservation.
+Then on the VM, check the Go server logs for the client IP:
+```sh
+docker compose -f docker-compose.prod.yml logs --since 1m server | grep '"ip"' | tail -1
+```
+- If the logged IP is the real client IPv6 (e.g., `2001:db8::1`), no action needed.
+- If the logged IP is `::ffff:10.89.0.x`, `127.0.0.1`, or `192.168.x.x`, the userland proxy is hiding the real address.
+
+**To fix (only if the check above fails):**
+Edit `/etc/docker/daemon.json` to disable the userland proxy:
+```json
+{ "userland-proxy": false }
+```
+Then restart the Docker daemon (`systemctl restart docker`). **This restarts all containers on the host**, so schedule it during a maintenance window. After restart, re-run the IPv6 curl test to confirm the real client IPv6 appears in Go logs.
+With `userland-proxy: false`, nginx's `$remote_addr` will be the true client IPv6,
+which is passed to Go via `X-Real-IP` and `X-Forwarded-For`. The Go
+`TRUSTED_PROXIES` (10.89.0.0/24) only covers the Docker bridge subnet; for IPv6
+you must add the Docker bridge IPv6 subnet (e.g., `fd00::/80`) to
+`TRUSTED_PROXIES` if you need IPv6 client IP preservation.
 
 ## 3. Backup and restore
 

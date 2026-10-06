@@ -317,7 +317,7 @@ This app is photo-heavy and map-based — unprocessed multi-photo uploads at up 
 
 ## Phase 5 — Real-Time Layer
 
-> **Status:** the plan was revised from WebSocket to Server-Sent Events. The live design is `GET /events` (one global stream per process, no rooms): `internal/modules/realtime/broker.go` publishes `pins.Event` JSON to Redis channel `goodspot:pins`; each client connection subscribes and `runStreamLoop` (`realtime/handler.go:198`) filters server-side by bbox (`matches`, handler.go:237-250) and category, writes `event: pin` messages, and emits a `: heartbeat` comment every 20 s (`handler.go:65`). `MAX_SSE_CONNECTIONS` caps total connections per process (`handler.go:78-95`); Caddy serves `/events` with `flush_interval -1` so frames are not buffered.
+> **Status:** the plan was revised from WebSocket to Server-Sent Events. The live design is `GET /events` (one global stream per process, no rooms): `internal/modules/realtime/broker.go` publishes `pins.Event` JSON to Redis channel `goodspot:pins`; each client connection subscribes and `runStreamLoop` (`realtime/handler.go:198`) filters server-side by bbox (`matches`, handler.go:237-250) and category, writes `event: pin` messages, and emits a `: heartbeat` comment every 20 s (`handler.go:65`). `MAX_SSE_CONNECTIONS` caps total connections per process (`handler.go:78-95`); nginx disables buffering for `/events` so frames are not buffered.
 
 ### 5.1 WebSocket server setup — superseded by SSE
 

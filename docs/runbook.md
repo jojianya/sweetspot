@@ -1,4 +1,4 @@
-# Runbook — Goodspot production (single VM + Caddy)
+# Runbook — Goodspot production (single VM + nginx)
 
 Audience: the on-call operator. All commands run from the repo root on the
 production VM unless noted. Domain and provider names marked `[FILL IN]`
@@ -23,7 +23,7 @@ must be replaced during first deploy.
 6. `docker compose -f docker-compose.prod.yml up -d` (migrations run
    automatically on server boot).
 7. Verify: `curl -sSf https://[FILL IN]/ready` reports `{status: ok}`
-   (via Caddy → client? No: `/ready` is served by the API; check
+   (via nginx → client? No: `/ready` is served by the API; check
    `http://127.0.0.1:8081/ready` on the VM if the API port is reachable, else
    through the proxy path) and `https://[FILL IN]/` loads in a browser.
    Confirm the session cookie carries `Secure`, HSTS is present, and
@@ -51,129 +51,6 @@ must be replaced during first deploy.
    down scripts (`RollbackLastMigration` skips the rest), so a rollback that
    must undo a migration requires restoring from a backup (§3) instead.
    Prefer forward fixes for schema mistakes.
-
-### Rollback to Caddy (if the nginx migration must be reverted)
-
-The `Caddyfile` and Caddy service definition remain in git history (branch
-`development`). To revert:
-
-1. **Stop nginx and certbot first** (port 80/443 conflict):
-   ```sh
-   docker compose -f docker-compose.prod.yml stop proxy certbot
-   ```
-
-2. **Restore Caddy compose and Caddyfile:**
-   ```sh
-   git checkout development -- docker-compose.prod.yml Caddyfile
-   ```
-
-3. **Start Caddy** (requires `caddy_data`/`caddy_config` volumes intact):
-   ```sh
-   docker compose -f docker-compose.prod.yml up -d
-   ```
-   Caddy will use the existing `caddy_data`/`caddy_config` volumes if they
-   still exist and serve the valid certificates immediately. If the volumes
-   were removed, Caddy will obtain fresh certificates automatically (causing
-   a brief period of self-signed certificates if the cutover copy step was
-   skipped).
-
-**Rollback requires `caddy_data` and `caddy_config` volumes to be intact.**
-Do not remove these volumes until nginx has run stably for at least one week
-(see §0 step 6). The `nginx_certs`, `certbot_data`, and `acme_webroot`
-volumes are the new ones; they can be cleaned up after confirming the nginx
-migration is stable.
-
-### Cutover from Caddy to nginx (zero-downtime certificate transfer)
-
-**Goal:** Switch from Caddy to nginx without ever serving a self-signed
-certificate to real users. The HSTS max-age is one year; a self-signed cert
-would pin clients to an invalid certificate and break access.
-
-**Prerequisites:**
-- Current production runs Caddy with valid Let's Encrypt certificates in
-  `caddy_data` volume.
-- You have the `chore/nginx-proxy` branch checked out locally (or the
-  equivalent nginx config deployed to the VM).
-
-**Steps:**
-
-1. **Stop Caddy, keep volumes:**
-   ```sh
-   docker compose -f docker-compose.prod.yml stop proxy
-   # caddy_data and caddy_config volumes remain mounted and untouched
-   ```
-
-2. **Copy the live certificate from Caddy's volume to nginx's volume:**
-   Caddy stores certificates under `/data/caddy/certificates/<issuer-directory>/<domain>/`.
-   The issuer directory is typically `acme-v02.api.letsencrypt.org-directory` for Let's Encrypt
-   production or `acme-staging-v02.api.letsencrypt.org-directory` for staging.
-   File names: `fullchain.pem` and `<domain>.key`.
-   ```sh
-   # Find the exact certificate paths first
-   docker run --rm -v <project>_caddy_data:/caddy_data:ro alpine \
-     find /caddy_data -name "fullchain.pem" -o -name "*.key" | grep -E "goodspot|yourdomain"
-   ```
-   Expected output (replace with your actual domain):
-   ```
-   /caddy_data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/goodspot.test/fullchain.pem
-   /caddy_data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/goodspot.test/goodspot.test.key
-   ```
-   Then copy them to nginx_certs:
-   ```sh
-   docker run --rm \
-     -v $(docker volume inspect -f '{{.Mountpoint}}' <project>_caddy_data):/caddy_data:ro \
-     -v $(docker volume inspect -f '{{.Mountpoint}}' <project>_nginx_certs):/nginx_certs \
-     alpine:3.20 sh -c '
-       mkdir -p /nginx_certs &&
-       cp /caddy_data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/goodspot.test/fullchain.pem /nginx_certs/fullchain.pem &&
-       cp /caddy_data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/goodspot.test/goodspot.test.key /nginx_certs/privkey.pem &&
-       chmod 644 /nginx_certs/fullchain.pem &&
-       chmod 600 /nginx_certs/privkey.pem
-     '
-   ```
-   *Note: If using ZeroSSL or another CA, the issuer directory name will differ.
-   Use the `find` command above to locate the exact paths.*
-
-3. **Start nginx + certbot:**
-   ```sh
-   docker compose -f docker-compose.prod.yml up -d proxy certbot
-   ```
-
-4. **Verify in the first 10 minutes that nginx serves the SEEDED certificate (not bootstrap):**
-   - `curl -sSf https://$DOMAIN/ready` → `{status: ok}`
-   - `curl -skI https://$DOMAIN/ | grep -i "strict-transport-security"` → HSTS present
-   - `openssl s_client -connect $DOMAIN:443 -servername $DOMAIN </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -enddate` → issuer must be "R3" or "E1" (Let's Encrypt), NOT self-signed
-   - `docker compose -f docker-compose.prod.yml logs proxy | tail -20` → no TLS errors
-   - Check that `acme_webroot` is writable: `docker compose -f docker-compose.prod.yml exec proxy ls /var/www/certbot/.well-known/acme-challenge/`
-
-5. **Confirm the bootstrap script does NOT overwrite the seeded certificate:**
-   The nginx entrypoint script (`30-bootstrap-certs.sh`) only generates a self-signed cert
-   if `/etc/nginx/certs/fullchain.pem` AND `/etc/nginx/certs/privkey.pem` are BOTH missing
-   or empty. If exactly one file exists, the script fails loudly with a clear error.
-   Verify:
-   ```sh
-   docker compose -f docker-compose.prod.yml exec proxy ls -la /etc/nginx/certs/
-   # Should show your seeded cert with recent timestamps, not a new self-signed cert
-   ```
-
-6. **Watch certbot's first issuance (replaces seeded cert):**
-   - certbot starts immediately (no random delay on first issuance), retries every 30s on failure.
-   - On failure, logs clearly: `Failed to obtain certificate` and deploy hook does NOT run.
-   - **Deadline:** certbot MUST have replaced the certificate before the seeded cert expires.
-     The deadline is the seeded cert's `notAfter` minus 14 days.
-     Verify:
-     ```sh
-     openssl s_client -connect $DOMAIN:443 -servername $DOMAIN </dev/null 2>/dev/null | openssl x509 -noout -serial -notAfter
-     # notAfter of seeded cert minus 14 days = hard deadline for certbot to succeed
-     ```
-
-7. **Monitor for 1 week before cleaning up Caddy volumes:**
-   - Verify certbot renewal works: `docker compose -f docker-compose.prod.yml exec certbot certbot renew --dry-run`
-   - Check `docker compose -f docker-compose.prod.yml logs certbot` for successful renewals
-   - After 1 week of stable operation:
-     ```sh
-     docker volume rm <project>_caddy_data <project>_caddy_config
-     ```
 
 ## 3. Backup and restore
 
@@ -269,7 +146,7 @@ Monitor: `[PROVIDER, FILL IN, or documentation only]`.
   carries a `quarantine` field (`ok`/`unwritable`): `unwritable` stays HTTP
   200 but means hidden-pin files cannot leave `/uploads` — treat it as an
   ERROR-level signal and fix the volume ownership (see §3). Alert on
-  non-200 for 2 consecutive minutes, and on Caddy 5xx rate from its access
+  non-200 for 2 consecutive minutes, and on nginx 5xx rate from its access
   logs. This is the user-facing signal.
 * Liveness: `GET /health` returns 200 whenever the process is alive
   (dependency-free by design). Container healthchecks and any restart policy
@@ -295,7 +172,7 @@ high/critical), migration test. `development` remains the integration branch.
 2. Redis down: auth fails closed (401 `session verification unavailable`) —
    users cannot log in until Redis recovers; logged-out tokens stay revoked
    only after recovery. Restart `redis`; sessions resume without a deploy.
-3. Postgres down: API 503s; Caddy serves errors. Restore §3 if data is at
+3. Postgres down: API 503s; nginx serves errors. Restore §3 if data is at
    risk, otherwise restart and watch migrations.
 4. Flood/abuse: per-IP limits (register/login/pins/comments/`/errors`) plus
    global caps and the login identifier lockout hold; all users behind one
@@ -307,8 +184,8 @@ high/critical), migration test. `development` remains the integration branch.
 ## 8. Verification status of this document
 
 * Compose render (`docker compose config` with dummy env): verified.
-* Caddyfile syntax: brace balance + directive review only — `caddy validate`
-  needs the binary; run `docker run caddy:2-alpine caddy validate` on the VM.
-* TLS to Postgres, SSE through Caddy, Secure/HSTS end to end, and the §3
-  restore drill: **must be run on the real VM** (no Docker/Postgres/Caddy on
+* nginx config syntax: `nginx -t` inside the proxy container
+  (`docker compose -f docker-compose.prod.yml exec proxy nginx -t`).
+* TLS to Postgres, SSE through nginx, Secure/HSTS end to end, and the §3
+  restore drill: **must be run on the real VM** (no Docker/Postgres/nginx on
   the authoring machine). Check them off below on first deploy.

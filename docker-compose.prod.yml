@@ -210,7 +210,3 @@ volumes:
   nginx_certs:
   certbot_data:
   acme_webroot:
-  # NOTE: the old `caddy_data` and `caddy_config` volumes are no longer
-  # referenced. They still exist on hosts that ran the Caddy stack; remove
-  # them manually once you no longer need rollback data:
-  #   docker volume rm <project>_caddy_data <project>_caddy_config

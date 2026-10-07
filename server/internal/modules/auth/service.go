@@ -14,13 +14,13 @@ import (
 
 const tokenExpiry = 30 * 24 * time.Hour
 
-// absentAccountHash is a real bcrypt hash (cost 12, matching production) of a
-// value no one can submit. Login compares against it when the identifier does
-// not exist, so a missing account costs the same as a wrong password and the
-// two cannot be told apart by response time — otherwise "no such user" answers
-// in microseconds while "wrong password" takes the ~250ms of a bcrypt compare,
-// which enumerates accounts. Generated once; it is not derived from any secret.
-const absentAccountHash = "$2a$12$C6UzMDM.H6dfI/f/IKcEe.7DKQ7CxSbLuKQpFWTVtL8T0dQVBOWGu"
+// absentAccountHash is a bcrypt hash of a value no one can submit.
+// It is generated at init time using the same cost as real passwords (via
+// server/pkg/password.init()), so a missing account costs the same as a wrong
+// password and the two cannot be told apart by response time. The hash is
+// produced by pkg/password.AbsentAccountHash, which is generated once at
+// package initialization using bcryptCost = 12.
+var absentAccountHash = password.AbsentAccountHash
 
 // Service interface and implementation.
 type Service interface {

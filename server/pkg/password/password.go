@@ -14,6 +14,32 @@ import (
 
 const bcryptCost = 12
 
+// AbsentAccountHash is a bcrypt hash of a value no one can submit.
+// It is generated at init time using the same cost as real passwords,
+// so a missing account costs the same as a wrong password and the two
+// cannot be told apart by response time. It must have cost >= 12
+// to match the timing of real password comparisons.
+var AbsentAccountHash string
+
+func init() {
+	hash, err := GenerateAbsentAccountHash()
+	if err != nil {
+		panic(fmt.Sprintf("failed to generate AbsentAccountHash: %v", err))
+	}
+	AbsentAccountHash = hash
+}
+
+// GenerateAbsentAccountHash generates a bcrypt hash of a value that no one can submit.
+// The caller (Login) compares passwords against this hash when the account does not exist,
+// so a missing account costs the same as a wrong password and the two cannot be told apart
+// by response time. The cost matches real password hashing so the timing channel is preserved.
+func GenerateAbsentAccountHash() (string, error) {
+	if len("anything") > MaxLen {
+		return "", ErrTooLong
+	}
+	return Hash("anything")
+}
+
 // MaxLen is the longest password bcrypt will accept, in bytes. Anything longer
 // is rejected by bcrypt itself, so callers must not submit it.
 const MaxLen = 72

@@ -87,7 +87,7 @@ services:
       DB_POOL_MAX_IDLE: ${DB_POOL_MAX_IDLE:-5m}
       DB_POOL_HEALTH_CHECK: ${DB_POOL_HEALTH_CHECK:-1m}
       MAX_SSE_CONNECTIONS: ${MAX_SSE_CONNECTIONS:-1000}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,https://goodspot.test:8443}
       # strict (default) is CSRF-safe but is NOT sent when the browser reaches
       # the app over plain HTTP on a LAN origin, so the session cookie is
       # dropped and the phone appears logged out. Set COOKIE_SAMESITE=lax in .env
@@ -135,8 +135,9 @@ services:
       # container itself.
       API_INTERNAL_URL: http://server:8081
       # Extra origins allowed to hit the dev server (HMR WebSocket) from a LAN
-      # address. Unset falls back to localhost,127.0.0.1.
-      NEXT_ALLOWED_DEV_ORIGINS: ${NEXT_ALLOWED_DEV_ORIGINS:-}
+      # address or via the dev nginx proxy. Unset falls back to
+      # localhost,127.0.0.1,goodspot.test.
+      NEXT_ALLOWED_DEV_ORIGINS: ${NEXT_ALLOWED_DEV_ORIGINS:-localhost,127.0.0.1,goodspot.test}
     volumes:
       - ./client:/app
       - /app/node_modules
@@ -161,7 +162,7 @@ services:
     environment:
       DOMAIN: goodspot.test
     volumes:
-      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/dev.conf.template:/etc/nginx/templates/default.conf.template:ro
       - ./nginx/includes/security-headers.conf:/etc/nginx/includes/security-headers.conf:ro
       - ./nginx/docker-entrypoint.d/30-bootstrap-certs.sh:/docker-entrypoint.d/30-bootstrap-certs.sh:ro
       - nginx_certs_dev:/etc/nginx/certs

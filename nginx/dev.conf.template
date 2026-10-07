@@ -1,0 +1,101 @@
+# DEV-ONLY server blocks (never used in production).
+# Same shape as default.conf.template, plus:
+#   - WebSocket upgrade forwarding (Upgrade/Connection) so Next.js live
+#     reload (/_next/* HMR websocket) works through the proxy. The prod
+#     template deliberately has none: it serves only static/proxied HTTPS.
+#   - The :80 redirect keeps the dev HTTPS port (:8443).
+# Mounted as /etc/nginx/templates/default.conf.template by the dev nginx
+# service in docker-compose.yml; ${DOMAIN} is substituted by the stock
+# nginx entrypoint. $host/$request_uri style variables stay untouched.
+map $http_upgrade $connection_upgrade {
+    default "";
+    websocket "upgrade";
+}
+
+# HTTP :80 — ACME webroot kept for shape parity, everything else 301 to the
+# dev HTTPS port.
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name ${DOMAIN};
+
+    server_tokens off;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host:8443$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name ${DOMAIN};
+
+    server_tokens off;
+
+    # Same as prod: matches the Go BodyLimit of 64<<20 on uploads.
+    client_max_body_size 64m;
+
+    # Self-signed bootstrap cert minted by
+    # nginx/docker-entrypoint.d/30-bootstrap-certs.sh on first boot
+    # (or a mkcert pair copied over it).
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $client_upstream http://client:3000;
+
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_types text/css text/plain text/xml application/xml application/json application/javascript text/javascript image/svg+xml;
+
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Referrer-Policy;
+
+    proxy_connect_timeout 5s;
+    proxy_send_timeout 60s;
+    proxy_read_timeout 60s;
+
+    # Upgrade headers on every location: Next.js HMR negotiates a websocket
+    # upgrade on a /_next/* path, and the dev server must see it. For plain
+    # HTTP requests $connection_upgrade is "" (same as prod).
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+
+    location /events {
+        include /etc/nginx/includes/security-headers.conf;
+        add_header X-Accel-Buffering "no" always;
+
+        gzip off;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_pass $client_upstream;
+    }
+
+    location / {
+        include /etc/nginx/includes/security-headers.conf;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_pass $client_upstream;
+    }
+}

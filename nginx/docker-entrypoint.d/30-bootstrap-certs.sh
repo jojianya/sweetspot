@@ -1,4 +1,10 @@
 #!/bin/sh
+# Bootstrap self-signed cert on first run; minted cert lives at
+# /etc/nginx/certs/fullchain.pem + privkey.pem. If both missing, generates
+# a 30‑day self‑signed cert for ${DOMAIN:-localhost} via openssl. If both
+# exist, verifies key matches cert; mismatch kills startup. If exactly one
+# file exists, aborts startup with error.
+
 # First-boot cert bootstrap, runs inside the nginx container entrypoint
 # (/docker-entrypoint.d scripts run before nginx starts).
 #

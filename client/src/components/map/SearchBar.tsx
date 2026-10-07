@@ -170,6 +170,7 @@ export default function SearchBar({
           aria-expanded={isOpen}
           aria-controls="search-results-listbox"
           aria-autocomplete="list"
+          aria-activedescendant={isOpen && activeIndex >= 0 ? `search-results-option-${activeIndex}` : undefined}
         />
         {query && (
           <button type="button" onClick={clear} className="rounded-full p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" aria-label="Clear">
@@ -204,6 +205,7 @@ export default function SearchBar({
                 return (
                   <li
                     key={`place-${item.place.id}`}
+                    id={`search-results-option-${i}`}
                     role="option"
                     aria-selected={isActive}
                     className={`cursor-pointer px-4 py-2.5 text-sm ${isActive ? "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300" : "text-zinc-900 hover:bg-zinc-50 dark:text-zinc-100 dark:hover:bg-zinc-800"}`}
@@ -229,6 +231,7 @@ export default function SearchBar({
                 return (
                   <li
                     key={`pin-${item.pin.id}`}
+                    id={`search-results-option-${i}`}
                     role="option"
                     aria-selected={isActive}
                     className={`cursor-pointer px-4 py-2.5 text-sm ${isActive ? "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300" : "text-zinc-900 hover:bg-zinc-50 dark:text-zinc-100 dark:hover:bg-zinc-800"}`}

@@ -80,6 +80,25 @@ describe("SearchBar", () => {
     });
   }
 
+  it("exposes the highlighted option through aria-activedescendant", async () => {
+    await act(async () => {
+      root.render(createElement(SearchBar, { center, onSelectPlace: vi.fn(), onSelectPin: vi.fn() }));
+    });
+    await typeQuery("place");
+
+    const input = container.querySelector("input")!;
+    expect(input.getAttribute("aria-activedescendant")).toBeNull();
+
+    await pressKey("ArrowDown");
+    const opts = options();
+    expect(opts.length).toBeGreaterThan(0);
+    const ids = opts.map((o) => o.id);
+    expect(ids.every((id) => id !== "")).toBe(true);
+    expect(new Set(ids).size).toBe(opts.length);
+    const active = opts.find((o) => o.getAttribute("aria-selected") === "true")!;
+    expect(input.getAttribute("aria-activedescendant")).toBe(active.id);
+  });
+
   it("hovering a pin then pressing Enter opens that pin (merged index, not section-local)", async () => {
     const onSelectPin = vi.fn();
     await act(async () => {

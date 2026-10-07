@@ -132,9 +132,10 @@ func (h *Handler) Logout(c *gin.Context) {
 }
 
 func (h *Handler) Me(c *gin.Context) {
-	role := ""
-	if r, err := h.service.Role(c.Request.Context(), middleware.GetUserID(c)); err == nil {
-		role = r
+	role, err := h.service.Role(c.Request.Context(), middleware.GetUserID(c))
+	if err != nil {
+		response.Internal(c, "auth: me", err, "user_id", middleware.GetUserID(c))
+		return
 	}
 	response.OK(c, gin.H{
 		"user_id": middleware.GetUserID(c),

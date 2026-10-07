@@ -106,6 +106,19 @@ func newTestService(stub *stubUserService) Service {
 	return NewService(stub, "test-secret")
 }
 
+func TestMeServiceErrorReturns500(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewHandler(newTestService(&stubUserService{}), nil, nil, SameSiteStrict, nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/auth/me", nil)
+	c.Set("user_id", "missing")
+	h.Me(c)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", w.Code)
+	}
+}
+
 func TestRegisterSuccess(t *testing.T) {
 	svc := newTestService(&stubUserService{})
 	u, token, err := svc.Register(context.Background(), RegisterRequest{

@@ -39,6 +39,8 @@ type stubRepo struct {
 	updated        bool
 	updatePhotos   int
 	updatedID      string
+	// lastPatch records the exact patch the handler sent to the repository.
+	lastPatch UpdatePinPatch
 	// updateResultPhotos is what UpdatePin reports as the pin's photo set
 	// after the update; visible answers PinVisible.
 	updateResultPhotos []PinPhoto
@@ -69,6 +71,7 @@ func (s *stubRepo) CreatePin(_ context.Context, _ NewPin) (Pin, error) {
 
 func (s *stubRepo) UpdatePin(_ context.Context, id, userID string, isModerator bool, patch UpdatePinPatch) (Pin, []PinPhoto, error) {
 	s.updated = true
+	s.lastPatch = patch
 	if patch.Photos != nil {
 		s.updatePhotos = len(patch.Photos)
 	}

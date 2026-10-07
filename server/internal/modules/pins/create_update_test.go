@@ -357,6 +357,22 @@ func TestUpdatePinSuccessWithoutPhotos(t *testing.T) {
 	}
 }
 
+// TestUpdatePinPhotosOnlyKeepsCaption proves an absent caption field is not
+// conflated with an explicit empty caption, which would clear the pin text.
+func TestUpdatePinPhotosOnlyKeepsCaption(t *testing.T) {
+	repo := baseUpdateRepo()
+	r := newUpdateHarness(t, repo, t.TempDir(), nil)
+	req := multipartBody(t, http.MethodPatch, "/pins/pin-1", map[string]string{}, map[string][]byte{"new.jpg": validJPEG(t)})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	if repo.lastPatch.Caption != nil {
+		t.Fatalf("caption patch = %v, want nil when field is absent", *repo.lastPatch.Caption)
+	}
+}
+
 // TestUpdatePinCleansUpNewFilesOnFailure proves staged replacements are
 // removed when the database update fails after the photos hit disk.
 func TestUpdatePinCleansUpNewFilesOnFailure(t *testing.T) {

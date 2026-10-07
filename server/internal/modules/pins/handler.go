@@ -567,6 +567,10 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		return
 	}
 	caption, categoryID := fields.caption, fields.categoryID
+	var captionPtr *string
+	if _, ok := form.Value["caption"]; ok {
+		captionPtr = &caption
+	}
 
 	if categoryID != nil {
 		exists, err := h.repo.CategoryExists(c.Request.Context(), *categoryID)
@@ -581,7 +585,7 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 	}
 
 	patch := UpdatePinPatch{
-		Caption:    &caption,
+		Caption:    captionPtr,
 		CategoryID: categoryID,
 	}
 

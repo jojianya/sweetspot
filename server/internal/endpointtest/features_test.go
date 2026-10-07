@@ -232,12 +232,30 @@ func (m *mockCollectionRepo) ListPublicByUser(context.Context, string) ([]collec
 	return public, nil
 }
 
-func (m *mockCollectionRepo) Update(context.Context, string, string, *string, bool) error {
-	return m.updateErr
+func (m *mockCollectionRepo) Update(_ context.Context, id, _ string, _ *string, _ bool, userID string, isModerator bool) error {
+	if m.updateErr != nil {
+		return m.updateErr
+	}
+	if m.collection.ID.String() != "" && m.collection.ID.String() != id {
+		return collections.ErrNotFound
+	}
+	if m.collection.UserID.String() != userID && !isModerator {
+		return collections.ErrForbidden
+	}
+	return nil
 }
 
-func (m *mockCollectionRepo) Delete(context.Context, string) error {
-	return m.deleteErr
+func (m *mockCollectionRepo) Delete(_ context.Context, id, userID string, isModerator bool) error {
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
+	if m.collection.ID.String() != "" && m.collection.ID.String() != id {
+		return collections.ErrNotFound
+	}
+	if m.collection.UserID.String() != userID && !isModerator {
+		return collections.ErrForbidden
+	}
+	return nil
 }
 
 func (m *mockCollectionRepo) ListPins(_ context.Context, _ string, limit, offset int) ([]pins.PinListEntry, int, error) {

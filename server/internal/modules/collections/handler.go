@@ -181,8 +181,13 @@ func (h *Handler) requireOwner(c *gin.Context) (Collection, bool) {
 }
 
 func (h *Handler) Update(c *gin.Context) {
-	existing, ok := h.requireOwner(c)
-	if !ok {
+	existing, err := h.repo.Get(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.NotFound(c, "collection not found")
+			return
+		}
+		response.Internal(c, "collections: get", err, "collection_id", c.Param("id"))
 		return
 	}
 
@@ -206,9 +211,13 @@ func (h *Handler) Update(c *gin.Context) {
 		isPrivate = *req.IsPrivate
 	}
 
-	if err := h.repo.Update(c.Request.Context(), c.Param("id"), name, description, isPrivate); err != nil {
+	if err := h.repo.Update(c.Request.Context(), c.Param("id"), name, description, isPrivate, middleware.GetUserID(c), users.IsModerator(h.roles, c)); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
+			return
+		}
+		if errors.Is(err, ErrForbidden) {
+			response.Forbidden(c, "you can only modify your own collections")
 			return
 		}
 		response.Internal(c, "collections: update", err, "collection_id", c.Param("id"))
@@ -219,13 +228,13 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	if _, ok := h.requireOwner(c); !ok {
-		return
-	}
-
-	if err := h.repo.Delete(c.Request.Context(), c.Param("id")); err != nil {
+	if err := h.repo.Delete(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), users.IsModerator(h.roles, c)); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
+			return
+		}
+		if errors.Is(err, ErrForbidden) {
+			response.Forbidden(c, "you can only modify your own collections")
 			return
 		}
 		response.Internal(c, "collections: delete", err, "collection_id", c.Param("id"))

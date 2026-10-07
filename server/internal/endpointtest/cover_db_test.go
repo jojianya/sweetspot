@@ -111,7 +111,7 @@ func TestDBListEntriesIncludeViews(t *testing.T) {
 	if err := socialRepo.Follow(ctx, follower, author); err != nil { t.Fatalf("follow: %v", err) }
 	col, err := colRepo.Create(ctx, author, "viewed", nil, false)
 	if err != nil { t.Fatalf("create collection: %v", err) }
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID.String()) })
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID.String(), author, true) })
 	if err := colRepo.AddPin(ctx, col.ID.String(), pinID); err != nil { t.Fatalf("add pin: %v", err) }
 
 	favs, _, err := favRepo.List(ctx, author, 50, 0)
@@ -183,7 +183,7 @@ func TestDBCoverCollectionPins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID.String()) })
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID.String(), author, true) })
 	for _, pid := range []string{a, b, c} {
 		if err := colRepo.AddPin(ctx, col.ID.String(), pid); err != nil {
 			t.Fatalf("add pin: %v", err)
@@ -220,7 +220,7 @@ func TestDBCoverCollectionList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), full.ID.String()) })
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), full.ID.String(), author, true) })
 	if err := colRepo.AddPin(ctx, full.ID.String(), a); err != nil {
 		t.Fatalf("add pin: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestDBCoverCollectionList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), empty.ID.String()) })
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), empty.ID.String(), author, true) })
 
 	got, err := colRepo.ListByUser(ctx, author)
 	if err != nil {

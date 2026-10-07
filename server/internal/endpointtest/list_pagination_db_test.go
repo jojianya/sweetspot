@@ -196,7 +196,7 @@ func TestDBCollectionPinsPaginate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = repo.Delete(context.Background(), col.ID.String()) })
+	t.Cleanup(func() { _ = repo.Delete(context.Background(), col.ID.String(), user, true) })
 
 	const total = 5
 	for i := 0; i < total; i++ {

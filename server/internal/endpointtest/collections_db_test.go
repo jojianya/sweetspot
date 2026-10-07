@@ -49,7 +49,7 @@ func seedCollection(t *testing.T, ctx context.Context, repo collections.Reposito
 		t.Fatalf("seed collection: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = repo.Delete(context.Background(), c.ID.String())
+		_ = repo.Delete(context.Background(), c.ID.String(), userID, true)
 	})
 	return c
 }

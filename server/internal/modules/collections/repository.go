@@ -10,7 +10,10 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 )
 
-var ErrNotFound = errors.New("collection not found")
+var (
+	ErrNotFound = errors.New("collection not found")
+	ErrForbidden = errors.New("forbidden")
+)
 
 type Repository interface {
 	UserExists(ctx context.Context, id string) (bool, error)
@@ -19,8 +22,8 @@ type Repository interface {
 	ListByUser(ctx context.Context, userID string) ([]Collection, error)
 	// ListPublicByUser omits private collections for viewers who do not own them.
 	ListPublicByUser(ctx context.Context, userID string) ([]Collection, error)
-	Update(ctx context.Context, id, name string, description *string, isPrivate bool) error
-	Delete(ctx context.Context, id string) error
+	Update(ctx context.Context, id, name string, description *string, isPrivate bool, userID string, isModerator bool) error
+	Delete(ctx context.Context, id, userID string, isModerator bool) error
 	// ListPins returns a page of the collection's visible pins plus the total
 	// number of them.
 	ListPins(ctx context.Context, id string, limit, offset int) ([]pins.PinListEntry, int, error)
@@ -128,28 +131,36 @@ func (r *postgresRepository) listByUser(ctx context.Context, userID string, publ
 	return collections, nil
 }
 
-func (r *postgresRepository) Update(ctx context.Context, id, name string, description *string, isPrivate bool) error {
+func (r *postgresRepository) Update(ctx context.Context, id, name string, description *string, isPrivate bool, userID string, isModerator bool) error {
 	tag, err := r.pool.Exec(ctx, `
-		UPDATE collections SET name = $2, description = $3, is_private = $4 WHERE id = $1
-	`, id, name, description, isPrivate)
+		UPDATE collections SET name = $2, description = $3, is_private = $4 WHERE id = $1 AND (user_id = $5 OR $6)
+	`, id, name, description, isPrivate, userID, isModerator)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	if tag.RowsAffected() == 1 {
+		return nil
+	}
+	var exists bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM collections WHERE id = $1)`, id).Scan(&exists); err != nil || !exists {
 		return ErrNotFound
 	}
-	return nil
+	return ErrForbidden
 }
 
-func (r *postgresRepository) Delete(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM collections WHERE id = $1`, id)
+func (r *postgresRepository) Delete(ctx context.Context, id, userID string, isModerator bool) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM collections WHERE id = $1 AND (user_id = $2 OR $3)`, id, userID, isModerator)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	if tag.RowsAffected() == 1 {
+		return nil
+	}
+	var exists bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM collections WHERE id = $1)`, id).Scan(&exists); err != nil || !exists {
 		return ErrNotFound
 	}
-	return nil
+	return ErrForbidden
 }
 
 // ListPins returns a page of the collection's visible pins plus the total

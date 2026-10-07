@@ -117,6 +117,29 @@ describe("usePinView", () => {
     expect(apiMocks.registerPinView).toHaveBeenCalledTimes(1);
   });
 
+  it("clears the previous pin result while the next pin loads", async () => {
+    apiMocks.registerPinView.mockReset();
+    let resolveSecond!: (v: number) => void;
+    apiMocks.registerPinView.mockImplementation((id: string) => {
+      if (id === "pin-1") return Promise.resolve(7);
+      return new Promise<number>((done) => {
+        resolveSecond = done;
+      });
+    });
+    await act(async () => {
+      root.render(createElement(ResultProbe, { pinId: "pin-1", ownerId: "owner-9" }));
+    });
+    expect(container.textContent).toBe("pin-1:7");
+    await act(async () => {
+      root.render(createElement(ResultProbe, { pinId: "pin-2", ownerId: "owner-9" }));
+    });
+    expect(container.textContent).toBe("none");
+    await act(async () => {
+      resolveSecond(21);
+    });
+    expect(container.textContent).toBe("pin-2:21");
+  });
+
   it("returns null when the call fails", async () => {
     apiMocks.registerPinView.mockRejectedValue(new Error("offline"));
     await act(async () => {

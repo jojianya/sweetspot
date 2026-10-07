@@ -25,6 +25,10 @@ export function usePinView(
   const [result, setResult] = useState<PinViewResult | null>(null);
 
   useEffect(() => {
+    setResult(null);
+  }, [pinId]);
+
+  useEffect(() => {
     if (!pinId || !user) return;
     if (ownerId && user.id === ownerId) return;
     if (registeredRef.current === pinId) return;

@@ -70,6 +70,7 @@ export default function MapApp({
   // A short-lived toast keeps the counter visible without stealing focus.
   const [streamToast, setStreamToast] = useState(0);
   const toastTimerRef = useRef<number | null>(null);
+  const boundsTimerRef = useRef<number | null>(null);
 
   const handleStreamedPin = useCallback(
     (pin: PinListEntry) => {
@@ -101,6 +102,7 @@ export default function MapApp({
   useEffect(() => {
     return () => {
       if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+      if (boundsTimerRef.current !== null) window.clearTimeout(boundsTimerRef.current);
     };
   }, []);
 
@@ -154,8 +156,6 @@ export default function MapApp({
   // Debounced bbox updates so a burst of moveend events doesn't close and
   // reopen the SSE connection on every pan/zoom. The bbox is quantized to
   // ~11 m so a string-identical bbox doesn't re-run the effect either way.
-  const boundsTimerRef = useRef<number | null>(null);
-
   const handleBoundsChange = useCallback(
     (bboxValue: string, c: { lat: number; lng: number }) => {
       setCenter(c);

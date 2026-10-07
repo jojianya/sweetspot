@@ -38,7 +38,7 @@ export default function CreatePinButton({
   const isLoggedIn = user !== null;
   const [files, setFiles] = useState<File[]>([]);
   const [caption, setCaption] = useState("");
-  const [categoryId, setCategoryId] = useState<number>(categories[0]?.id ?? 1);
+  const [categoryId, setCategoryId] = useState<number | null>(categories[0]?.id ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,9 +105,15 @@ export default function CreatePinButton({
       });
   };
 
+  const selectedCategoryId = categoryId ?? categories[0]?.id ?? null;
+
   const submit = async () => {
     if (!user) return;
-    const shaped = buildCreatePinPayload({ lat, lng, categoryId, caption, files });
+    if (selectedCategoryId === null) {
+      setError("Choose a category");
+      return;
+    }
+    const shaped = buildCreatePinPayload({ lat, lng, categoryId: selectedCategoryId, caption, files });
     if ("error" in shaped) {
       setError(shaped.error);
       return;
@@ -251,10 +257,12 @@ export default function CreatePinButton({
               </div>
 
               <select
-                value={categoryId}
+                value={selectedCategoryId ?? ""}
                 onChange={(e) => setCategoryId(Number(e.target.value))}
+                disabled={categories.length === 0}
                 className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
               >
+                {selectedCategoryId === null && <option value="">Choose a category</option>}
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -280,7 +288,7 @@ export default function CreatePinButton({
               <button
                 type="button"
                 onClick={submit}
-                disabled={submitting}
+                disabled={submitting || selectedCategoryId === null}
                 className="w-full rounded-lg bg-rose-600 px-4 py-2.5 font-medium text-white hover:bg-rose-700 disabled:opacity-60"
               >
                 {submitting ? "Posting…" : "Post to map"}

@@ -498,6 +498,7 @@ func TestAuthEndpoints(t *testing.T) {
 			})
 
 			t.Run("MeAuthenticated", func(t *testing.T) {
+				usersSvc.users[testUUID1] = users.User{ID: testUUID1, Email: "a@example.com", Username: "alice", Role: users.RoleUser}
 				tok := newToken(t, testUUID1)
 				w := doJSON(t, r, http.MethodGet, "/me", "", map[string]string{"Authorization": "Bearer " + tok})
 				if w.Code != http.StatusOK {

@@ -31,6 +31,19 @@ must be replaced during first deploy.
    `: heartbeat` lines).
 8. Register the uptime monitor (see §5).
 
+## 0A. First deploy on a new server
+
+Caddy certificate copy: only for migrating an existing Caddy host; skip on a
+fresh server.
+
+1. Set `DOMAIN` and point DNS at the VM.
+2. Open ports 80 and 443 only.
+3. Fill `.env` from `.env.example`, including `PUBLIC_BASE_URL` and
+   `MAILER_WEBHOOK_URL`.
+4. Start with `QUARANTINE_SWEEP_DRY_RUN=true`.
+5. Confirm the first certificate was issued, then set
+   `QUARANTINE_SWEEP_DRY_RUN=false` and redeploy.
+
 ## 1. Deploy a new release
 
 1. `git fetch --tags && git checkout <tag>` on the VM (deploys track tags;

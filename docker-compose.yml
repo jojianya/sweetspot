@@ -144,6 +144,31 @@ services:
     depends_on:
       - server
 
+  nginx:
+    # Dev edge proxy, mirroring production TLS termination locally. Separate
+    # container built from ./nginx; no certbot sidecar (the entrypoint
+    # bootstrap script mints a self-signed cert for DOMAIN on first boot).
+    # Always in the stack: no profile. Uses its own cert volume so the
+    # self-signed dev cert never touches prod's nginx_certs.
+    build:
+      context: ./nginx
+    image: sweetspot-nginx-dev
+    container_name: goodspot247-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+      - "8443:443"
+    environment:
+      DOMAIN: goodspot.test
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/includes/security-headers.conf:/etc/nginx/includes/security-headers.conf:ro
+      - ./nginx/docker-entrypoint.d/30-bootstrap-certs.sh:/docker-entrypoint.d/30-bootstrap-certs.sh:ro
+      - nginx_certs_dev:/etc/nginx/certs
+    depends_on:
+      - client
+
 volumes:
   postgres_data:
   server_uploads:
+  nginx_certs_dev:

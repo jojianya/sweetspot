@@ -179,6 +179,29 @@ describe("useUsersAdmin", () => {
     expect(state()).toContain(":listing:");
   });
 
+  it("drops a late search when show-all supersedes it", async () => {
+    const slowSearch = deferred<{ users: PublicProfile[]; total: number }>();
+    apiMocks.searchUsers.mockReturnValueOnce(slowSearch.promise);
+    await renderProbe();
+    await act(async () => {
+      click("type");
+    });
+    await act(async () => {
+      click("search");
+    });
+    expect(apiMocks.searchUsers).toHaveBeenCalledWith("ali");
+    await act(async () => {
+      click("showall");
+    });
+    await act(async () => {
+      slowSearch.resolve({ users: [user("u-9", "stale")], total: 99 });
+      await slowSearch.promise;
+    });
+    expect(state()).toContain(":all:");
+    expect(state()).toContain(":listing:");
+    expect(state()).not.toContain("stale");
+  });
+
   it("promotes a user with a notice and swaps the row", async () => {
     await renderProbe();
     await act(async () => {

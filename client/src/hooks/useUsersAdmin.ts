@@ -55,12 +55,6 @@ export function useUsersAdmin() {
       });
   }, []);
 
-  // A search supersedes any page in flight: bump the tag so a late page
-  // response is dropped instead of overwriting the matches.
-  const supersedePendingPages = useCallback(() => {
-    fetchRunRef.current++;
-  }, []);
-
   useEffect(() => {
     fetchPage(0, false);
   }, [attempt, fetchPage]);
@@ -69,19 +63,24 @@ export function useUsersAdmin() {
     e.preventDefault();
     const q = query.trim();
     if (!q || loading || loadingMore) return;
-    // Any page still in flight is now stale; drop it before starting the search.
-    supersedePendingPages();
+    // Claim the run tag: any page still in flight is now stale, and a later
+    // show-all (which bumps the tag via fetchPage) makes this search stale.
+    const runID = ++fetchRunRef.current;
+    const stale = () => runID !== fetchRunRef.current;
     setLoading(true);
     setError(null);
     setNotice(null);
     try {
       const res = await searchUsers(q);
+      if (stale()) return;
       setResults(res.users);
       setTotal(res.total);
       setActiveQuery(q);
     } catch (err) {
+      if (stale()) return;
       setError(errorMessage(err));
     } finally {
+      if (stale()) return;
       setLoading(false);
     }
   };

@@ -4,6 +4,10 @@
 #     reload (/_next/* HMR websocket) works through the proxy. The prod
 #     template deliberately has none: it serves only static/proxied HTTPS.
 #   - The :80 redirect keeps the dev HTTPS port (:8443).
+# KNOWN LIMITATION: HMR websocket upgrade via nginx returns 404 (Next.js
+# rejects the proxied upgrade even with correct headers). Direct to
+# client:3000 works (101). Workaround: access http://localhost:3000 or
+# add goodspot.test to /etc/hosts and use port 3000 directly for full HMR.
 # Mounted as /etc/nginx/templates/default.conf.template by the dev nginx
 # service in docker-compose.yml; ${DOMAIN} is substituted by the stock
 # nginx entrypoint. $host/$request_uri style variables stay untouched.
@@ -26,6 +30,8 @@ server {
     }
 
     location / {
+        proxy_buffering off;
+        proxy_cache off;
         return 301 https://$host:8443$request_uri;
     }
 }
@@ -68,6 +74,7 @@ server {
     # HTTP requests $connection_upgrade is "" (same as prod).
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header X-Debug-Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
 
     location /events {
@@ -85,10 +92,12 @@ server {
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        proxy_pass $client_upstream;
+        proxy_pass http://client:3000;
     }
 
     location / {
+        proxy_buffering off;
+        proxy_cache off;
         include /etc/nginx/includes/security-headers.conf;
 
         proxy_set_header Host $host;
@@ -96,6 +105,6 @@ server {
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        proxy_pass $client_upstream;
+        proxy_pass http://client:3000;
     }
 }

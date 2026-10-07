@@ -80,6 +80,18 @@ describe("SearchBar", () => {
     });
   }
 
+  it("names the search input and keeps the combobox pattern", async () => {
+    await act(async () => {
+      root.render(createElement(SearchBar, { center, onSelectPlace: vi.fn(), onSelectPin: vi.fn() }));
+    });
+    const input = container.querySelector("input")!;
+    expect(input.getAttribute("aria-label")).toBeTruthy();
+    expect(input.getAttribute("role")).toBe("combobox");
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(input.getAttribute("aria-controls")).toBe("search-results-listbox");
+    expect(input.getAttribute("aria-autocomplete")).toBe("list");
+  });
+
   it("exposes the highlighted option through aria-activedescendant", async () => {
     await act(async () => {
       root.render(createElement(SearchBar, { center, onSelectPlace: vi.fn(), onSelectPin: vi.fn() }));

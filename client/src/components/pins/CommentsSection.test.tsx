@@ -104,6 +104,12 @@ describe("CommentsSection delete failure", () => {
     expect(alerts()).toEqual([]);
   });
 
+  it("names the comment box", async () => {
+    await render();
+    const box = container.querySelector("textarea") as HTMLTextAreaElement;
+    expect(box?.getAttribute("aria-label")).toBeTruthy();
+  });
+
   it("clears a previous delete error on the next attempt", async () => {
     hookMocks.remove.mockRejectedValueOnce(new Error("network unavailable"));
     await render();

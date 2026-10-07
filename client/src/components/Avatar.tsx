@@ -10,6 +10,10 @@ type AvatarProps = {
   className?: string;
   /** Colors for the initial-letter fallback. */
   fallbackClassName?: string;
+  /** Accessible name for the image. Keep "" where the username is shown
+      right next to it; pass the username where the avatar alone identifies
+      the user. */
+  alt?: string;
 };
 
 export default function Avatar({
@@ -17,6 +21,7 @@ export default function Avatar({
   username,
   className = "h-8 w-8",
   fallbackClassName = FALLBACK_CLASS,
+  alt = "",
 }: AvatarProps) {
   const normalized = resolveMediaUrl(src);
   if (!normalized) {
@@ -30,6 +35,6 @@ export default function Avatar({
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element -- avatars are hosted media, <img> is fine here
-    <img src={normalized} alt="" className={`rounded-full object-cover ${className}`} />
+    <img src={normalized} alt={alt} className={`rounded-full object-cover ${className}`} />
   );
 }

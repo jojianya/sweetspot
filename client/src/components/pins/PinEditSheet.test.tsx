@@ -95,6 +95,12 @@ describe("PinEditSheet update", () => {
 
   // The update response carries the pin's photo set, so the sheet must adopt it
   // instead of refetching the pin it was just handed.
+  it("names the photo picker", async () => {
+    await renderSheet();
+    const file = container.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(file?.getAttribute("aria-label")).toBeTruthy();
+  });
+
   it("adopts the photo set from the update response without refetching", async () => {
     const photo = updatedPhoto();
     apiMocks.updatePin.mockResolvedValue({ pin: { ...pin, caption: "Renamed" }, photos: [photo] });

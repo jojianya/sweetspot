@@ -165,6 +165,7 @@ export default function SearchBar({
           onFocus={() => { if (results.length > 0) setIsOpen(true); }}
           onKeyDown={handleKey}
           placeholder={placeholder}
+          aria-label={placeholder}
           className="flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100"
           role="combobox"
           aria-expanded={isOpen}

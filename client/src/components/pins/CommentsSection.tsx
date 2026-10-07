@@ -120,6 +120,7 @@ export default function CommentsSection({ pinId, compact = false }: CommentsSect
             <Avatar
               src={c.avatar_url}
               username={c.username ?? "?"}
+              alt={c.username ?? "?"}
               className="h-8 w-8"
               fallbackClassName="bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
             />
@@ -173,6 +174,7 @@ export default function CommentsSection({ pinId, compact = false }: CommentsSect
               rows={compact ? 1 : 2}
               maxLength={500}
               placeholder="Add a comment…"
+              aria-label="Add a comment"
               className="min-w-0 flex-1 resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-sky-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
             />
             <button

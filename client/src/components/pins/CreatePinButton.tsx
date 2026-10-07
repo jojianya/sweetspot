@@ -214,6 +214,7 @@ export default function CreatePinButton({
                 accept="image/jpeg,image/png"
                 multiple
                 className="hidden"
+                aria-label="Add photos"
                 onChange={(e) => handleFiles(e.target.files)}
               />
 
@@ -260,6 +261,7 @@ export default function CreatePinButton({
                 value={selectedCategoryId ?? ""}
                 onChange={(e) => setCategoryId(Number(e.target.value))}
                 disabled={categories.length === 0}
+                aria-label="Category"
                 className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
               >
                 {selectedCategoryId === null && <option value="">Choose a category</option>}
@@ -276,6 +278,7 @@ export default function CreatePinButton({
                 onChange={(e) => setCaption(e.target.value)}
                 maxLength={200}
                 placeholder="Add a caption (optional)"
+                aria-label="Add a caption"
                 className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
               />
 

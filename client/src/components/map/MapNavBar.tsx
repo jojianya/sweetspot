@@ -102,6 +102,7 @@ export default function MapNavBar({
             <Avatar
               src={user.avatar_url}
               username={user.username}
+              alt={user.username}
               className="h-full w-full"
             />
           </button>

@@ -190,6 +190,7 @@ export default function PinEditSheet({
               accept="image/jpeg,image/png"
               multiple
               className="hidden"
+              aria-label="Replace photos"
               onChange={(e) => handleFiles(e.target.files)}
             />
           </div>

@@ -158,7 +158,7 @@ func (r *postgresRepository) Delete(ctx context.Context, id string) error {
 // duplicate or skip a pin when positions are rewritten.
 func (r *postgresRepository) ListPins(ctx context.Context, id string, limit, offset int) ([]pins.PinListEntry, int, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.created_at,
+		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
 		       `+database.CoverPhotoCoalesce+`, u.username,
 		       COUNT(*) OVER () AS total
 		FROM collection_pins cp
@@ -179,7 +179,7 @@ func (r *postgresRepository) ListPins(ctx context.Context, id string, limit, off
 	for rows.Next() {
 		var e pins.PinListEntry
 		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
-			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.CreatedAt, &e.CoverURL, &e.Username, &total); err != nil {
+			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.CreatedAt, &e.CoverURL, &e.Username, &total); err != nil {
 			return nil, 0, err
 		}
 		entries = append(entries, e)

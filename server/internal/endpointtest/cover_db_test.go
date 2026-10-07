@@ -96,6 +96,36 @@ func coverByID[T any](entries []T, id func(T) string) map[string]T {
 	return out
 }
 
+func TestDBListEntriesIncludeViews(t *testing.T) {
+	ctx, pool, author, categoryID := coverSetup(t)
+	pinsRepo := pins.NewRepository(pool)
+	favRepo := favorites.NewRepository(pool)
+	socialRepo := social.NewRepository(pool)
+	colRepo := collections.NewRepository(pool)
+	pinID := seedCoverPin(t, ctx, pinsRepo, author, categoryID, 10.5, 10.5, "viewed", nil)
+	if _, err := pool.Exec(ctx, `UPDATE pins SET views = 7 WHERE id = $1`, pinID); err != nil {
+		t.Fatalf("set views: %v", err)
+	}
+	if err := favRepo.Save(ctx, author, pinID); err != nil { t.Fatalf("save favorite: %v", err) }
+	follower := seedDBUserWithRole(t, ctx, pool, fmt.Sprintf("views-%d@example.com", time.Now().UnixNano()), "user")
+	if err := socialRepo.Follow(ctx, follower, author); err != nil { t.Fatalf("follow: %v", err) }
+	col, err := colRepo.Create(ctx, author, "viewed", nil, false)
+	if err != nil { t.Fatalf("create collection: %v", err) }
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID.String()) })
+	if err := colRepo.AddPin(ctx, col.ID.String(), pinID); err != nil { t.Fatalf("add pin: %v", err) }
+
+	favs, _, err := favRepo.List(ctx, author, 50, 0)
+	if err != nil { t.Fatalf("favorites list: %v", err) }
+	if len(favs) != 1 || favs[0].Pin.Views != 7 { t.Fatalf("favorites views = %+v, want 7", favs) }
+	feed, err := socialRepo.Feed(ctx, follower, 50)
+	if err != nil { t.Fatalf("feed: %v", err) }
+	byID := coverByID(feed, func(e pins.PinListEntry) string { return e.ID.String() })
+	if byID[pinID].Pin.Views != 7 { t.Fatalf("feed views = %d, want 7", byID[pinID].Pin.Views) }
+	cps, _, err := colRepo.ListPins(ctx, col.ID.String(), 50, 0)
+	if err != nil { t.Fatalf("collection pins: %v", err) }
+	if len(cps) != 1 || cps[0].Pin.Views != 7 { t.Fatalf("collection pins views = %+v, want 7", cps) }
+}
+
 func TestDBCoverPinsList(t *testing.T) {
 	ctx, pool, author, categoryID := coverSetup(t)
 	repo := pins.NewRepository(pool)

@@ -5,7 +5,23 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestDSNEncodesSpecialCharacters(t *testing.T) {
+	cfg := &Config{DBHost: "db", DBPort: "5432", DBUser: "alice", DBPass: "p@ss:wo rd/x", DBName: "good spot", DBSSLMode: "disable"}
+	parsed, err := pgxpool.ParseConfig(cfg.DSN())
+	if err != nil {
+		t.Fatalf("parse DSN: %v", err)
+	}
+	if parsed.ConnConfig.Password != cfg.DBPass {
+		t.Errorf("password = %q, want %q", parsed.ConnConfig.Password, cfg.DBPass)
+	}
+	if parsed.ConnConfig.Database != cfg.DBName {
+		t.Errorf("database = %q, want %q", parsed.ConnConfig.Database, cfg.DBName)
+	}
+}
 
 func TestValidateAppEnv(t *testing.T) {
 	for _, value := range []string{"development", "production"} {

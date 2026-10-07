@@ -36,30 +36,30 @@ const defaultCORSAllowedOrigins = "http://localhost:3000,http://localhost:3001,h
 const defaultCookieSameSite = "strict"
 
 type Config struct {
-	Port               string
-	AppEnv             string
-	DBHost             string
-	DBPort             string
-	DBUser             string
-	DBPass             string
-	DBName             string
-	DBSSLMode          string
-	DBPoolMaxConns     int
-	DBPoolMaxLifetime  time.Duration
-	DBPoolMaxIdle      time.Duration
-	DBPoolHealthCheck  time.Duration
-	LogLevel           string
-	LogFormat          string
-	JWTSecret          string
-	StorageBackend     string
-	StorageBase        string
+	Port              string
+	AppEnv            string
+	DBHost            string
+	DBPort            string
+	DBUser            string
+	DBPass            string
+	DBName            string
+	DBSSLMode         string
+	DBPoolMaxConns    int
+	DBPoolMaxLifetime time.Duration
+	DBPoolMaxIdle     time.Duration
+	DBPoolHealthCheck time.Duration
+	LogLevel          string
+	LogFormat         string
+	JWTSecret         string
+	StorageBackend    string
+	StorageBase       string
 	// QuarantineDir holds files moved out of ./uploads when their pin is
 	// hidden. It must sit outside the static root so /uploads/<file> 404s
 	// after the move; restores are a plain move back.
 	QuarantineDir string
 	// QuarantineDryRun makes the startup sweep report hidden-pin files that
 	// would move without moving anything.
-	QuarantineDryRun bool
+	QuarantineDryRun   bool
 	RedisAddr          string
 	RedisPassword      string
 	CORSAllowedOrigins []string
@@ -401,8 +401,17 @@ func mustParseTrustedProxies(raw string) []string {
 }
 
 func (c *Config) DSN() string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		c.DBHost, c.DBPort, c.DBUser, c.DBPass, c.DBName, c.DBSSLMode)
+	u := &url.URL{
+		Scheme:  "postgres",
+		User:    url.UserPassword(c.DBUser, c.DBPass),
+		Host:    net.JoinHostPort(c.DBHost, c.DBPort),
+		Path:    "/" + c.DBName,
+		RawPath: "/" + url.PathEscape(c.DBName),
+	}
+	q := url.Values{}
+	q.Set("sslmode", c.DBSSLMode)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func getEnv(key, fallback string) string {

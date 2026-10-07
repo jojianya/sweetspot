@@ -4,10 +4,11 @@
 #     reload (/_next/* HMR websocket) works through the proxy. The prod
 #     template deliberately has none: it serves only static/proxied HTTPS.
 #   - The :80 redirect keeps the dev HTTPS port (:8443).
-# KNOWN LIMITATION: HMR websocket upgrade via nginx returns 404 (Next.js
-# rejects the proxied upgrade even with correct headers). Direct to
-# client:3000 works (101). Workaround: access http://localhost:3000 or
-# add goodspot.test to /etc/hosts and use port 3000 directly for full HMR.
+# NOTE: proxy_set_header is NOT inherited by location blocks that define
+# their own proxy_set_header. WebSocket headers (Upgrade, Connection) and
+# the Host header must be repeated in each location block, otherwise the
+# inner block's proxy_set_header directives replace the outer ones and the
+# websocket upgrade headers are dropped. See the two location blocks below.
 # Mounted as /etc/nginx/templates/default.conf.template by the dev nginx
 # service in docker-compose.yml; ${DOMAIN} is substituted by the stock
 # nginx entrypoint. $host/$request_uri style variables stay untouched.

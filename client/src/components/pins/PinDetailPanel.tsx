@@ -73,7 +73,10 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
 
   // The edit sheet hands back the updated pin (its response carries the
   // current photos), so there is nothing left to refetch.
-  const handleUpdated = (updated: PinDetail) => setPin(updated);
+  const handleUpdated = (updated: PinDetail) => {
+    setPin(updated);
+    setIndex((prev) => Math.min(prev, Math.max(0, updated.photos.length - 1)));
+  };
 
   const name = pin.caption?.trim();
 

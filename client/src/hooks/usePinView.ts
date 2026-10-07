@@ -24,9 +24,13 @@ export function usePinView(
   const { user } = useAuth();
   const [result, setResult] = useState<PinViewResult | null>(null);
 
-  useEffect(() => {
+  // Drop the previous pin's count during render when pinId changes, so it is
+  // never shown against the new pin while its registration is in flight.
+  const [prevPinId, setPrevPinId] = useState(pinId);
+  if (prevPinId !== pinId) {
+    setPrevPinId(pinId);
     setResult(null);
-  }, [pinId]);
+  }
 
   useEffect(() => {
     if (!pinId || !user) return;

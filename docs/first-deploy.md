@@ -46,13 +46,12 @@ Edit `.env` and fill in **all required values** (no secrets in this doc — use 
 **Optional certbot knobs (see `certbot/entrypoint.sh`):**
 
 - `CERTBOT_EMAIL` — ACME contact email (empty → `--register-unsafely-without-email`).
-- `CERTBOT_STAGING` — set to `true` for first run (uses Let's Encrypt staging CA, avoids rate limits).
+- `CERTBOT_STAGING` — set to `true` **only for debugging** (uses Let's Encrypt staging CA, avoids rate limits). Do **not** use for first deploy; the real cert is obtained directly.
 - `CERTBOT_SERVER` — custom ACME directory URL (rarely needed).
 - `CERTBOT_NO_VERIFY_SSL` — set to `true` for local test CA.
 
 **First-run flags (required for first deploy):**
 
-- `CERTBOT_STAGING=true`
 - `QUARANTINE_SWEEP_DRY_RUN=true`
 
 **Database/Redis (already set by compose defaults, but can be overridden):**
@@ -92,7 +91,7 @@ All services should show `Up` (healthy). The `proxy` service depends on `client`
 **How it works:**
 
 - On first boot, the `proxy` container's entrypoint (`nginx/docker-entrypoint.d/30-bootstrap-certs.sh`) checks `/etc/nginx/certs/`. If missing or empty, it generates a **self-signed certificate** (valid 30 days) so nginx can start immediately.
-- The `certbot` sidecar waits for `proxy` to be healthy, then requests a real certificate via HTTP-01 challenge using the shared `acme_webroot` volume (`/.well-known/acme-challenge/`). On success, `certbot/reload-nginx.sh` copies the real cert/key into `nginx_certs` and sends `SIGHUP` to nginx (via shared PID namespace).
+- The `certbot` sidecar waits for `proxy` to be healthy, then requests a **real Let's Encrypt certificate** via HTTP-01 challenge using the shared `acme_webroot` volume (`/.well-known/acme-challenge/`). On success, `certbot/reload-nginx.sh` copies the real cert/key into `nginx_certs` and sends `SIGHUP` to nginx (via shared PID namespace).
 - Certbot renews every 12h automatically via its loop.
 
 **Watch the logs:**
@@ -105,7 +104,27 @@ docker compose -f docker-compose.prod.yml logs -f certbot
 
 - **DNS not pointing at VPS**: certbot will fail with connection timeout. Fix the A record and wait for propagation.
 - **Port 80 blocked**: certbot HTTP-01 challenge requires inbound port 80. Check firewall/security group.
-- **CERTBOT_STAGING=true** avoids rate limits during testing. Remove it for production cert.
+
+**Troubleshooting note:**
+
+- `CERTBOT_STAGING=true` is **only for debugging** (uses Let's Encrypt staging CA to avoid rate limits). It issues a **staging certificate** that browsers don't trust. Do **not** use it for production deploys.
+- If you used `CERTBOT_STAGING=true` and need to switch to the real certificate, you **must clear the `certbot_data` volume** so certbot sees no existing certificate and requests a fresh one from the production CA. The certbot entrypoint only does initial issuance when `/etc/letsencrypt/live/${DOMAIN}/fullchain.pem` is missing; otherwise it skips to the renewal loop with the same CA.
+
+  **VERIFY ON SERVER** — exact steps to force reissue:
+
+  ```sh
+  # 1. Stop certbot
+  docker compose -f docker-compose.prod.yml stop certbot
+
+  # 2. Remove the certbot data (this deletes the ACME account and staging cert)
+  docker volume rm <project>_certbot_data
+
+  # 3. Ensure CERTBOT_STAGING is unset in .env
+  # 4. Restart certbot to trigger fresh issuance against production CA
+  docker compose -f docker-compose.prod.yml up -d certbot
+  ```
+
+  After step 4, watch `docker compose -f docker-compose.prod.yml logs -f certbot` for "initial issuance succeeded" from the production CA.
 
 ## 7. Verify
 
@@ -128,18 +147,31 @@ curl -sI https://DOMAIN/ | grep -iE 'strict-transport|content-type-options|frame
 
 All checks should pass.
 
-## 8. Switch to the Real Certificate
+## 8. Switch from Staging to Production Certificate
 
-After the staging cert is verified:
+If you deployed with `CERTBOT_STAGING=true` and now need the real certificate:
 
-1. Edit `.env` and set `CERTBOT_STAGING=` (remove the value / comment it out).
-2. Recreate the certbot container to pick up the new value:
+1. Edit `.env` and remove `CERTBOT_STAGING` (unset it completely).
+2. Stop certbot and clear its data so it requests a fresh production cert:
 
    ```sh
-   docker compose -f docker-compose.prod.yml up -d --build certbot
+   docker compose -f docker-compose.prod.yml stop certbot
+   docker volume rm <project>_certbot_data
    ```
 
-3. Watch the certbot logs; it will request a production cert and install it. If the staging cert is already in place, certbot will replace it on the next renewal cycle (or you can force a reissue by removing the `certbot_data` volume and recreating — **VERIFY ON SERVER** for the exact reissue steps from the scripts).
+3. Restart certbot to trigger fresh issuance against the production CA:
+
+   ```sh
+   docker compose -f docker-compose.prod.yml up -d certbot
+   ```
+
+4. Watch the logs for "initial issuance succeeded" from the production CA:
+
+   ```sh
+   docker compose -f docker-compose.prod.yml logs -f certbot
+   ```
+
+**VERIFY ON SERVER** — the exact reissue behavior depends on the certbot entrypoint logic; if the cert already exists in `certbot_data`, certbot skips initial issuance and goes straight to the renewal loop with the same CA. Clearing the volume is the only reliable way to force a fresh production issuance.
 
 ## 9. Quarantine Sweep
 

@@ -51,6 +51,10 @@ type UpdateProfilePatch struct {
 	Socials   *map[string]any
 }
 
+// pgCodeUniqueViolation is the PostgreSQL SQLSTATE for unique_violation.
+// A named constant because pgerrcode is not a dependency.
+const pgCodeUniqueViolation = "23505"
+
 type postgresRepository struct {
 	pool *pgxpool.Pool
 }
@@ -68,6 +72,10 @@ func (r *postgresRepository) Create(ctx context.Context, email, passwordHash, us
 	`, strings.ToLower(email), passwordHash, username).Scan(
 		&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt,
 	)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgCodeUniqueViolation {
+		return User{}, ErrDuplicate
+	}
 	if err != nil {
 		return User{}, err
 	}
@@ -302,7 +310,7 @@ func (r *postgresRepository) UpdateProfile(ctx context.Context, id string, patch
 		return User{}, ErrNotFound
 	}
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+	if errors.As(err, &pgErr) && pgErr.Code == pgCodeUniqueViolation {
 		return User{}, ErrUsernameTaken
 	}
 	if err != nil {

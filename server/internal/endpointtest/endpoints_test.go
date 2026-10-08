@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/favorites"
@@ -88,10 +87,10 @@ type mockUserService struct {
 
 func (m *mockUserService) Create(_ context.Context, email, passwordHash, username string) (users.User, error) {
 	if _, ok := m.byEmail[email]; ok {
-		return users.User{}, &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint"}
+		return users.User{}, users.ErrDuplicate
 	}
 	if _, ok := m.byUsername[username]; ok {
-		return users.User{}, &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint"}
+		return users.User{}, users.ErrDuplicate
 	}
 	u := users.User{ID: testUUID1, Email: email, PasswordHash: passwordHash, Username: username, Role: users.RoleUser}
 	return u, nil

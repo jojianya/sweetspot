@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 	"github.com/jojianya/sweetspot247-backend/pkg/password"
@@ -62,8 +61,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (users.User
 
 	u, err := s.users.Create(ctx, req.Email, hash, req.Username)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.Is(err, users.ErrDuplicate) {
 			return users.User{}, "", ErrConflict
 		}
 		return users.User{}, "", err

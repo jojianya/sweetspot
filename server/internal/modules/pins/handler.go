@@ -3,10 +3,7 @@ package pins
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
-	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,9 +14,7 @@ import (
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
-	"github.com/jojianya/sweetspot247-backend/internal/platform/imaging"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
-	"github.com/jojianya/sweetspot247-backend/pkg/geohash"
 )
 
 const (
@@ -37,14 +32,9 @@ const (
 	profileMaxLimit     = 100
 )
 
-type validatedFile struct {
-	data  []byte
-	thumb []byte
-	ext   string
-}
-
-// photoErr carries a photo-upload failure: the HTTP status to respond with and
-// the client-facing message.
+// photoErr carries an input-validation failure: the HTTP status to respond
+// with and the client-facing message. Returned by the field validators in
+// validate.go, which check request shape (handler-layer input validation).
 type photoErr struct {
 	status int
 	msg    string
@@ -57,23 +47,43 @@ type Handler struct {
 	// roles resolves moderation rights from the database rather than the JWT,
 	// so a demotion takes effect on the caller's next request.
 	roles users.RoleReader
+	svc   *Service
 }
 
 func NewHandler(repo Repository, store *storage.Local, events Events, roles users.RoleReader) *Handler {
 	if events == nil {
 		events = nopEvents{}
 	}
-	return &Handler{repo: repo, store: store, events: events, roles: roles}
+	return &Handler{repo: repo, store: store, events: events, roles: roles, svc: NewService(repo, store, events, roles)}
+}
+
+// service returns the service, building it from the handler's dependencies
+// when the handler was constructed as a struct literal (as some tests do)
+// instead of via NewHandler.
+func (h *Handler) service() *Service {
+	if h.svc != nil {
+		return h.svc
+	}
+	return NewService(h.repo, h.store, h.events, h.roles)
+}
+
+// isModerator resolves moderation rights for the caller. Without a wired
+// RoleReader nobody is a moderator.
+func (h *Handler) isModerator(c *gin.Context) bool {
+	if h.roles == nil {
+		return false
+	}
+	return users.IsModerator(h.roles, c)
 }
 
 // nopEvents is the zero-value event publisher used when realtime is disabled.
 type nopEvents struct{}
 
-func (nopEvents) PinCreated(context.Context, Event)      {}
-func (nopEvents) PinRemoved(context.Context, PinRemoved) {}
+func (nopEvents) PinCreated(ctx context.Context, e Event)      {}
+func (nopEvents) PinRemoved(ctx context.Context, e PinRemoved) {}
 
 func (h *Handler) ListCategories(c *gin.Context) {
-	categories, err := h.repo.ListCategories(c.Request.Context())
+	categories, err := h.service().ListCategories(c.Request.Context())
 	if err != nil {
 		response.Internal(c, "pins: list categories", err)
 		return
@@ -98,25 +108,17 @@ func (h *Handler) GetPins(c *gin.Context) {
 		categoryID = &id
 	}
 
-	if categoryID != nil {
-		exists, err := h.repo.CategoryExists(c.Request.Context(), *categoryID)
-		if err != nil {
-			response.Internal(c, "pins: category exists", err, "category_id", *categoryID)
-			return
-		}
-		if !exists {
-			response.BadRequest(c, "category not found")
-			return
-		}
-	}
-
 	limit, ok := httpx.ParseLimit(c, pinListDefaultLimit, pinListDefaultLimit)
 	if !ok {
 		return
 	}
 
-	pins, err := h.repo.ListPins(c.Request.Context(), bbox, categoryID, limit)
+	pins, err := h.service().ListPins(c.Request.Context(), bbox, categoryID, limit)
 	if err != nil {
+		if errors.Is(err, ErrCategoryNotFound) {
+			response.BadRequest(c, "category not found")
+			return
+		}
 		response.Internal(c, "pins: list", err)
 		return
 	}
@@ -138,7 +140,7 @@ func (h *Handler) GetTrending(c *gin.Context) {
 		return
 	}
 
-	pins, err := h.repo.ListTrending(c.Request.Context(), bbox, limit)
+	pins, err := h.service().ListTrending(c.Request.Context(), bbox, limit)
 	if err != nil {
 		response.Internal(c, "pins: trending", err)
 		return
@@ -148,7 +150,7 @@ func (h *Handler) GetTrending(c *gin.Context) {
 }
 
 func (h *Handler) GetPin(c *gin.Context) {
-	pin, err := h.repo.GetPin(c.Request.Context(), c.Param("id"))
+	pin, err := h.service().GetVisible(c.Request.Context(), c.Param("id"), middleware.GetUserID(c))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
@@ -158,33 +160,14 @@ func (h *Handler) GetPin(c *gin.Context) {
 		return
 	}
 
-	if pin.IsHidden && !h.canViewHidden(c, pin) {
-		response.NotFound(c, "pin not found")
-		return
-	}
-
 	response.OK(c, gin.H{"pin": pin})
-}
-
-func (h *Handler) canViewHidden(c *gin.Context, pin PinDetail) bool {
-	viewerID := middleware.GetUserID(c)
-	if viewerID == "" {
-		return false
-	}
-	if viewerID == pin.UserID.String() {
-		return true
-	}
-
-	// Only reached for a hidden pin owned by someone else, so the lookup below
-	// is off the common path.
-	return users.IsModerator(h.roles, c)
 }
 
 // RegisterView counts a unique per-account view. It is read-safe for
 // anonymous visitors: without a session it returns the current count
 // unchanged, so opening a pin logged out never errors and never counts.
 func (h *Handler) RegisterView(c *gin.Context) {
-	views, err := h.repo.RegisterView(c.Request.Context(), c.Param("id"), middleware.GetUserID(c))
+	views, err := h.service().RegisterView(c.Request.Context(), c.Param("id"), middleware.GetUserID(c))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
@@ -204,18 +187,7 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		return
 	}
 
-	id := c.Param("id")
-
-	// Moderation check reuses the same live-DB IsModerator as UpdatePin, so a
-	// demotion takes effect immediately. It is computed unconditionally (not
-	// from a pre-loaded owner) because authorization lives in the repository
-	// UPDATE predicate below — the pre-delete read is only for photo cleanup.
-	isModerator := false
-	if h.roles != nil {
-		isModerator = users.IsModerator(h.roles, c)
-	}
-
-	if err := h.repo.DeletePin(c.Request.Context(), id, userID, isModerator); err != nil {
+	if err := h.service().DeletePin(c.Request.Context(), c.Param("id"), userID, h.isModerator(c)); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
 			return
@@ -224,43 +196,8 @@ func (h *Handler) DeletePin(c *gin.Context) {
 			response.Forbidden(c, "you can only delete your own pins")
 			return
 		}
-		response.Internal(c, "delete pin", err, "pin_id", id, "user_id", userID)
+		response.Internal(c, "delete pin", err, "pin_id", c.Param("id"), "user_id", userID)
 		return
-	}
-
-	// Load the (now hidden) pin for photo cleanup and moderator audit logging.
-	// pin_photos rows survive the soft-hide, so this read sees the
-	// authoritative set. A read failure here must not fail the delete; files
-	// are unreferenced either way and the miss is logged for a sweep.
-	existing, err := h.repo.GetPin(c.Request.Context(), id)
-	if err != nil {
-		slog.Warn("delete pin: load for cleanup", "error", err.Error(), "pin_id", id, "user_id", userID)
-		response.NoContent(c)
-		return
-	}
-
-	if existing.UserID.String() != userID {
-		slog.Info("moderator deleted pin", "moderator_id", userID, "pin_id", id, "owner_id", existing.UserID.String())
-	}
-
-	// Best-effort cleanup, matching what UpdatePin does for replaced photos. The
-	// pin is already gone, so a storage failure must not fail the request; the
-	// files are unreferenced either way. Logged so an operator can sweep them.
-	for _, ph := range existing.Photos {
-		if err := h.store.Delete(ph.PhotoURL); err != nil {
-			slog.Warn("delete pin: remove photo", "error", err.Error(), "url", ph.PhotoURL, "pin_id", id)
-		}
-		if err := h.store.Delete(ph.ThumbnailURL); err != nil {
-			slog.Warn("delete pin: remove thumbnail", "error", err.Error(), "url", ph.ThumbnailURL, "pin_id", id)
-		}
-	}
-
-	// Publish pin_removed event for realtime updates (best-effort; failure logged but not fatal).
-	if h.events != nil {
-		h.events.PinRemoved(c.Request.Context(), PinRemoved{
-			ID:       id,
-			Location: existing.Location,
-		})
 	}
 
 	response.NoContent(c)
@@ -274,15 +211,6 @@ func (h *Handler) CreatePin(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	userExists, err := h.repo.UserExists(c.Request.Context(), userID)
-	if err != nil {
-		response.Internal(c, "create pin: user exists", err, "user_id", userID)
-		return
-	}
-	if !userExists {
-		response.Unauthorized(c, "account no longer exists, please sign in again")
-		return
-	}
 
 	files := form.File["photos"]
 	input, verr := validateCreateFields(c.PostForm("lat"), c.PostForm("lng"), c.PostForm("category_id"), c.PostForm("caption"), len(files))
@@ -290,167 +218,50 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		response.Error(c, verr.status, verr.msg)
 		return
 	}
-	lat, lng, categoryID, caption := input.lat, input.lng, input.categoryID, input.caption
 
-	validated, perr := processPhotos(files)
-	if perr != nil {
-		if perr.status == http.StatusInternalServerError {
-			slog.Error("create pin: read uploaded file", "error", perr.msg)
-		}
-		response.Error(c, perr.status, perr.msg)
-		return
-	}
-
-	exists, err := h.repo.CategoryExists(c.Request.Context(), categoryID)
-	if err != nil {
-		response.Internal(c, "create pin: category exists", err, "category_id", categoryID)
-		return
-	}
-	if !exists {
-		response.BadRequest(c, "category not found")
-		return
-	}
-
-	photoURLs, thumbURLs, err := h.savePhotos(validated)
-	if err != nil {
-		slog.Error("create pin: save photo", "error", err.Error())
-		response.Error(c, http.StatusInternalServerError, "could not save uploaded file")
-		return
-	}
-
-	pin, err := h.repo.CreatePin(c.Request.Context(), NewPin{
-		UserID:        middleware.GetUserID(c),
-		Lat:           lat,
-		Lng:           lng,
-		Caption:       caption,
-		CategoryID:    categoryID,
-		PhotoURLs:     photoURLs,
-		ThumbnailURLs: thumbURLs,
-		Geohash:       geohash.Encode(lat, lng),
+	res, err := h.service().CreatePin(c.Request.Context(), CreatePinInput{
+		UserID:     userID,
+		Lat:        input.lat,
+		Lng:        input.lng,
+		Caption:    input.caption,
+		CategoryID: input.categoryID,
+		Files:      files,
 	})
 	if err != nil {
-		// The photos are already on disk; remove them so a failed insert
-		// cannot orphan files. Use min length to guard against mismatched slices.
-		// Log deletion failures instead of discarding them.
-		n := len(photoURLs)
-		if len(thumbURLs) < n {
-			n = len(thumbURLs)
+		switch {
+		case errors.Is(err, ErrAccountMissing):
+			response.Unauthorized(c, err.Error())
+		case errors.Is(err, ErrCategoryNotFound):
+			response.BadRequest(c, "category not found")
+		case errors.Is(err, ErrPhotoTooLarge), errors.Is(err, ErrPhotoInvalid):
+			response.BadRequest(c, err.Error())
+		case errors.Is(err, ErrPhotoUnreadable):
+			slog.Error("create pin: read uploaded file", "error", err.Error())
+			response.Error(c, http.StatusInternalServerError, err.Error())
+		case errors.Is(err, ErrPhotoSave):
+			slog.Error("create pin: save photo", "error", err.Error())
+			response.Error(c, http.StatusInternalServerError, "could not save uploaded file")
+		default:
+			response.Internal(c, "create pin: database insert", err,
+				"user_id", userID,
+				"lat", input.lat,
+				"lng", input.lng,
+				"category_id", input.categoryID,
+				"photos", len(res.PhotoURLs))
 		}
-		for i := 0; i < n; i++ {
-			if err := h.store.Delete(photoURLs[i]); err != nil {
-				slog.Warn("cleanup failed: photo", "url", photoURLs[i], "error", err)
-			}
-			if err := h.store.Delete(thumbURLs[i]); err != nil {
-				slog.Warn("cleanup failed: thumbnail", "url", thumbURLs[i], "error", err)
-			}
-		}
-		response.Internal(c, "create pin: database insert", err,
-			"user_id", middleware.GetUserID(c),
-			"lat", lat,
-			"lng", lng,
-			"category_id", categoryID,
-			"photos", len(photoURLs))
 		return
 	}
 
-	photos := make([]gin.H, 0, len(photoURLs))
-	for i := range photoURLs {
+	photos := make([]gin.H, 0, len(res.PhotoURLs))
+	for i := range res.PhotoURLs {
 		photos = append(photos, gin.H{
-			"photo_url":     photoURLs[i],
-			"thumbnail_url": thumbURLs[i],
+			"photo_url":     res.PhotoURLs[i],
+			"thumbnail_url": res.ThumbURLs[i],
 			"position":      i,
 		})
 	}
 
-	// Broadcast to connected maps (best-effort; never fails the create).
-	cover := ""
-	if len(thumbURLs) > 0 {
-		cover = thumbURLs[0]
-	} else if len(photoURLs) > 0 {
-		cover = photoURLs[0]
-	}
-	h.events.PinCreated(c.Request.Context(), Event{
-		ID:         pin.ID.String(),
-		UserID:     pin.UserID.String(),
-		Location:   fmt.Sprintf("POINT(%v %v)", lng, lat),
-		Caption:    pin.Caption,
-		CategoryID: pin.CategoryID,
-		CoverURL:   cover,
-		CreatedAt:  pin.CreatedAt,
-	})
-
-	response.Created(c, gin.H{"pin": pin, "photos": photos})
-}
-
-// processPhotos opens, validates, and re-encodes every uploaded photo. The
-// returned *photoErr is non-nil on failure and carries the exact status and
-// message to respond with.
-func processPhotos(files []*multipart.FileHeader) ([]validatedFile, *photoErr) {
-	validated := make([]validatedFile, 0, len(files))
-	for i, fh := range files {
-		if fh.Size > maxPhotoSize {
-			return nil, &photoErr{http.StatusBadRequest, "one or more photos exceed 10MB"}
-		}
-
-		src, err := fh.Open()
-		if err != nil {
-			return nil, &photoErr{http.StatusInternalServerError, "could not read uploaded file"}
-		}
-		// Cap the read at max+1 so a lied-about FileHeader.Size cannot push
-		// an unbounded body into memory; the length check below is authoritative.
-		data, err := io.ReadAll(io.LimitReader(src, maxPhotoSize+1))
-		src.Close()
-		if err != nil {
-			return nil, &photoErr{http.StatusInternalServerError, "could not read uploaded file"}
-		}
-		if len(data) > maxPhotoSize {
-			return nil, &photoErr{http.StatusBadRequest, "one or more photos exceed 10MB"}
-		}
-
-		if err := imaging.Validate(data); err != nil {
-			return nil, &photoErr{http.StatusBadRequest, fmt.Sprintf("photo %d: %s", i+1, err)}
-		}
-
-		proc, err := imaging.Process(data)
-		if err != nil {
-			return nil, &photoErr{http.StatusBadRequest, fmt.Sprintf("photo %d: %s", i+1, err)}
-		}
-
-		validated = append(validated, validatedFile{data: proc.Full, thumb: proc.Thumb, ext: "webp"})
-	}
-	return validated, nil
-}
-
-// savePhotos writes the processed photos to storage. On any failure it removes
-// every file it already wrote, so a failed create cannot orphan files on disk.
-func (h *Handler) savePhotos(validated []validatedFile) (photoURLs, thumbURLs []string, err error) {
-	type stored struct{ full, thumb string }
-	written := make([]stored, 0, len(validated))
-	cleanup := func() {
-		for _, s := range written {
-			_ = h.store.Delete(s.full)
-			_ = h.store.Delete(s.thumb)
-		}
-	}
-
-	photoURLs = make([]string, 0, len(validated))
-	thumbURLs = make([]string, 0, len(validated))
-	for _, vf := range validated {
-		full, err := h.store.Save(vf.data, vf.ext)
-		if err != nil {
-			cleanup()
-			return nil, nil, err
-		}
-		thumb, err := h.store.Save(vf.thumb, vf.ext)
-		if err != nil {
-			cleanup()
-			return nil, nil, err
-		}
-		written = append(written, stored{full: full, thumb: thumb})
-		photoURLs = append(photoURLs, full)
-		thumbURLs = append(thumbURLs, thumb)
-	}
-	return photoURLs, thumbURLs, nil
+	response.Created(c, gin.H{"pin": res.Pin, "photos": photos})
 }
 
 func (h *Handler) SearchPins(c *gin.Context) {
@@ -469,7 +280,7 @@ func (h *Handler) SearchPins(c *gin.Context) {
 		return
 	}
 
-	pins, err := h.repo.SearchPins(c.Request.Context(), q, limit)
+	pins, err := h.service().SearchPins(c.Request.Context(), q, limit)
 	if err != nil {
 		response.Internal(c, "search pins", err, "query", q)
 		return
@@ -485,20 +296,13 @@ func (h *Handler) ListByUser(c *gin.Context) {
 		return
 	}
 
-	userID := c.Param("id")
-	exists, err := h.repo.UserExists(c.Request.Context(), userID)
+	pins, err := h.service().ListByUser(c.Request.Context(), c.Param("id"), limit)
 	if err != nil {
-		response.Internal(c, "pins: check profile user", err, "user_id", userID)
-		return
-	}
-	if !exists {
-		response.NotFound(c, "user not found")
-		return
-	}
-
-	pins, err := h.repo.ListByUser(c.Request.Context(), userID, limit)
-	if err != nil {
-		response.Internal(c, "pins: list by user", err, "user_id", userID)
+		if errors.Is(err, ErrNotFound) {
+			response.NotFound(c, "user not found")
+			return
+		}
+		response.Internal(c, "pins: list by user", err, "user_id", c.Param("id"))
 		return
 	}
 
@@ -518,39 +322,6 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	id := c.Param("id")
 
-	existing, err := h.repo.GetPin(c.Request.Context(), id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.NotFound(c, "pin not found")
-			return
-		}
-		response.Internal(c, "update pin: get", err, "pin_id", id)
-		return
-	}
-
-	// Hidden pins do not exist for edits. Checked before any work is done so a
-	// hidden pin answers 404 rather than revealing that it exists, the same rule
-	// DeletePin, comments, favorites, reports and collections follow. The UPDATE
-	// predicate repeats the check; this one just avoids staging uploads for a pin
-	// that cannot be edited.
-	visible, err := h.repo.PinVisible(c.Request.Context(), id)
-	if err != nil {
-		response.Internal(c, "update pin: visibility check", err, "pin_id", id)
-		return
-	}
-	if !visible {
-		response.NotFound(c, "pin not found")
-		return
-	}
-
-	// Without a wired RoleReader nobody is a moderator (same as DeletePin).
-	// Ownership itself is enforced by the UPDATE predicate, so there is no
-	// load-then-decide window between this read and the write.
-	isModerator := false
-	if h.roles != nil {
-		isModerator = users.IsModerator(h.roles, c)
-	}
-
 	form, err := c.MultipartForm()
 	if err != nil {
 		response.BadRequest(c, "expected multipart form data")
@@ -566,80 +337,40 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 		response.Error(c, verr.status, verr.msg)
 		return
 	}
-	caption, categoryID := fields.caption, fields.categoryID
 	var captionPtr *string
 	if _, ok := form.Value["caption"]; ok {
-		captionPtr = &caption
+		captionPtr = &fields.caption
 	}
 
-	if categoryID != nil {
-		exists, err := h.repo.CategoryExists(c.Request.Context(), *categoryID)
-		if err != nil {
-			response.Internal(c, "update pin: category exists", err, "category_id", *categoryID)
-			return
-		}
-		if !exists {
+	res, err := h.service().UpdatePin(c.Request.Context(), UpdatePinInput{
+		ID:          id,
+		UserID:      userID,
+		IsModerator: h.isModerator(c),
+		Caption:     captionPtr,
+		CategoryID:  fields.categoryID,
+		Files:       form.File["photos"],
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			response.NotFound(c, "pin not found")
+		case errors.Is(err, ErrForbidden):
+			response.Forbidden(c, "you can only edit your own pins")
+		case errors.Is(err, ErrCategoryNotFound):
 			response.BadRequest(c, "category not found")
-			return
-		}
-	}
-
-	patch := UpdatePinPatch{
-		Caption:    captionPtr,
-		CategoryID: categoryID,
-	}
-
-	files := form.File["photos"]
-	if len(files) > 0 {
-		validated, perr := processPhotos(files)
-		if perr != nil {
-			if perr.status == http.StatusInternalServerError {
-				slog.Error("update pin: read uploaded file", "error", perr.msg)
-			}
-			response.Error(c, perr.status, perr.msg)
-			return
-		}
-
-		photoURLs, thumbURLs, err := h.savePhotos(validated)
-		if err != nil {
+		case errors.Is(err, ErrPhotoTooLarge), errors.Is(err, ErrPhotoInvalid):
+			response.BadRequest(c, err.Error())
+		case errors.Is(err, ErrPhotoUnreadable):
+			slog.Error("update pin: read uploaded file", "error", err.Error())
+			response.Error(c, http.StatusInternalServerError, err.Error())
+		case errors.Is(err, ErrPhotoSave):
 			slog.Error("update pin: save photo", "error", err.Error())
 			response.Error(c, http.StatusInternalServerError, "could not save uploaded file")
-			return
+		default:
+			response.Internal(c, "update pin: database update", err, "pin_id", id)
 		}
-
-		patch.Photos = make([]NewPhoto, 0, len(photoURLs))
-		for i := range photoURLs {
-			patch.Photos = append(patch.Photos, NewPhoto{PhotoURL: photoURLs[i], ThumbnailURL: thumbURLs[i]})
-		}
-	}
-
-	updated, photos, err := h.repo.UpdatePin(c.Request.Context(), id, userID, isModerator, patch)
-	if err != nil {
-		// The new photos are already on disk; remove them so a failed update
-		// cannot orphan files.
-		for _, ph := range patch.Photos {
-			_ = h.store.Delete(ph.PhotoURL)
-			_ = h.store.Delete(ph.ThumbnailURL)
-		}
-		if errors.Is(err, ErrNotFound) {
-			response.NotFound(c, "pin not found")
-			return
-		}
-		if errors.Is(err, ErrForbidden) {
-			response.Forbidden(c, "you can only edit your own pins")
-			return
-		}
-		response.Internal(c, "update pin: database update", err, "pin_id", id)
 		return
 	}
 
-	// Best-effort cleanup of the replaced photos now that the swap succeeded.
-	if patch.Photos != nil {
-		for _, ph := range existing.Photos {
-			_ = h.store.Delete(ph.PhotoURL)
-			_ = h.store.Delete(ph.ThumbnailURL)
-		}
-	}
-
-	response.OK(c, gin.H{"pin": updated, "photos": photos})
+	response.OK(c, gin.H{"pin": res.Pin, "photos": res.Photos})
 }

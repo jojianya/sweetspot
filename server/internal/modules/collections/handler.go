@@ -31,14 +31,34 @@ type Handler struct {
 	// roles resolves moderation rights from the database rather than the JWT,
 	// so a demotion takes effect on the caller's next request.
 	roles users.RoleReader
+	svc   *Service
 }
 
 func NewHandler(repo Repository, roles users.RoleReader) *Handler {
-	return &Handler{repo: repo, roles: roles}
+	return &Handler{repo: repo, roles: roles, svc: NewService(repo)}
+}
+
+// service returns the service, building it from the handler's repository
+// when the handler was constructed as a struct literal (as some tests do)
+// instead of via NewHandler.
+func (h *Handler) service() *Service {
+	if h.svc != nil {
+		return h.svc
+	}
+	return NewService(h.repo)
+}
+
+// isModerator resolves moderation rights for the caller. Without a wired
+// RoleReader nobody is a moderator.
+func (h *Handler) isModerator(c *gin.Context) bool {
+	if h.roles == nil {
+		return false
+	}
+	return users.IsModerator(h.roles, c)
 }
 
 func (h *Handler) ListMine(c *gin.Context) {
-	collections, err := h.repo.ListByUser(c.Request.Context(), middleware.GetUserID(c))
+	collections, err := h.service().ListMine(c.Request.Context(), middleware.GetUserID(c))
 	if err != nil {
 		response.Internal(c, "collections: list mine", err, "user_id", middleware.GetUserID(c))
 		return
@@ -48,28 +68,14 @@ func (h *Handler) ListMine(c *gin.Context) {
 
 func (h *Handler) ListByUser(c *gin.Context) {
 	userID := c.Param("id")
-	exists, err := h.repo.UserExists(c.Request.Context(), userID)
-	if err != nil {
-		response.Internal(c, "collections: user exists", err, "user_id", userID)
-		return
-	}
-	if !exists {
-		response.NotFound(c, "user not found")
-		return
-	}
 
-	// Private collections are visible only to their owner; everyone else,
-	// logged in or not, sees the public subset.
-	callerID := middleware.GetUserID(c)
-	var collections []Collection
-	var listErr error
-	if callerID != "" && callerID == userID {
-		collections, listErr = h.repo.ListByUser(c.Request.Context(), userID)
-	} else {
-		collections, listErr = h.repo.ListPublicByUser(c.Request.Context(), userID)
-	}
-	if listErr != nil {
-		response.Internal(c, "collections: list by user", listErr, "user_id", userID)
+	collections, err := h.service().ListByUser(c.Request.Context(), userID, middleware.GetUserID(c))
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			response.NotFound(c, "user not found")
+			return
+		}
+		response.Internal(c, "collections: list by user", err, "user_id", userID)
 		return
 	}
 	response.OK(c, gin.H{"collections": collections})
@@ -110,7 +116,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	isPrivate := req.IsPrivate != nil && *req.IsPrivate
-	collection, err := h.repo.Create(c.Request.Context(), middleware.GetUserID(c), name, description, isPrivate)
+	collection, err := h.service().Create(c.Request.Context(), middleware.GetUserID(c), name, description, isPrivate)
 	if err != nil {
 		response.Internal(c, "collections: create", err, "user_id", middleware.GetUserID(c))
 		return
@@ -121,22 +127,6 @@ func (h *Handler) Create(c *gin.Context) {
 
 func (h *Handler) Get(c *gin.Context) {
 	id := c.Param("id")
-	collection, err := h.repo.Get(c.Request.Context(), id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.NotFound(c, "collection not found")
-			return
-		}
-		response.Internal(c, "collections: get", err, "collection_id", id)
-		return
-	}
-
-	// Private collections exist only for their owner: anyone else gets 404,
-	// the same convention as hidden pins, so privacy is not enumerable.
-	if collection.IsPrivate && collection.UserID.String() != middleware.GetUserID(c) {
-		response.NotFound(c, "collection not found")
-		return
-	}
 
 	limit, ok := httpx.ParseLimit(c, collectionPinListDefaultLimit, collectionPinListMaxLimit)
 	if !ok {
@@ -147,50 +137,39 @@ func (h *Handler) Get(c *gin.Context) {
 		return
 	}
 
-	pins, total, err := h.repo.ListPins(c.Request.Context(), id, limit, offset)
-	if err != nil {
-		response.Internal(c, "collections: get pins", err, "collection_id", id)
-		return
-	}
-
-	response.OK(c, gin.H{"collection": CollectionDetail{Collection: collection, Pins: pins, PinTotal: total}})
-}
-
-// requireOwner aborts unless the caller owns the collection (or moderates),
-// returning the collection so callers can reuse the read.
-func (h *Handler) requireOwner(c *gin.Context) (Collection, bool) {
-	collection, err := h.repo.Get(c.Request.Context(), c.Param("id"))
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.NotFound(c, "collection not found")
-			return Collection{}, false
-		}
-		response.Internal(c, "collections: get", err, "collection_id", c.Param("id"))
-		return Collection{}, false
-	}
-
-	userID := middleware.GetUserID(c)
-	if collection.UserID.String() != userID {
-		// Only non-owners reach the role lookup, keeping it off the common path.
-		if !users.IsModerator(h.roles, c) {
-			response.Forbidden(c, "you can only modify your own collections")
-			return Collection{}, false
-		}
-	}
-	return collection, true
-}
-
-func (h *Handler) Update(c *gin.Context) {
-	existing, err := h.repo.Get(c.Request.Context(), c.Param("id"))
+	detail, err := h.service().GetDetail(c.Request.Context(), id, middleware.GetUserID(c), limit, offset)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return
 		}
-		response.Internal(c, "collections: get", err, "collection_id", c.Param("id"))
+		response.Internal(c, "collections: get", err, "collection_id", id)
 		return
 	}
 
+	response.OK(c, gin.H{"collection": detail})
+}
+
+// requireOwner aborts unless the caller owns the collection (or moderates),
+// returning the collection so callers can reuse the read.
+func (h *Handler) requireOwner(c *gin.Context) (Collection, bool) {
+	collection, err := h.service().RequireOwner(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c))
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.NotFound(c, "collection not found")
+			return Collection{}, false
+		}
+		if errors.Is(err, ErrForbidden) {
+			response.Forbidden(c, "you can only modify your own collections")
+			return Collection{}, false
+		}
+		response.Internal(c, "collections: get", err, "collection_id", c.Param("id"))
+		return Collection{}, false
+	}
+	return collection, true
+}
+
+func (h *Handler) Update(c *gin.Context) {
 	var req CollectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "name is required")
@@ -202,16 +181,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	// Absent means unchanged, so partial updates cannot flip visibility by
-	// accident; only the owner can change it (requireOwner already enforced
-	// ownership or moderation, and moderators editing a private collection
-	// they can already see keep its flag unless they set it).
-	isPrivate := existing.IsPrivate
-	if req.IsPrivate != nil {
-		isPrivate = *req.IsPrivate
-	}
-
-	if err := h.repo.Update(c.Request.Context(), c.Param("id"), name, description, isPrivate, middleware.GetUserID(c), users.IsModerator(h.roles, c)); err != nil {
+	if err := h.service().Update(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c), name, description, req.IsPrivate); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return
@@ -228,7 +198,7 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	if err := h.repo.Delete(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), users.IsModerator(h.roles, c)); err != nil {
+	if err := h.service().Delete(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c)); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return
@@ -250,17 +220,11 @@ func (h *Handler) AddPin(c *gin.Context) {
 	}
 
 	pinID := c.Param("pinId")
-	exists, err := h.repo.PinExists(c.Request.Context(), pinID)
-	if err != nil {
-		response.Internal(c, "collections: pin exists", err, "pin_id", pinID)
-		return
-	}
-	if !exists {
-		response.NotFound(c, "pin not found")
-		return
-	}
-
-	if err := h.repo.AddPin(c.Request.Context(), c.Param("id"), pinID); err != nil {
+	if err := h.service().AddPin(c.Request.Context(), c.Param("id"), pinID); err != nil {
+		if errors.Is(err, ErrPinNotFound) {
+			response.NotFound(c, "pin not found")
+			return
+		}
 		response.Internal(c, "collections: add pin", err, "collection_id", c.Param("id"), "pin_id", pinID)
 		return
 	}
@@ -273,7 +237,7 @@ func (h *Handler) RemovePin(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.RemovePin(c.Request.Context(), c.Param("id"), c.Param("pinId")); err != nil {
+	if err := h.service().RemovePin(c.Request.Context(), c.Param("id"), c.Param("pinId")); err != nil {
 		response.Internal(c, "collections: remove pin", err, "collection_id", c.Param("id"), "pin_id", c.Param("pinId"))
 		return
 	}

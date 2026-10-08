@@ -5,11 +5,22 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
 
 var ErrNotFound = errors.New("comment not found")
+
+// ErrPinNotFound reports that the pin a comment targets does not exist or is
+// hidden. The repository translates the comments_pin_id_fkey violation, so
+// callers match with errors.Is instead of reading driver error codes.
+var ErrPinNotFound = errors.New("pin not found")
+
+// pgCodeForeignKeyViolation is the PostgreSQL SQLSTATE for
+// foreign_key_violation. A named constant because pgerrcode is not a
+// dependency.
+const pgCodeForeignKeyViolation = "23503"
 
 type Repository interface {
 	// ListByPin returns a page of comments on the pin plus the total number of
@@ -92,6 +103,12 @@ func (r *postgresRepository) Create(ctx context.Context, pinID, userID, body str
 		&c.ID, &c.PinID, &c.UserID, &c.Body, &c.IsHidden, &c.CreatedAt, &c.Username, &c.AvatarURL,
 	)
 	if err != nil {
+		// Safety net: the pin vanished between the visibility check and the
+		// insert (or raced a hide) — report it as a missing pin, not a 500.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgCodeForeignKeyViolation {
+			return Comment{}, ErrPinNotFound
+		}
 		return Comment{}, err
 	}
 	return c, nil

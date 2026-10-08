@@ -2,11 +2,8 @@ package comments
 
 import (
 	"errors"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
@@ -25,10 +22,21 @@ type Handler struct {
 	// roles resolves moderation rights from the database rather than the JWT,
 	// so a demotion takes effect on the caller's next request.
 	roles users.RoleReader
+	svc   *Service
 }
 
 func NewHandler(repo Repository, roles users.RoleReader) *Handler {
-	return &Handler{repo: repo, roles: roles}
+	return &Handler{repo: repo, roles: roles, svc: NewService(repo)}
+}
+
+// service returns the service, building it from the handler's repository
+// when the handler was constructed as a struct literal (as some tests do)
+// instead of via NewHandler.
+func (h *Handler) service() *Service {
+	if h.svc != nil {
+		return h.svc
+	}
+	return NewService(h.repo)
 }
 
 // isModerator reports whether the caller holds a moderation role.
@@ -37,16 +45,6 @@ func (h *Handler) isModerator(c *gin.Context) bool {
 }
 
 func (h *Handler) List(c *gin.Context) {
-	exists, err := h.repo.PinExistsVisible(c.Request.Context(), c.Param("id"))
-	if err != nil {
-		response.Internal(c, "comments: pin exists", err, "pin_id", c.Param("id"))
-		return
-	}
-	if !exists {
-		response.NotFound(c, "pin not found")
-		return
-	}
-
 	limit, ok := httpx.ParseLimit(c, commentListDefaultLimit, commentListMaxLimit)
 	if !ok {
 		return
@@ -56,8 +54,12 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	comments, total, err := h.repo.ListByPin(c.Request.Context(), c.Param("id"), limit, offset)
+	comments, total, err := h.service().ListByPin(c.Request.Context(), c.Param("id"), limit, offset)
 	if err != nil {
+		if errors.Is(err, ErrPinNotFound) {
+			response.NotFound(c, "pin not found")
+			return
+		}
 		response.Internal(c, "comments: list", err, "pin_id", c.Param("id"))
 		return
 	}
@@ -71,36 +73,18 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	body := strings.TrimSpace(req.Body)
-	if body == "" {
-		response.BadRequest(c, "body is required")
-		return
-	}
-	if utf8.RuneCountInString(body) > maxCommentLength {
-		response.BadRequest(c, "body must be at most 500 characters")
-		return
-	}
-
-	exists, err := h.repo.PinExistsVisible(c.Request.Context(), c.Param("id"))
+	comment, err := h.service().Create(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), req.Body)
 	if err != nil {
-		response.Internal(c, "comments: pin exists", err, "pin_id", c.Param("id"))
-		return
-	}
-	if !exists {
-		response.NotFound(c, "pin not found")
-		return
-	}
-
-	comment, err := h.repo.Create(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), body)
-	if err != nil {
-		// Safety net: the pin vanished between the visibility check and the
-		// insert (or raced a hide) — report it as a missing pin, not a 500.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+		switch {
+		case errors.Is(err, errEmptyBody):
+			response.BadRequest(c, "body is required")
+		case errors.Is(err, errBodyTooLong):
+			response.BadRequest(c, "body must be at most 500 characters")
+		case errors.Is(err, ErrPinNotFound):
 			response.NotFound(c, "pin not found")
-			return
+		default:
+			response.Internal(c, "comments: create", err, "pin_id", c.Param("id"))
 		}
-		response.Internal(c, "comments: create", err, "pin_id", c.Param("id"))
 		return
 	}
 
@@ -108,31 +92,15 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	userID := middleware.GetUserID(c)
-	comment, err := h.repo.Get(c.Request.Context(), c.Param("id"))
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+	if err := h.service().Delete(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c)); err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
 			response.NotFound(c, "comment not found")
-			return
+		case errors.Is(err, ErrForbidden):
+			response.Forbidden(c, "you can only delete your own comments")
+		default:
+			response.Internal(c, "comments: delete", err, "comment_id", c.Param("id"))
 		}
-		response.Internal(c, "comments: get", err, "comment_id", c.Param("id"))
-		return
-	}
-
-	// Moderators soft-delete (keeps an audit trail); the author removes it
-	// outright.
-	if h.isModerator(c) {
-		if err := h.repo.Hide(c.Request.Context(), comment.ID.String()); err != nil {
-			response.Internal(c, "comments: hide", err, "comment_id", comment.ID.String())
-			return
-		}
-	} else if comment.UserID.String() == userID {
-		if err := h.repo.Delete(c.Request.Context(), comment.ID.String()); err != nil {
-			response.Internal(c, "comments: delete", err, "comment_id", comment.ID.String())
-			return
-		}
-	} else {
-		response.Forbidden(c, "you can only delete your own comments")
 		return
 	}
 

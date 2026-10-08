@@ -13,6 +13,8 @@ import (
 var (
 	ErrNotFound = errors.New("collection not found")
 	ErrForbidden = errors.New("forbidden")
+	ErrPinNotFound = errors.New("pin not found")
+	ErrUserNotFound = errors.New("user not found")
 )
 
 type Repository interface {

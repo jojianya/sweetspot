@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"unicode/utf8"
@@ -14,7 +13,6 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
-	"github.com/jojianya/sweetspot247-backend/internal/platform/imaging"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 )
 
@@ -90,16 +88,6 @@ func (h *Handler) UpdateRole(c *gin.Context) {
 func (h *Handler) UpdateMe(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	current, err := h.service.GetByID(c.Request.Context(), userID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.NotFound(c, "user not found")
-			return
-		}
-		response.Internal(c, "user: get", err)
-		return
-	}
-
 	if err := c.Request.ParseMultipartForm(maxMultipartMem); err != nil {
 		response.BadRequest(c, "could not parse form")
 		return
@@ -112,80 +100,28 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 		return
 	}
 
-	var patch UpdateProfilePatch
-	patch.Username = input.username
-	patch.Socials = input.socials
-
-	var newAvatar *string
+	var avatar *multipart.FileHeader
 	if fhs := c.Request.MultipartForm.File["avatar"]; len(fhs) > 0 {
-		fh := fhs[0]
-		if fh.Size > maxAvatarSize {
-			response.BadRequest(c, "avatar exceeds 5MB")
-			return
-		}
-		src, err := fh.Open()
-		if err != nil {
-			response.Internal(c, "user: open avatar", err)
-			return
-		}
-		// Cap at max+1 so the length check below enforces actual bytes, not
-		// the client-claimed FileHeader.Size.
-		data, readErr := io.ReadAll(io.LimitReader(src, maxAvatarSize+1))
-		src.Close()
-		if readErr != nil {
-			response.Internal(c, "user: read avatar", readErr)
-			return
-		}
-		if len(data) > maxAvatarSize {
-			response.BadRequest(c, "avatar exceeds 5MB")
-			return
-		}
-		if err := imaging.Validate(data); err != nil {
-			response.BadRequest(c, err.Error())
-			return
-		}
-		processed, err := imaging.Avatar(data)
-		if err != nil {
-			response.Internal(c, "user: process avatar", err)
-			return
-		}
-		url, err := h.store.Save(processed, "webp")
-		if err != nil {
-			response.Internal(c, "user: save avatar", err)
-			return
-		}
-		newAvatar = &url
-		patch.AvatarURL = &url
+		avatar = fhs[0]
 	}
 
-	updated, err := h.service.UpdateProfile(c.Request.Context(), userID, patch)
+	updater := &profileUpdater{svc: h.service, store: h.store}
+	updated, err := updater.UpdateProfileWithAvatar(c.Request.Context(), userID, UpdateProfilePatch{
+		Username: input.username,
+		Socials:  input.socials,
+	}, avatar)
 	if err != nil {
-		if newAvatar != nil {
-			// Best-effort: the update already failed, so a delete failure only
-			// leaves an orphan file for the operator sweep.
-			if derr := h.store.Delete(*newAvatar); derr != nil {
-				slog.Warn("update profile cleanup: remove new avatar", "error", derr.Error(), "url", *newAvatar, "user_id", userID)
-			}
-		}
 		switch {
 		case errors.Is(err, ErrNotFound):
 			response.NotFound(c, "user not found")
-			return
 		case errors.Is(err, ErrUsernameTaken):
 			response.Conflict(c, "username already taken")
-			return
+		case errors.Is(err, ErrAvatarTooLarge), errors.Is(err, ErrAvatarInvalid):
+			response.BadRequest(c, err.Error())
 		default:
 			response.Internal(c, "user: update profile", err)
-			return
 		}
-	}
-
-	// The previous avatar file is superseded; drop it (best-effort: a delete
-	// failure leaves an orphan file, logged for the operator sweep).
-	if newAvatar != nil && current.AvatarURL != nil && *current.AvatarURL != *newAvatar {
-		if err := h.store.Delete(*current.AvatarURL); err != nil {
-			slog.Warn("update profile: remove old avatar", "error", err.Error(), "url", *current.AvatarURL, "user_id", userID)
-		}
+		return
 	}
 
 	response.OK(c, updated.ToPrivate())

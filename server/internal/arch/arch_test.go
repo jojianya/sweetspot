@@ -36,11 +36,9 @@ var allowModelPgtype = map[string]bool{
 	"reports":     true, // server/internal/modules/reports/model.go:7
 }
 
-// allowServicePgconn documents the 23505 Code checks in business logic.
-var allowServicePgconn = map[string]bool{
-	"auth":    true, // server/internal/modules/auth/service.go:9,47
-	"reports": true, // server/internal/modules/reports/service.go:7,32
-}
+// allowServicePgconn documents pgconn references in business logic.
+// Empty: repositories translate driver errors into domain errors.
+var allowServicePgconn = map[string]bool{}
 
 // allowServiceMiddleware documents user/service.go importing the HTTP layer.
 var allowServiceMiddleware = map[string]bool{
@@ -134,7 +132,7 @@ func TestServiceHasNoInfraImports(t *testing.T) {
 			switch {
 			case imp == "github.com/jackc/pgx/v5/pgconn":
 				if !allowServicePgconn[mod] {
-					t.Errorf("%s: new pgconn import in service (allowlisted: auth, reports)", path)
+					t.Errorf("%s: service must not import pgconn; repositories translate driver errors into domain errors", path)
 				}
 			case strings.Contains(imp, "internal/http/middleware"):
 				if !allowServiceMiddleware[mod] {

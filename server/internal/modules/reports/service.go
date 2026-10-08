@@ -2,9 +2,6 @@ package reports
 
 import (
 	"context"
-	"errors"
-
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Service interface {
@@ -27,15 +24,9 @@ func (s *service) PinExists(ctx context.Context, pinID string) (bool, error) {
 }
 
 func (s *service) CreateReport(ctx context.Context, pinID, reporterID, reason string) (Report, error) {
-	rep, err := s.repo.CreateReport(ctx, pinID, reporterID, reason)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return Report{}, ErrAlreadyReported
-		}
-		return Report{}, err
-	}
-	return rep, nil
+	// The repository translates the unique-violation driver error into
+	// ErrAlreadyReported; the service only passes domain errors through.
+	return s.repo.CreateReport(ctx, pinID, reporterID, reason)
 }
 
 func (s *service) ReviewReport(ctx context.Context, reportID, action, resolvedBy string) (Report, *string, error) {

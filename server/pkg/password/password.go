@@ -43,6 +43,23 @@ func init() {
 	absentAccountHashOnce.Do(initAbsentAccountHash)
 }
 
+// GetAbsentAccountHash returns the absent account hash, ensuring it is
+// initialized via sync.Once if not already done.
+func GetAbsentAccountHash() string {
+	absentAccountHashOnce.Do(initAbsentAccountHash)
+	return AbsentAccountHash
+}
+
+// EnsureAbsentAccountHashInitialized forces initialization of the absent
+// account hash. Returns an error if initialization failed.
+func EnsureAbsentAccountHashInitialized() error {
+	absentAccountHashOnce.Do(initAbsentAccountHash)
+	if absentAccountHashErr != nil {
+		return absentAccountHashErr
+	}
+	return nil
+}
+
 // GenerateAbsentAccountHash generates a bcrypt hash of a random value that no one can submit.
 // The caller (Login) compares passwords against this hash when the account does not exist,
 // so a missing account costs the same as a wrong password and the two cannot be told apart

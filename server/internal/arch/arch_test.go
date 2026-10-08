@@ -30,7 +30,6 @@ import (
 // allowModelPgtype documents the current pgtype leak in models. New model
 // files importing pgtype, or any model importing gin/platform/pgconn, fail.
 var allowModelPgtype = map[string]bool{
-	"pins":        true, // server/internal/modules/pins/model.go:6
 	"collections": true, // server/internal/modules/collections/model.go:6
 	"comments":    true, // server/internal/modules/comments/model.go:6
 	"reports":     true, // server/internal/modules/reports/model.go:7

@@ -34,7 +34,7 @@ func (m *mockCommentRepo) reset() {
 // the author and the only thing that can grant access is a moderation role.
 func hiddenPinOwnedBy(ownerID string) pins.PinDetail {
 	return pins.PinDetail{
-		Pin:      pins.Pin{ID: uuidOf(testUUID3), UserID: uuidOf(ownerID), IsHidden: true},
+		Pin:      pins.Pin{ID: testUUID3, UserID: ownerID, IsHidden: true},
 		Photos:   []pins.PinPhoto{},
 		Category: nil,
 	}

@@ -61,10 +61,10 @@ func TestDBFavoritesListPaginates(t *testing.T) {
 				t.Fatalf("offset %d: page larger than limit: %d", offset, len(page))
 			}
 			for _, e := range page {
-				if seen[e.Pin.ID.String()] {
-					t.Fatalf("offset %d: %s returned twice", offset, e.Pin.ID.String())
+				if seen[e.Pin.ID] {
+					t.Fatalf("offset %d: %s returned twice", offset, e.Pin.ID)
 				}
-				seen[e.Pin.ID.String()] = true
+				seen[e.Pin.ID] = true
 			}
 			if offset > saved+2 {
 				t.Fatal("paging did not terminate")
@@ -230,10 +230,10 @@ func TestDBCollectionPinsPaginate(t *testing.T) {
 				break
 			}
 			for _, e := range page {
-				if seen[e.Pin.ID.String()] {
-					t.Fatalf("offset %d: pin %s returned twice", offset, e.Pin.ID.String())
+				if seen[e.Pin.ID] {
+					t.Fatalf("offset %d: pin %s returned twice", offset, e.Pin.ID)
 				}
-				seen[e.Pin.ID.String()] = true
+				seen[e.Pin.ID] = true
 			}
 			if offset > total+2 {
 				t.Fatal("paging did not terminate")

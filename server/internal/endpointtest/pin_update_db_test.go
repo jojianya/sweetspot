@@ -47,10 +47,10 @@ func TestDBUpdatePinReturnsPhotoSet(t *testing.T) {
 		}
 		assertPhotoURLs(t, photos, []string{"new-a.webp", "new-b.webp", "new-c.webp"})
 		for i, ph := range photos {
-			if ph.PinID.String() != pinID {
-				t.Errorf("photo %d pin_id = %s, want %s", i, ph.PinID.String(), pinID)
+			if ph.PinID != pinID {
+				t.Errorf("photo %d pin_id = %s, want %s", i, ph.PinID, pinID)
 			}
-			if ph.ID.String() == "" || ph.CreatedAt.IsZero() {
+			if ph.ID == "" || ph.CreatedAt.IsZero() {
 				t.Errorf("photo %d is missing its row id or created_at: %+v", i, ph)
 			}
 			if int(ph.Position) != i {

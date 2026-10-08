@@ -62,7 +62,7 @@ func seedCoverPin(t *testing.T, ctx context.Context, repo pins.Repository, userI
 	if err != nil {
 		t.Fatalf("seed pin: %v", err)
 	}
-	return p.ID.String()
+	return p.ID
 }
 
 func coverSetup(t *testing.T) (ctx context.Context, pool *pgxpool.Pool, author string, categoryID int) {
@@ -119,7 +119,7 @@ func TestDBListEntriesIncludeViews(t *testing.T) {
 	if len(favs) != 1 || favs[0].Pin.Views != 7 { t.Fatalf("favorites views = %+v, want 7", favs) }
 	feed, err := socialRepo.Feed(ctx, follower, 50)
 	if err != nil { t.Fatalf("feed: %v", err) }
-	byID := coverByID(feed, func(e pins.PinListEntry) string { return e.ID.String() })
+	byID := coverByID(feed, func(e pins.PinListEntry) string { return e.ID })
 	if byID[pinID].Pin.Views != 7 { t.Fatalf("feed views = %d, want 7", byID[pinID].Pin.Views) }
 	cps, _, err := colRepo.ListPins(ctx, col.ID.String(), 50, 0)
 	if err != nil { t.Fatalf("collection pins: %v", err) }
@@ -135,7 +135,7 @@ func TestDBCoverPinsList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPins: %v", err)
 	}
-	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID.String() })
+	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID })
 	if len(byID) < 3 {
 		t.Fatalf("ListPins returned %d pins, want at least our 3", len(byID))
 	}
@@ -160,7 +160,7 @@ func TestDBCoverTrending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTrending: %v", err)
 	}
-	byID := coverByID(got, func(e pins.TrendingPin) string { return e.ID.String() })
+	byID := coverByID(got, func(e pins.TrendingPin) string { return e.ID })
 	for id, want := range map[string]string{a: coverThumbA, b: coverFullB, c: ""} {
 		entry, ok := byID[id]
 		if !ok {
@@ -197,7 +197,7 @@ func TestDBCoverCollectionPins(t *testing.T) {
 	if total != 3 {
 		t.Errorf("ListPins total = %d, want 3", total)
 	}
-	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID.String() })
+	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID })
 	for id, want := range map[string]string{a: coverThumbA, b: coverFullB, c: ""} {
 		entry, ok := byID[id]
 		if !ok {
@@ -283,7 +283,7 @@ func TestDBCoverFeed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Feed: %v", err)
 	}
-	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID.String() })
+	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID })
 	entry, ok := byID[a]
 	if !ok {
 		t.Fatalf("feed missing pin %s", a)

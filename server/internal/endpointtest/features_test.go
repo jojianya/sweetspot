@@ -64,7 +64,7 @@ func (s *stubPinRepo) UpdatePin(_ context.Context, _ string, userID string, isMo
 	if s.updateErr != nil {
 		return pins.Pin{}, nil, s.updateErr
 	}
-	if s.pinDetail.UserID.String() != userID && !isModerator {
+	if s.pinDetail.UserID != userID && !isModerator {
 		return pins.Pin{}, nil, pins.ErrForbidden
 	}
 	return s.updated, s.updatedPhotos, nil
@@ -417,11 +417,11 @@ func uuidOf(s string) (v pgtype.UUID) {
 }
 
 func pinDetailOf(userID string) pins.PinDetail {
-	return pins.PinDetail{Pin: pins.Pin{UserID: uuidOf(userID)}}
+	return pins.PinDetail{Pin: pins.Pin{UserID: userID}}
 }
 
 func pinListEntryOf(id string) pins.PinListEntry {
-	return pins.PinListEntry{Pin: pins.Pin{ID: uuidOf(id)}}
+	return pins.PinListEntry{Pin: pins.Pin{ID: id}}
 }
 
 func uuidStr() string { return testUUID3 }

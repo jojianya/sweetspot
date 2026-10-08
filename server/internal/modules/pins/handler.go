@@ -171,7 +171,7 @@ func (h *Handler) canViewHidden(c *gin.Context, pin PinDetail) bool {
 	if viewerID == "" {
 		return false
 	}
-	if viewerID == pin.UserID.String() {
+	if viewerID == pin.UserID {
 		return true
 	}
 
@@ -239,8 +239,8 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		return
 	}
 
-	if existing.UserID.String() != userID {
-		slog.Info("moderator deleted pin", "moderator_id", userID, "pin_id", id, "owner_id", existing.UserID.String())
+	if existing.UserID != userID {
+		slog.Info("moderator deleted pin", "moderator_id", userID, "pin_id", id, "owner_id", existing.UserID)
 	}
 
 	// Best-effort cleanup, matching what UpdatePin does for replaced photos. The
@@ -370,8 +370,8 @@ func (h *Handler) CreatePin(c *gin.Context) {
 		cover = photoURLs[0]
 	}
 	h.events.PinCreated(c.Request.Context(), Event{
-		ID:         pin.ID.String(),
-		UserID:     pin.UserID.String(),
+		ID:         pin.ID,
+		UserID:     pin.UserID,
 		Location:   fmt.Sprintf("POINT(%v %v)", lng, lat),
 		Caption:    pin.Caption,
 		CategoryID: pin.CategoryID,

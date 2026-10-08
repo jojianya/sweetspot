@@ -73,7 +73,7 @@ func TestRealDBTrendingAndBbox(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create pin %d: %v", i, err)
 		}
-		pinIDs = append(pinIDs, pin.ID.String())
+		pinIDs = append(pinIDs, pin.ID)
 	}
 
 	// Debug: check what pins exist and their locations
@@ -114,7 +114,7 @@ func TestRealDBTrendingAndBbox(t *testing.T) {
 
 	// Verify comment counts match expectations
 	for _, tp := range trending {
-		t.Logf("  pin %s: comments=%d score=%.2f", tp.Pin.ID.String(), tp.CommentCount, tp.Score)
+		t.Logf("  pin %s: comments=%d score=%.2f", tp.Pin.ID, tp.CommentCount, tp.Score)
 	}
 
 	// ListPins with bbox - should use pins_location_idx

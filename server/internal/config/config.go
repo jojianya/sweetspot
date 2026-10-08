@@ -127,7 +127,7 @@ func Load() *Config {
 		StorageBackend:     getEnv("STORAGE_BACKEND", "local"),
 		StorageBase:        getEnv("STORAGE_BASE_URL", defaultStorageBaseURL(port)),
 		QuarantineDir:      getEnv("QUARANTINE_DIR", "./quarantine"),
-		QuarantineDryRun:   getEnvBool("QUARANTINE_SWEEP_DRY_RUN", false),
+		QuarantineDryRun:   getEnvBool("QUARANTINE_SWEEP_DRY_RUN", true),
 		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
 		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),

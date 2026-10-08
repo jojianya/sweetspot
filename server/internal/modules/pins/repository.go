@@ -140,8 +140,13 @@ func (r *postgresRepository) DeletePin(ctx context.Context, id, userID string, i
 	return ErrForbidden
 }
 
+// categoryListHardCap bounds ListCategories. The table is an 8-row seed, so
+// the cap can never trigger on legitimate data; it only guards the endpoint
+// against returning an unbounded set if the seed ever grows.
+const categoryListHardCap = 100
+
 func (r *postgresRepository) ListCategories(ctx context.Context) ([]Category, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, name, slug FROM categories ORDER BY id`)
+	rows, err := r.pool.Query(ctx, `SELECT id, name, slug FROM categories ORDER BY id LIMIT $1`, categoryListHardCap)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +201,11 @@ type rowQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
+// pinPhotoListHardCap bounds scanPinPhotos. Validation caps uploads at
+// maxPhotosPerPin (5), so the cap can never trigger on legitimate data; it
+// only keeps a corrupted photo set from producing an unbounded result.
+const pinPhotoListHardCap = 10
+
 // scanPinPhotos reads a pin's photos in position order.
 func scanPinPhotos(ctx context.Context, q rowQuerier, pinID string) ([]PinPhoto, error) {
 	rows, err := q.Query(ctx, `
@@ -203,7 +213,8 @@ func scanPinPhotos(ctx context.Context, q rowQuerier, pinID string) ([]PinPhoto,
 		FROM pin_photos
 		WHERE pin_id = $1
 		ORDER BY position
-	`, pinID)
+		LIMIT $2
+	`, pinID, pinPhotoListHardCap)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +258,7 @@ func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, cate
 	query := pinListEntrySelect + `
 		  AND ($5::int IS NULL OR p.category_id = $5)
 		  AND ST_Intersects(p.location, ST_MakeEnvelope($1, $2, $3, $4, 4326))
-		ORDER BY p.created_at DESC
+		ORDER BY p.created_at DESC, p.id DESC
 		LIMIT $6`
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -294,7 +305,7 @@ func (r *postgresRepository) ListTrending(ctx context.Context, bbox [4]float64, 
 	// expects (minLng, minLat, maxLng, maxLat).
 	query := trendingPinSelect + `
 		  AND ST_Intersects(p.location, ST_MakeEnvelope($1, $2, $3, $4, 4326))
-		ORDER BY score DESC, p.created_at DESC
+		ORDER BY score DESC, p.created_at DESC, p.id DESC
 		LIMIT $5`
 
 	rows, err := r.pool.Query(ctx, query, bbox[1], bbox[0], bbox[3], bbox[2], limit)
@@ -330,7 +341,7 @@ func (r *postgresRepository) SearchPins(ctx context.Context, query string, limit
 
 	querySQL := pinListEntrySelect + `
 		  AND (p.caption ILIKE '%' || $1 || '%' OR u.username ILIKE '%' || $1 || '%')
-		ORDER BY p.created_at DESC
+		ORDER BY p.created_at DESC, p.id DESC
 		LIMIT $2`
 
 	rows, err := r.pool.Query(ctx, querySQL, escaped, limit)
@@ -345,7 +356,7 @@ func (r *postgresRepository) SearchPins(ctx context.Context, query string, limit
 func (r *postgresRepository) ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error) {
 	query := pinListEntrySelect + `
 		  AND p.user_id = $1
-		ORDER BY p.created_at DESC
+		ORDER BY p.created_at DESC, p.id DESC
 		LIMIT $2`
 
 	rows, err := r.pool.Query(ctx, query, userID, limit)

@@ -121,7 +121,7 @@ func (r *postgresRepository) ListReports(ctx context.Context, status *string, li
 		LEFT JOIN users u ON u.id = r.reporter_id
 		LEFT JOIN pins p ON p.id = r.pin_id
 		WHERE ($1::text IS NULL OR r.status = $1)
-		ORDER BY r.created_at DESC
+		ORDER BY r.created_at DESC, r.id DESC
 		LIMIT $2 OFFSET $3
 	`, status, limit, offset)
 	if err != nil {

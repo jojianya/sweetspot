@@ -73,7 +73,7 @@ func (r *postgresRepository) List(ctx context.Context, userID string, limit, off
 		`+database.CoverPhotoLateral+`
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE f.user_id = $1 AND p.is_hidden = false
-		ORDER BY f.created_at DESC
+		ORDER BY f.created_at DESC, f.pin_id DESC
 		LIMIT $2 OFFSET $3
 	`, userID, limit, offset)
 	if err != nil {
@@ -119,7 +119,7 @@ func (r *postgresRepository) ListIDs(ctx context.Context, userID string) ([]stri
 	rows, err := r.pool.Query(ctx, `
 		SELECT f.pin_id::text FROM favorites f
 		JOIN pins p ON p.id = f.pin_id AND p.is_hidden = false
-		WHERE f.user_id = $1 ORDER BY f.created_at DESC
+		WHERE f.user_id = $1 ORDER BY f.created_at DESC, f.pin_id DESC
 		LIMIT $2
 	`, userID, listIDsHardCap)
 	if err != nil {

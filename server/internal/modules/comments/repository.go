@@ -38,7 +38,8 @@ func (r *postgresRepository) PinExistsVisible(ctx context.Context, pinID string)
 
 // ListByPin returns a page of comments on the pin plus the total number of
 // visible comments, from COUNT(*) OVER () in the same query. Comments read
-// oldest-first, so the ordering column is stable across pages.
+// oldest-first, and the id tiebreaker keeps the sort stable across pages even
+// when two comments share a created_at.
 func (r *postgresRepository) ListByPin(ctx context.Context, pinID string, limit, offset int) ([]Comment, int, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT c.id, c.pin_id, c.user_id, c.body, c.is_hidden, c.created_at, u.username, u.avatar_url,
@@ -46,7 +47,7 @@ func (r *postgresRepository) ListByPin(ctx context.Context, pinID string, limit,
 		FROM comments c
 		LEFT JOIN users u ON u.id = c.user_id
 		WHERE c.pin_id = $1 AND c.is_hidden = false
-		ORDER BY c.created_at ASC
+		ORDER BY c.created_at ASC, c.id ASC
 		LIMIT $2 OFFSET $3
 	`, pinID, limit, offset)
 	if err != nil {

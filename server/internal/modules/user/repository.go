@@ -192,13 +192,14 @@ func (r *postgresRepository) CountUsers(ctx context.Context) (int, error) {
 // ListUsers returns a page of users plus the total count. The count comes
 // from COUNT(*) OVER () in the same query (P1.4), avoiding a separate
 // round-trip. If the page is empty we cannot read the window function's
-// result, so we fall back to CountUsers.
+// result, so we fall back to CountUsers. The id tiebreaker keeps the sort
+// stable across pages when two users share a created_at.
 func (r *postgresRepository) ListUsers(ctx context.Context, limit, offset int) ([]User, int, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at,
 		       COUNT(*) OVER () AS total
 		FROM users
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {

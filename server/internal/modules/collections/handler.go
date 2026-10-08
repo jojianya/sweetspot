@@ -133,7 +133,7 @@ func (h *Handler) Get(c *gin.Context) {
 
 	// Private collections exist only for their owner: anyone else gets 404,
 	// the same convention as hidden pins, so privacy is not enumerable.
-	if collection.IsPrivate && collection.UserID.String() != middleware.GetUserID(c) {
+	if collection.IsPrivate && collection.UserID != middleware.GetUserID(c) {
 		response.NotFound(c, "collection not found")
 		return
 	}
@@ -170,7 +170,7 @@ func (h *Handler) requireOwner(c *gin.Context) (Collection, bool) {
 	}
 
 	userID := middleware.GetUserID(c)
-	if collection.UserID.String() != userID {
+	if collection.UserID != userID {
 		// Only non-owners reach the role lookup, keeping it off the common path.
 		if !users.IsModerator(h.roles, c) {
 			response.Forbidden(c, "you can only modify your own collections")

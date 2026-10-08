@@ -196,18 +196,18 @@ func TestDBCollectionPinsPaginate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = repo.Delete(context.Background(), col.ID.String(), user, true) })
+	t.Cleanup(func() { _ = repo.Delete(context.Background(), col.ID, user, true) })
 
 	const total = 5
 	for i := 0; i < total; i++ {
 		pinID := seedDBPin(t, ctx, pool, user, categoryID)
-		if err := repo.AddPin(ctx, col.ID.String(), pinID); err != nil {
+		if err := repo.AddPin(ctx, col.ID, pinID); err != nil {
 			t.Fatalf("add pin %d: %v", i, err)
 		}
 	}
 
 	t.Run("TotalCountsEveryMatch", func(t *testing.T) {
-		page, got, err := repo.ListPins(ctx, col.ID.String(), 2, 0)
+		page, got, err := repo.ListPins(ctx, col.ID, 2, 0)
 		if err != nil {
 			t.Fatalf("ListPins: %v", err)
 		}
@@ -222,7 +222,7 @@ func TestDBCollectionPinsPaginate(t *testing.T) {
 	t.Run("PagesCoverEveryPinOnce", func(t *testing.T) {
 		seen := map[string]bool{}
 		for offset := 0; ; offset += 2 {
-			page, _, err := repo.ListPins(ctx, col.ID.String(), 2, offset)
+			page, _, err := repo.ListPins(ctx, col.ID, 2, offset)
 			if err != nil {
 				t.Fatalf("offset %d: ListPins: %v", offset, err)
 			}

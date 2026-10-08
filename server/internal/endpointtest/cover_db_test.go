@@ -111,8 +111,8 @@ func TestDBListEntriesIncludeViews(t *testing.T) {
 	if err := socialRepo.Follow(ctx, follower, author); err != nil { t.Fatalf("follow: %v", err) }
 	col, err := colRepo.Create(ctx, author, "viewed", nil, false)
 	if err != nil { t.Fatalf("create collection: %v", err) }
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID.String(), author, true) })
-	if err := colRepo.AddPin(ctx, col.ID.String(), pinID); err != nil { t.Fatalf("add pin: %v", err) }
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID, author, true) })
+	if err := colRepo.AddPin(ctx, col.ID, pinID); err != nil { t.Fatalf("add pin: %v", err) }
 
 	favs, _, err := favRepo.List(ctx, author, 50, 0)
 	if err != nil { t.Fatalf("favorites list: %v", err) }
@@ -121,7 +121,7 @@ func TestDBListEntriesIncludeViews(t *testing.T) {
 	if err != nil { t.Fatalf("feed: %v", err) }
 	byID := coverByID(feed, func(e pins.PinListEntry) string { return e.ID })
 	if byID[pinID].Pin.Views != 7 { t.Fatalf("feed views = %d, want 7", byID[pinID].Pin.Views) }
-	cps, _, err := colRepo.ListPins(ctx, col.ID.String(), 50, 0)
+	cps, _, err := colRepo.ListPins(ctx, col.ID, 50, 0)
 	if err != nil { t.Fatalf("collection pins: %v", err) }
 	if len(cps) != 1 || cps[0].Pin.Views != 7 { t.Fatalf("collection pins views = %+v, want 7", cps) }
 }
@@ -183,14 +183,14 @@ func TestDBCoverCollectionPins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID.String(), author, true) })
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID, author, true) })
 	for _, pid := range []string{a, b, c} {
-		if err := colRepo.AddPin(ctx, col.ID.String(), pid); err != nil {
+		if err := colRepo.AddPin(ctx, col.ID, pid); err != nil {
 			t.Fatalf("add pin: %v", err)
 		}
 	}
 
-	got, total, err := colRepo.ListPins(ctx, col.ID.String(), 50, 0)
+	got, total, err := colRepo.ListPins(ctx, col.ID, 50, 0)
 	if err != nil {
 		t.Fatalf("ListPins: %v", err)
 	}
@@ -220,26 +220,26 @@ func TestDBCoverCollectionList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), full.ID.String(), author, true) })
-	if err := colRepo.AddPin(ctx, full.ID.String(), a); err != nil {
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), full.ID, author, true) })
+	if err := colRepo.AddPin(ctx, full.ID, a); err != nil {
 		t.Fatalf("add pin: %v", err)
 	}
 	empty, err := colRepo.Create(ctx, author, "empty", nil, false)
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), empty.ID.String(), author, true) })
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), empty.ID, author, true) })
 
 	got, err := colRepo.ListByUser(ctx, author)
 	if err != nil {
 		t.Fatalf("ListByUser: %v", err)
 	}
-	byID := coverByID(got, func(e collections.Collection) string { return e.ID.String() })
-	if byID[full.ID.String()].CoverURL != coverThumbA {
-		t.Errorf("scalar cover = %q, want first thumbnail %q", byID[full.ID.String()].CoverURL, coverThumbA)
+	byID := coverByID(got, func(e collections.Collection) string { return e.ID })
+	if byID[full.ID].CoverURL != coverThumbA {
+		t.Errorf("scalar cover = %q, want first thumbnail %q", byID[full.ID].CoverURL, coverThumbA)
 	}
-	if byID[empty.ID.String()].CoverURL != "" {
-		t.Errorf("empty collection cover = %q, want empty", byID[empty.ID.String()].CoverURL)
+	if byID[empty.ID].CoverURL != "" {
+		t.Errorf("empty collection cover = %q, want empty", byID[empty.ID].CoverURL)
 	}
 }
 

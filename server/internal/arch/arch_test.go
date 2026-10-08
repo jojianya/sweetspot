@@ -42,10 +42,9 @@ var allowServicePgconn = map[string]bool{
 	"reports": true, // server/internal/modules/reports/service.go:7,32
 }
 
-// allowServiceMiddleware documents user/service.go importing the HTTP layer.
-var allowServiceMiddleware = map[string]bool{
-	"user": true, // server/internal/modules/user/service.go:6 (SessionState)
-}
+// allowServiceMiddleware documents services importing the HTTP layer.
+// Empty: no service may import internal/http/middleware.
+var allowServiceMiddleware = map[string]bool{}
 
 func moduleDirs(t *testing.T) []string {
 	t.Helper()
@@ -138,7 +137,7 @@ func TestServiceHasNoInfraImports(t *testing.T) {
 				}
 			case strings.Contains(imp, "internal/http/middleware"):
 				if !allowServiceMiddleware[mod] {
-					t.Errorf("%s: new http/middleware import in service (allowlisted: user)", path)
+					t.Errorf("%s: service must not import http/middleware (%s)", path, imp)
 				}
 			case strings.Contains(imp, "gin-gonic/gin"):
 				t.Errorf("%s: service must not import gin (%s)", path, imp)

@@ -71,6 +71,10 @@ func (h *ResetHandler) Request(c *gin.Context) {
 
 	link := h.baseURL + "/reset-password?token=" + raw
 	go func() {
+		// Deliberately not the request context: it is cancelled as soon as the
+		// handler responds, which would abort a slow send. A detached context
+		// with its own timeout lets the delivery outlive the request without
+		// hanging forever.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := h.mailer.SendPasswordReset(ctx, u.Email, link); err != nil {

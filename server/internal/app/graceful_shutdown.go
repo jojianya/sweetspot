@@ -41,8 +41,11 @@ func serve(srv *http.Server) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		// A graceful stop is the success path: report nil so the process does
-		// not log a server error on every SIGTERM.
-		_ = srv.Shutdown(shutdownCtx)
+		// not log a server error on every SIGTERM. A shutdown failure (e.g. the
+		// 5s window expiring) is still worth a warning, not a server error.
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("graceful shutdown incomplete", "error", err.Error())
+		}
 		return nil
 	}
 }

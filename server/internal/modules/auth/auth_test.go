@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -321,104 +320,47 @@ func TestAbsentAccountHashCostMatchesRealHash(t *testing.T) {
 	}
 }
 
-// TestAbsentAccountHashLoginPaths verifies that the unknown-email login
-// path and the wrong-password path return the same error and HTTP status,
-// so an attacker cannot distinguish between "no such account" and
-// "wrong password" by response time or error message.
-
-
-
-// TestAbsentAccountHashLoginPaths verifies that the unknown-email login
-// path and the wrong-password path return the same error and HTTP status,
-// so an attacker cannot distinguish between "no such account" and
-// "wrong password" by response time or error message.
-// It uses the auth service with a stub repository to avoid needing a running server.
-// TestAbsentAccountHashLoginPaths verifies that the unknown-email login
-// path and the wrong-password path return the same error and HTTP status,
-// so an attacker cannot distinguish between "no such account" and
-// "wrong password" by response time or error message.
-// It uses the auth service with a stub repository to avoid needing a running server.
+// TestAbsentAccountHashLoginPaths verifies that the unknown-email login path
+// and the wrong-password path return the same error, so an attacker cannot
+// distinguish between "no such account" and "wrong password" by response
+// message. It exercises the real auth service with a stub user service (fake
+// dependency, real thing under test).
 func TestAbsentAccountHashLoginPaths(t *testing.T) {
-	// Use a stub user service with no users registered
-	svc := &stubUserService{
-		users:      map[string]users.User{},
-		byEmail:    map[string]users.User{},
-		byUsername: map[string]users.User{},
+	hash, err := password.Hash("correct_password")
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
 	}
+	svc := newTestService(&stubUserService{
+		users: map[string]users.User{
+			"usr_1": {ID: "usr_1", Email: "test@example.com", Username: "testuser", PasswordHash: hash},
+		},
+		byEmail: map[string]users.User{
+			"test@example.com": {ID: "usr_1", Email: "test@example.com", Username: "testuser", PasswordHash: hash},
+		},
+		byUsername: map[string]users.User{},
+	})
 
-	// Test 1: Unknown email login - should return error
-	_, err := svc.Login(context.Background(), LoginRequest{
+	_, _, unknownErr := svc.Login(context.Background(), LoginRequest{
 		Identifier: "nonexistent@example.com",
 		Password:   "password123",
 	})
-	if err == nil {
-		t.Error("expected error for unknown email, got nil")
-	} else {
-		t.Logf("got expected error for unknown email: %v", err)
+	if !errors.Is(unknownErr, ErrInvalidCredentials) {
+		t.Fatalf("unknown email err = %v, want ErrInvalidCredentials", unknownErr)
 	}
 
-	// Test 2: Wrong password - register a user first, then try wrong password
-	_, err = svc.Register(context.Background(), RegisterRequest{
-		Email:    "test@example.com",
-		Password: "correct_password",
-		Username: "testuser",
-	})
-	if err != nil {
-		t.Fatalf("failed to register test user: %v", err)
-	}
-
-	// Now try wrong password for the registered user
-	_, err = svc.Login(context.Background(), LoginRequest{
+	_, _, wrongPwErr := svc.Login(context.Background(), LoginRequest{
 		Identifier: "test@example.com",
 		Password:   "wrong_password",
 	})
-	if err == nil {
-		t.Error("expected error for wrong password, got nil")
-	} else {
-		t.Logf("got expected error for wrong password: %v", err)
+	if !errors.Is(wrongPwErr, ErrInvalidCredentials) {
+		t.Fatalf("wrong password err = %v, want ErrInvalidCredentials", wrongPwErr)
 	}
 
-	// Test 3: Verify both error paths are consistent for timing safety
-	err1 := fmt.Errorf("invalid email, username, or password")
-	err2 := fmt.Errorf("invalid email, username, or password")
-	if err1.Error() != err2.Error() {
-		t.Logf("Both error messages should be identical for timing safety: got %q and %q",
-			err1.Error(), err2.Error())
+	if unknownErr.Error() != wrongPwErr.Error() {
+		t.Fatalf("login errors differ: %q vs %q; they must be identical", unknownErr, wrongPwErr)
 	}
 }
 
-
-func (s *stubUserService) Login(_ context.Context, req LoginRequest) (users.User, error) {
-	// Check if user exists by email
-	u, ok := s.byEmail[req.Identifier]
-	if !ok {
-		return users.User{}, fmt.Errorf("invalid email, username, or password")
-	}
-	// Check password
-	if !password.Verify(req.Password, u.PasswordHash) {
-		return users.User{}, fmt.Errorf("invalid email, username, or password")
-	}
-	return u, nil
-}
-
-func (s *stubUserService) Register(_ context.Context, req RegisterRequest) (users.User, error) {
-	// Check if user already exists
-	if _, ok := s.byEmail[req.Email]; ok {
-		return users.User{}, fmt.Errorf("email already taken")
-	}
-	// Create user
-	ph, _ := password.Hash(req.Password)
-	u := users.User{
-		ID:        "usr_new",
-		Email:     req.Email,
-		Username:  req.Username,
-		PasswordHash: ph,
-	}
-	// Store user
-	s.byEmail[req.Email] = u
-	s.users[u.ID] = u
-	return u, nil
-}
 // TestAbsentAccountHashGet returns the absent account hash and validates it.
 // It fails if the hash is empty or bcrypt.Cost can't read it.
 func TestAbsentAccountHashGet(t *testing.T) {

@@ -407,11 +407,12 @@ func (s *stubUserService) Register(_ context.Context, req RegisterRequest) (user
 		return users.User{}, fmt.Errorf("email already taken")
 	}
 	// Create user
+	ph, _ := password.Hash(req.Password)
 	u := users.User{
 		ID:        "usr_new",
 		Email:     req.Email,
 		Username:  req.Username,
-		PasswordHash: password.Hash(req.Password)[0],
+		PasswordHash: ph,
 	}
 	// Store user
 	s.byEmail[req.Email] = u

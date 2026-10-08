@@ -1,3 +1,3 @@
-FROM nginx:1.28-alpine
+FROM nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
 # openssl CLI is needed by the first-boot bootstrap script.
 RUN apk add --no-cache openssl curl

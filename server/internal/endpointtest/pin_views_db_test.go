@@ -55,6 +55,12 @@ func setupViews(t *testing.T, bl *cache.Blacklist, checker ...middleware.Session
 	if err != nil {
 		t.Fatalf("seed pin: %v", err)
 	}
+	// Hard-delete the pin in cleanup so the fixture never leaves an orphaned
+	// visible pin behind (the author user is deleted, and pins.user_id is
+	// ON DELETE SET NULL).
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM pins WHERE id = $1`, p.ID)
+	})
 	h := pins.NewHandler(repo, nil, nil, nil)
 
 	gin.SetMode(gin.TestMode)

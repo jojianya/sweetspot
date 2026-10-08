@@ -63,6 +63,10 @@ services:
       - proxy
 
   client:
+    # Distinct tag from the dev compose file's sweetspot-client-dev: sharing
+    # the implicit <project>-client tag let a prod build overwrite the dev
+    # image (see the same note on the server below).
+    image: sweetspot-client-prod
     build:
       context: ./client
       dockerfile: Dockerfile
@@ -86,6 +90,11 @@ services:
       - server
 
   server:
+    # Distinct tag from the dev compose file's sweetspot-server-dev: without
+    # it both files resolve ./server builds into the implicit <project>
+    # image and a prod build replaces the dev image (then `up -d` runs the
+    # prod CMD under the dev bind mount: exec: "./server": no such file).
+    image: sweetspot-server-prod
     build:
       context: ./server
       dockerfile: deployments/docker/server.Dockerfile

@@ -1,9 +1,3 @@
-// Package password wraps bcrypt, which has a hard 72-byte input limit.
-//
-// The limit is in bytes, while the length validation on the request DTO counts
-// runes. Those disagree for any non-ASCII password, so a password can pass
-// validation and then be rejected by bcrypt. This package owns the byte limit
-// and the validation that has to match it, so the two cannot drift.
 package password
 
 import (
@@ -21,22 +15,16 @@ const bcryptCost = 12
 // so a missing account costs the same as a wrong password and the two
 // cannot be told apart by response time. It must have cost >= 12
 // to match the timing of real password comparisons.
-var AbsentAccountHash string
+var absentAccountHash string
 
-// AbsentAccountHash is generated lazily once, on first use, using the same
-// bcrypt cost as real passwords. This avoids generating it if the package
-// is imported but never used for login (e.g. in test environments without
-// a database).
 var absentAccountHashOnce sync.Once
-var absentAccountHashErr error
 
 func initAbsentAccountHash() {
 	hash, err := GenerateAbsentAccountHash()
 	if err != nil {
-		absentAccountHashErr = err
 		return
 	}
-	AbsentAccountHash = hash
+	absentAccountHash = hash
 }
 
 func init() {
@@ -44,18 +32,19 @@ func init() {
 }
 
 // GetAbsentAccountHash returns the absent account hash, ensuring it is
-// initialized via sync.Once if not already done.
+// initialized via sync.Once if not already done. This prevents a read
+// before the first Once.Do from returning an empty/zero value.
 func GetAbsentAccountHash() string {
-	absentAccountHashOnce.Do(initAbsentAccountHash)
-	return AbsentAccountHash
+	absentAccountHashOnce.Do(func() {})
+	return absentAccountHash
 }
 
 // EnsureAbsentAccountHashInitialized forces initialization of the absent
 // account hash. Returns an error if initialization failed.
 func EnsureAbsentAccountHashInitialized() error {
-	absentAccountHashOnce.Do(initAbsentAccountHash)
-	if absentAccountHashErr != nil {
-		return absentAccountHashErr
+	absentAccountHashOnce.Do(func() {})
+	if absentAccountHash == "" {
+		return fmt.Errorf("absent account hash not initialized")
 	}
 	return nil
 }

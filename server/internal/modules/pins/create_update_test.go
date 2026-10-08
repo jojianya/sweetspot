@@ -139,7 +139,11 @@ func TestCreatePinRejectsUnknownUser(t *testing.T) {
 	repo := baseCreateRepo()
 	repo.userExists = false
 	r := newCreateHarness(t, repo, t.TempDir())
-	req := multipartBody(t, http.MethodPost, "/pins", map[string]string{"lat": "10"}, nil)
+	// Fully valid fields: input validation passes, so the request reaches the
+	// account check and the unknown user answers 401.
+	req := multipartBody(t, http.MethodPost, "/pins",
+		map[string]string{"lat": "10", "lng": "10", "category_id": "1"},
+		map[string][]byte{"a.jpg": validJPEG(t)})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {

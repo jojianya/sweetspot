@@ -2,8 +2,8 @@ package pins
 
 import (
 	"bytes"
+	"errors"
 	"mime/multipart"
-	"net/http"
 	"testing"
 )
 
@@ -39,14 +39,14 @@ func TestProcessPhotosRejectsSpoofedSize(t *testing.T) {
 	// Spoof: claim a tiny size while the payload is oversize.
 	files[0].Size = 1
 
-	_, perr := processPhotos(files)
-	if perr == nil {
-		t.Fatalf("processPhotos accepted spoofed-size oversize payload, want 400")
+	_, err = processPhotos(files)
+	if err == nil {
+		t.Fatalf("processPhotos accepted spoofed-size oversize payload, want ErrPhotoTooLarge")
 	}
-	if perr.status != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", perr.status)
+	if !errors.Is(err, ErrPhotoTooLarge) {
+		t.Fatalf("err = %v, want ErrPhotoTooLarge", err)
 	}
-	if perr.msg != "one or more photos exceed 10MB" {
-		t.Fatalf("msg = %q, want size error", perr.msg)
+	if err.Error() != "one or more photos exceed 10MB" {
+		t.Fatalf("msg = %q, want size error", err.Error())
 	}
 }

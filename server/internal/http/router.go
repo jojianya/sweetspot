@@ -38,7 +38,11 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	// and X-Forwarded-For is ignored, which is spoof-safe but means per-IP
 	// rate limits are shared per proxy behind the Next rewrite (which does not
 	// forward X-Forwarded-For). Only list proxy addresses/CIDRs you operate.
-	_ = r.SetTrustedProxies(cfg.TrustedProxies)
+	// The list is validated in config.Load, so a failure here means a bug in
+	// that validation; refuse to boot rather than run with the wrong peers.
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		panic("set trusted proxies: " + err.Error())
+	}
 	r.Use(middleware.Recover(rep), middleware.RequestLogger(lg, "/health"), middleware.ReportErrors(rep), middleware.CORS(cfg.CORSAllowedOrigins...), middleware.SecurityHeaders())
 
 	r.Static("/uploads", "./uploads")

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"strings"
 	"unicode/utf8"
 
@@ -158,7 +159,11 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 	updated, err := h.service.UpdateProfile(c.Request.Context(), userID, patch)
 	if err != nil {
 		if newAvatar != nil {
-			_ = h.store.Delete(*newAvatar)
+			// Best-effort: the update already failed, so a delete failure only
+			// leaves an orphan file for the operator sweep.
+			if derr := h.store.Delete(*newAvatar); derr != nil {
+				slog.Warn("update profile cleanup: remove new avatar", "error", derr.Error(), "url", *newAvatar, "user_id", userID)
+			}
 		}
 		switch {
 		case errors.Is(err, ErrNotFound):
@@ -173,9 +178,12 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 		}
 	}
 
-	// The previous avatar file is superseded; drop it (best-effort).
+	// The previous avatar file is superseded; drop it (best-effort: a delete
+	// failure leaves an orphan file, logged for the operator sweep).
 	if newAvatar != nil && current.AvatarURL != nil && *current.AvatarURL != *newAvatar {
-		_ = h.store.Delete(*current.AvatarURL)
+		if err := h.store.Delete(*current.AvatarURL); err != nil {
+			slog.Warn("update profile: remove old avatar", "error", err.Error(), "url", *current.AvatarURL, "user_id", userID)
+		}
 	}
 
 	response.OK(c, updated.ToPrivate())

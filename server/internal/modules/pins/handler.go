@@ -427,9 +427,15 @@ func (h *Handler) savePhotos(validated []validatedFile) (photoURLs, thumbURLs []
 	type stored struct{ full, thumb string }
 	written := make([]stored, 0, len(validated))
 	cleanup := func() {
+		// Best-effort: the create already failed, so a delete failure only
+		// leaves an orphan file; log it for the operator sweep.
 		for _, s := range written {
-			_ = h.store.Delete(s.full)
-			_ = h.store.Delete(s.thumb)
+			if err := h.store.Delete(s.full); err != nil {
+				slog.Warn("create pin cleanup: remove photo", "error", err.Error(), "url", s.full)
+			}
+			if err := h.store.Delete(s.thumb); err != nil {
+				slog.Warn("create pin cleanup: remove thumbnail", "error", err.Error(), "url", s.thumb)
+			}
 		}
 	}
 
@@ -616,10 +622,15 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 	updated, photos, err := h.repo.UpdatePin(c.Request.Context(), id, userID, isModerator, patch)
 	if err != nil {
 		// The new photos are already on disk; remove them so a failed update
-		// cannot orphan files.
+		// cannot orphan files. Best-effort: the update already failed, so a
+		// delete failure only leaves an orphan file for the operator sweep.
 		for _, ph := range patch.Photos {
-			_ = h.store.Delete(ph.PhotoURL)
-			_ = h.store.Delete(ph.ThumbnailURL)
+			if derr := h.store.Delete(ph.PhotoURL); derr != nil {
+				slog.Warn("update pin cleanup: remove photo", "error", derr.Error(), "url", ph.PhotoURL, "pin_id", id)
+			}
+			if derr := h.store.Delete(ph.ThumbnailURL); derr != nil {
+				slog.Warn("update pin cleanup: remove thumbnail", "error", derr.Error(), "url", ph.ThumbnailURL, "pin_id", id)
+			}
 		}
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
@@ -636,8 +647,12 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 	// Best-effort cleanup of the replaced photos now that the swap succeeded.
 	if patch.Photos != nil {
 		for _, ph := range existing.Photos {
-			_ = h.store.Delete(ph.PhotoURL)
-			_ = h.store.Delete(ph.ThumbnailURL)
+			if err := h.store.Delete(ph.PhotoURL); err != nil {
+				slog.Warn("update pin: remove replaced photo", "error", err.Error(), "url", ph.PhotoURL, "pin_id", id)
+			}
+			if err := h.store.Delete(ph.ThumbnailURL); err != nil {
+				slog.Warn("update pin: remove replaced thumbnail", "error", err.Error(), "url", ph.ThumbnailURL, "pin_id", id)
+			}
 		}
 	}
 

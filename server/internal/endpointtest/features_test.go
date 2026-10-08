@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 	apphttp "github.com/jojianya/sweetspot247-backend/internal/http"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
@@ -409,13 +408,6 @@ func authHeaders(token string) map[string]string {
 	return map[string]string{"Authorization": "Bearer " + token}
 }
 
-func uuidOf(s string) (v pgtype.UUID) {
-	if err := v.Scan(s); err != nil {
-		panic(err)
-	}
-	return v
-}
-
 func pinDetailOf(userID string) pins.PinDetail {
 	return pins.PinDetail{Pin: pins.Pin{UserID: userID}}
 }
@@ -750,7 +742,7 @@ func TestPinView(t *testing.T) {
 
 func TestCommentEndpoints(t *testing.T) {
 	commentRepo := &mockCommentRepo{
-		get: comments.Comment{PinID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), Body: "nice"},
+		get: comments.Comment{PinID: testUUID1, UserID: testUUID1, Body: "nice"},
 	}
 	usersSvc := newUsersSvc()
 	// The moderator path reads the role from the database, so the privilege has

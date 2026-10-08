@@ -21,7 +21,7 @@ import (
 
 // commentOwnedBy builds a comment authored by userID.
 func commentOwnedBy(userID string) comments.Comment {
-	return comments.Comment{ID: uuidOf(testUUID3), PinID: uuidOf(testUUID1), UserID: uuidOf(userID), Body: "nice"}
+	return comments.Comment{ID: testUUID3, PinID: testUUID1, UserID: userID, Body: "nice"}
 }
 
 // reset clears the call counters so a single test can assert on several

@@ -169,10 +169,10 @@ func TestDBCommentsListPaginates(t *testing.T) {
 				break
 			}
 			for _, c := range page {
-				if seen[c.ID.String()] {
-					t.Fatalf("offset %d: comment %s returned twice", offset, c.ID.String())
+				if seen[c.ID] {
+					t.Fatalf("offset %d: comment %s returned twice", offset, c.ID)
 				}
-				seen[c.ID.String()] = true
+				seen[c.ID] = true
 			}
 			if offset > total+2 {
 				t.Fatal("paging did not terminate")

@@ -30,8 +30,7 @@ import (
 // allowModelPgtype documents the current pgtype leak in models. New model
 // files importing pgtype, or any model importing gin/platform/pgconn, fail.
 var allowModelPgtype = map[string]bool{
-	"comments": true, // server/internal/modules/comments/model.go:6
-	"reports":  true, // server/internal/modules/reports/model.go:7
+	"reports": true, // server/internal/modules/reports/model.go:7
 }
 
 // allowServicePgconn documents the 23505 Code checks in business logic.

@@ -7,7 +7,9 @@
 package password
 
 import (
+	"crypto/rand"
 	"fmt"
+	"sync"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -15,29 +17,48 @@ import (
 const bcryptCost = 12
 
 // AbsentAccountHash is a bcrypt hash of a value no one can submit.
-// It is generated at init time using the same cost as real passwords,
+// It is generated lazily once, on first use, using the same cost as real passwords,
 // so a missing account costs the same as a wrong password and the two
 // cannot be told apart by response time. It must have cost >= 12
 // to match the timing of real password comparisons.
 var AbsentAccountHash string
 
-func init() {
+// AbsentAccountHash is generated lazily once, on first use, using the same
+// bcrypt cost as real passwords. This avoids generating it if the package
+// is imported but never used for login (e.g. in test environments without
+// a database).
+var absentAccountHashOnce sync.Once
+var absentAccountHashErr error
+
+func initAbsentAccountHash() {
 	hash, err := GenerateAbsentAccountHash()
 	if err != nil {
-		panic(fmt.Sprintf("failed to generate AbsentAccountHash: %v", err))
+		absentAccountHashErr = err
+		return
 	}
 	AbsentAccountHash = hash
 }
 
-// GenerateAbsentAccountHash generates a bcrypt hash of a value that no one can submit.
+func init() {
+	absentAccountHashOnce.Do(initAbsentAccountHash)
+}
+
+// GenerateAbsentAccountHash generates a bcrypt hash of a random value that no one can submit.
 // The caller (Login) compares passwords against this hash when the account does not exist,
 // so a missing account costs the same as a wrong password and the two cannot be told apart
 // by response time. The cost matches real password hashing so the timing channel is preserved.
 func GenerateAbsentAccountHash() (string, error) {
-	if len("anything") > MaxLen {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	// The random byte string is chosen so it will never match a real password,
+	// ensuring the timing-safe login guard works correctly.
+	randomStr := string(buf)
+	if len(randomStr) > MaxLen {
 		return "", ErrTooLong
 	}
-	return Hash("anything")
+	return Hash(randomStr)
 }
 
 // MaxLen is the longest password bcrypt will accept, in bytes. Anything longer

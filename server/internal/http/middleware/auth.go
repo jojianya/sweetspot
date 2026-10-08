@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
+	"github.com/jojianya/sweetspot247-backend/internal/session"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 )
 
@@ -22,11 +23,10 @@ const (
 )
 
 // SessionState is the per-user session posture: the instant before which
-// tokens are dead, plus the live role for context caching.
-type SessionState struct {
-	ValidAfter time.Time
-	Role       string
-}
+// tokens are dead, plus the live role for context caching. It is an alias
+// for session.State so existing middleware callers keep working while the
+// type itself lives outside the HTTP layer.
+type SessionState = session.State
 
 // SessionChecker loads the session posture for a user. Implemented by the
 // user service (one indexed PK lookup); the middleware passes it through

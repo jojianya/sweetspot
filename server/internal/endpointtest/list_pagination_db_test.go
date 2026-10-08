@@ -61,10 +61,10 @@ func TestDBFavoritesListPaginates(t *testing.T) {
 				t.Fatalf("offset %d: page larger than limit: %d", offset, len(page))
 			}
 			for _, e := range page {
-				if seen[e.Pin.ID.String()] {
-					t.Fatalf("offset %d: %s returned twice", offset, e.Pin.ID.String())
+				if seen[e.Pin.ID] {
+					t.Fatalf("offset %d: %s returned twice", offset, e.Pin.ID)
 				}
-				seen[e.Pin.ID.String()] = true
+				seen[e.Pin.ID] = true
 			}
 			if offset > saved+2 {
 				t.Fatal("paging did not terminate")
@@ -169,10 +169,10 @@ func TestDBCommentsListPaginates(t *testing.T) {
 				break
 			}
 			for _, c := range page {
-				if seen[c.ID.String()] {
-					t.Fatalf("offset %d: comment %s returned twice", offset, c.ID.String())
+				if seen[c.ID] {
+					t.Fatalf("offset %d: comment %s returned twice", offset, c.ID)
 				}
-				seen[c.ID.String()] = true
+				seen[c.ID] = true
 			}
 			if offset > total+2 {
 				t.Fatal("paging did not terminate")
@@ -196,18 +196,18 @@ func TestDBCollectionPinsPaginate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = repo.Delete(context.Background(), col.ID.String(), user, true) })
+	t.Cleanup(func() { _ = repo.Delete(context.Background(), col.ID, user, true) })
 
 	const total = 5
 	for i := 0; i < total; i++ {
 		pinID := seedDBPin(t, ctx, pool, user, categoryID)
-		if err := repo.AddPin(ctx, col.ID.String(), pinID); err != nil {
+		if err := repo.AddPin(ctx, col.ID, pinID); err != nil {
 			t.Fatalf("add pin %d: %v", i, err)
 		}
 	}
 
 	t.Run("TotalCountsEveryMatch", func(t *testing.T) {
-		page, got, err := repo.ListPins(ctx, col.ID.String(), 2, 0)
+		page, got, err := repo.ListPins(ctx, col.ID, 2, 0)
 		if err != nil {
 			t.Fatalf("ListPins: %v", err)
 		}
@@ -222,7 +222,7 @@ func TestDBCollectionPinsPaginate(t *testing.T) {
 	t.Run("PagesCoverEveryPinOnce", func(t *testing.T) {
 		seen := map[string]bool{}
 		for offset := 0; ; offset += 2 {
-			page, _, err := repo.ListPins(ctx, col.ID.String(), 2, offset)
+			page, _, err := repo.ListPins(ctx, col.ID, 2, offset)
 			if err != nil {
 				t.Fatalf("offset %d: ListPins: %v", offset, err)
 			}
@@ -230,10 +230,10 @@ func TestDBCollectionPinsPaginate(t *testing.T) {
 				break
 			}
 			for _, e := range page {
-				if seen[e.Pin.ID.String()] {
-					t.Fatalf("offset %d: pin %s returned twice", offset, e.Pin.ID.String())
+				if seen[e.Pin.ID] {
+					t.Fatalf("offset %d: pin %s returned twice", offset, e.Pin.ID)
 				}
-				seen[e.Pin.ID.String()] = true
+				seen[e.Pin.ID] = true
 			}
 			if offset > total+2 {
 				t.Fatal("paging did not terminate")

@@ -122,13 +122,13 @@ func (h *Handler) Delete(c *gin.Context) {
 	// Moderators soft-delete (keeps an audit trail); the author removes it
 	// outright.
 	if h.isModerator(c) {
-		if err := h.repo.Hide(c.Request.Context(), comment.ID.String()); err != nil {
-			response.Internal(c, "comments: hide", err, "comment_id", comment.ID.String())
+		if err := h.repo.Hide(c.Request.Context(), comment.ID); err != nil {
+			response.Internal(c, "comments: hide", err, "comment_id", comment.ID)
 			return
 		}
-	} else if comment.UserID.String() == userID {
-		if err := h.repo.Delete(c.Request.Context(), comment.ID.String()); err != nil {
-			response.Internal(c, "comments: delete", err, "comment_id", comment.ID.String())
+	} else if comment.UserID == userID {
+		if err := h.repo.Delete(c.Request.Context(), comment.ID); err != nil {
+			response.Internal(c, "comments: delete", err, "comment_id", comment.ID)
 			return
 		}
 	} else {

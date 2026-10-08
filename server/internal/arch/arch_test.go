@@ -27,14 +27,9 @@ import (
 	"testing"
 )
 
-// allowModelPgtype documents the current pgtype leak in models. New model
-// files importing pgtype, or any model importing gin/platform/pgconn, fail.
-var allowModelPgtype = map[string]bool{
-	"pins":        true, // server/internal/modules/pins/model.go:6
-	"collections": true, // server/internal/modules/collections/model.go:6
-	"comments":    true, // server/internal/modules/comments/model.go:6
-	"reports":     true, // server/internal/modules/reports/model.go:7
-}
+// allowModelPgtype documents pgtype leaks in models. Empty: models use
+// plain Go types and repositories convert to/from driver types.
+var allowModelPgtype = map[string]bool{}
 
 // allowServicePgconn documents pgconn references in business logic.
 // Empty: repositories translate driver errors into domain errors.
@@ -102,7 +97,7 @@ func TestModelHasNoInfraImports(t *testing.T) {
 			switch {
 			case imp == "github.com/jackc/pgx/v5/pgtype":
 				if !allowModelPgtype[mod] {
-					t.Errorf("%s: new pgtype import in model (allowlisted: pins, collections, comments, reports)", path)
+					t.Errorf("%s: model must not import pgtype; the repository converts driver types", path)
 				}
 			case strings.Contains(imp, "gin-gonic/gin"):
 				t.Errorf("%s: model must not import gin (%s)", path, imp)

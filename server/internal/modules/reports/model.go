@@ -3,8 +3,6 @@ package reports
 import (
 	"errors"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -21,14 +19,14 @@ const (
 )
 
 type Report struct {
-	ID         pgtype.UUID `json:"id"`
-	PinID      pgtype.UUID `json:"pin_id"`
-	ReporterID pgtype.UUID `json:"reporter_id"`
-	Reason     string      `json:"reason"`
-	Status     string      `json:"status"`
-	ResolvedBy pgtype.UUID `json:"resolved_by"`
-	ResolvedAt *time.Time  `json:"resolved_at"`
-	CreatedAt  time.Time   `json:"created_at"`
+	ID         string     `json:"id"`
+	PinID      string     `json:"pin_id"`
+	ReporterID string     `json:"reporter_id"`
+	Reason     string     `json:"reason"`
+	Status     string     `json:"status"`
+	ResolvedBy *string    `json:"resolved_by"`
+	ResolvedAt *time.Time `json:"resolved_at"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 type ReportListEntry struct {

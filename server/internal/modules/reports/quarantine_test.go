@@ -49,7 +49,7 @@ func TestReviewApproveQuarantinesPinFiles(t *testing.T) {
 
 	loc := "POINT(1 2)"
 	svc := &stubReviewService{
-		report:   Report{PinID: uuidPtr("11111111-1111-1111-1111-111111111111")},
+		report:   Report{PinID: "11111111-1111-1111-1111-111111111111"},
 		location: &loc,
 	}
 	photos := &stubPhotos{detail: pins.PinDetail{
@@ -88,7 +88,7 @@ func TestReviewApproveQuarantinesAllPhotos(t *testing.T) {
 
 	loc := "POINT(1 2)"
 	svc := &stubReviewService{
-		report:   Report{PinID: uuidPtr("11111111-1111-1111-1111-111111111111")},
+		report:   Report{PinID: "11111111-1111-1111-1111-111111111111"},
 		location: &loc,
 	}
 	h := NewHandler(svc, &recordingPublisher{}).
@@ -132,7 +132,7 @@ func TestReviewApproveQuarantineFailureStillHides(t *testing.T) {
 
 	loc := "POINT(1 2)"
 	svc := &stubReviewService{
-		report:   Report{PinID: uuidPtr("11111111-1111-1111-1111-111111111111")},
+		report:   Report{PinID: "11111111-1111-1111-1111-111111111111"},
 		location: &loc,
 	}
 	photos := &stubPhotos{detail: pins.PinDetail{

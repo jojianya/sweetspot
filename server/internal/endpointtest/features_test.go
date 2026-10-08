@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 	apphttp "github.com/jojianya/sweetspot247-backend/internal/http"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
@@ -64,7 +63,7 @@ func (s *stubPinRepo) UpdatePin(_ context.Context, _ string, userID string, isMo
 	if s.updateErr != nil {
 		return pins.Pin{}, nil, s.updateErr
 	}
-	if s.pinDetail.UserID.String() != userID && !isModerator {
+	if s.pinDetail.UserID != userID && !isModerator {
 		return pins.Pin{}, nil, pins.ErrForbidden
 	}
 	return s.updated, s.updatedPhotos, nil
@@ -236,10 +235,10 @@ func (m *mockCollectionRepo) Update(_ context.Context, id, _ string, _ *string, 
 	if m.updateErr != nil {
 		return m.updateErr
 	}
-	if m.collection.ID.String() != "" && m.collection.ID.String() != id {
+	if m.collection.ID != "" && m.collection.ID != id {
 		return collections.ErrNotFound
 	}
-	if m.collection.UserID.String() != userID && !isModerator {
+	if m.collection.UserID != userID && !isModerator {
 		return collections.ErrForbidden
 	}
 	return nil
@@ -249,10 +248,10 @@ func (m *mockCollectionRepo) Delete(_ context.Context, id, userID string, isMode
 	if m.deleteErr != nil {
 		return m.deleteErr
 	}
-	if m.collection.ID.String() != "" && m.collection.ID.String() != id {
+	if m.collection.ID != "" && m.collection.ID != id {
 		return collections.ErrNotFound
 	}
-	if m.collection.UserID.String() != userID && !isModerator {
+	if m.collection.UserID != userID && !isModerator {
 		return collections.ErrForbidden
 	}
 	return nil
@@ -409,19 +408,12 @@ func authHeaders(token string) map[string]string {
 	return map[string]string{"Authorization": "Bearer " + token}
 }
 
-func uuidOf(s string) (v pgtype.UUID) {
-	if err := v.Scan(s); err != nil {
-		panic(err)
-	}
-	return v
-}
-
 func pinDetailOf(userID string) pins.PinDetail {
-	return pins.PinDetail{Pin: pins.Pin{UserID: uuidOf(userID)}}
+	return pins.PinDetail{Pin: pins.Pin{UserID: userID}}
 }
 
 func pinListEntryOf(id string) pins.PinListEntry {
-	return pins.PinListEntry{Pin: pins.Pin{ID: uuidOf(id)}}
+	return pins.PinListEntry{Pin: pins.Pin{ID: id}}
 }
 
 func uuidStr() string { return testUUID3 }
@@ -750,7 +742,7 @@ func TestPinView(t *testing.T) {
 
 func TestCommentEndpoints(t *testing.T) {
 	commentRepo := &mockCommentRepo{
-		get: comments.Comment{PinID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), Body: "nice"},
+		get: comments.Comment{PinID: testUUID1, UserID: testUUID1, Body: "nice"},
 	}
 	usersSvc := newUsersSvc()
 	// The moderator path reads the role from the database, so the privilege has
@@ -907,7 +899,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	colRepo := &mockCollectionRepo{
 		exists:     true,
 		userExists: true,
-		collection: collections.Collection{UserID: uuidOf(testUUID1), Name: "Weekend"},
+		collection: collections.Collection{UserID: testUUID1, Name: "Weekend"},
 		detail:     collections.CollectionDetail{},
 		pinExists:  true,
 	}
@@ -930,7 +922,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("Create", func(t *testing.T) {
-		colRepo2 := &mockCollectionRepo{created: collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), Name: "Trip"}}
+		colRepo2 := &mockCollectionRepo{created: collections.Collection{ID: testUUID1, UserID: testUUID1, Name: "Trip"}}
 		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, colRepo2, newUsersSvc())
 		w := doJSON(t, r2, http.MethodPost, "/collections", `{"name":"Trip","description":"summer"}`, authHeaders(token))
 		if w.Code != http.StatusCreated {
@@ -953,7 +945,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("GetPrivateAsOwnerIs200", func(t *testing.T) {
-		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), IsPrivate: true}}, newUsersSvc())
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: testUUID1, UserID: testUUID1, IsPrivate: true}}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodGet, "/collections/"+testUUID1, "", authHeaders(token))
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
@@ -961,7 +953,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("GetPrivateAsOtherIs404", func(t *testing.T) {
-		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), IsPrivate: true}}, newUsersSvc())
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: testUUID1, UserID: testUUID1, IsPrivate: true}}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodGet, "/collections/"+testUUID1, "", authHeaders(otherToken))
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
@@ -969,7 +961,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("GetPrivateLoggedOutIs404", func(t *testing.T) {
-		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), IsPrivate: true}}, newUsersSvc())
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{ID: testUUID1, UserID: testUUID1, IsPrivate: true}}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodGet, "/collections/"+testUUID1, "", nil)
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d (%s)", w.Code, w.Body.String())
@@ -977,8 +969,8 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("ListOmitsPrivateForOthers", func(t *testing.T) {
-		pub := collections.Collection{ID: uuidOf(testUUID1), UserID: uuidOf(testUUID1), Name: "pub"}
-		priv := collections.Collection{ID: uuidOf(testUUID2), UserID: uuidOf(testUUID1), Name: "priv", IsPrivate: true}
+		pub := collections.Collection{ID: testUUID1, UserID: testUUID1, Name: "pub"}
+		priv := collections.Collection{ID: testUUID2, UserID: testUUID1, Name: "priv", IsPrivate: true}
 		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{userExists: true, collections: []collections.Collection{pub, priv}}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodGet, "/users/"+testUUID1+"/collections", "", authHeaders(otherToken))
 		if w.Code != http.StatusOK {
@@ -994,7 +986,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("OwnerUpdates", func(t *testing.T) {
-		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: uuidOf(testUUID1)}}, newUsersSvc())
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: testUUID1}}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodPatch, "/collections/"+testUUID1, `{"name":"Renamed"}`, authHeaders(token))
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("expected 204, got %d (%s)", w.Code, w.Body.String())
@@ -1002,7 +994,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("NonOwnerCannotUpdate", func(t *testing.T) {
-		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: uuidOf(testUUID1)}}, newUsersSvc())
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: testUUID1}}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodPatch, "/collections/"+testUUID1, `{"name":"Stolen"}`, authHeaders(otherToken))
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d (%s)", w.Code, w.Body.String())
@@ -1010,7 +1002,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("OwnerDeletes", func(t *testing.T) {
-		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: uuidOf(testUUID1)}}, newUsersSvc())
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: testUUID1}}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodDelete, "/collections/"+testUUID1, "", authHeaders(token))
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("expected 204, got %d", w.Code)
@@ -1018,7 +1010,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("AddPin", func(t *testing.T) {
-		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: uuidOf(testUUID1)}, pinExists: true}, newUsersSvc())
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: testUUID1}, pinExists: true}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodPut, "/collections/"+testUUID1+"/pins/"+uuidStr(), "", authHeaders(token))
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("expected 204, got %d (%s)", w.Code, w.Body.String())
@@ -1033,7 +1025,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("AddPinUnknownPin", func(t *testing.T) {
-		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: uuidOf(testUUID1)}, pinExists: false}, newUsersSvc())
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: testUUID1}, pinExists: false}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodPut, "/collections/"+testUUID1+"/pins/"+uuidStr(), "", authHeaders(token))
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d", w.Code)
@@ -1041,7 +1033,7 @@ func TestCollectionEndpoints(t *testing.T) {
 	})
 
 	t.Run("RemovePin", func(t *testing.T) {
-		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: uuidOf(testUUID1)}}, newUsersSvc())
+		r2, _ := setupFeaturesRouter(t, &stubPinRepo{}, &mockCommentRepo{}, &mockSocialRepo{}, &mockCollectionRepo{collection: collections.Collection{UserID: testUUID1}}, newUsersSvc())
 		w := doJSON(t, r2, http.MethodDelete, "/collections/"+testUUID1+"/pins/"+uuidStr(), "", authHeaders(token))
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("expected 204, got %d", w.Code)

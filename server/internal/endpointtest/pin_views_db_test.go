@@ -65,7 +65,7 @@ func setupViews(t *testing.T, bl *cache.Blacklist, checker ...middleware.Session
 		ch = checker[0]
 	}
 	r.POST("/pins/:id/view", middleware.OptionalAuth(viewTestSecret, bl, ch), viewLimit.Middleware(), h.RegisterView)
-	return viewFixture{router: r, repo: repo, pool: pool, author: author, other: other, pinID: p.ID.String()}
+	return viewFixture{router: r, repo: repo, pool: pool, author: author, other: other, pinID: p.ID}
 }
 
 func viewToken(t *testing.T, userID string) string {

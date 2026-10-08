@@ -21,7 +21,7 @@ import (
 
 // commentOwnedBy builds a comment authored by userID.
 func commentOwnedBy(userID string) comments.Comment {
-	return comments.Comment{ID: uuidOf(testUUID3), PinID: uuidOf(testUUID1), UserID: uuidOf(userID), Body: "nice"}
+	return comments.Comment{ID: testUUID3, PinID: testUUID1, UserID: userID, Body: "nice"}
 }
 
 // reset clears the call counters so a single test can assert on several
@@ -34,7 +34,7 @@ func (m *mockCommentRepo) reset() {
 // the author and the only thing that can grant access is a moderation role.
 func hiddenPinOwnedBy(ownerID string) pins.PinDetail {
 	return pins.PinDetail{
-		Pin:      pins.Pin{ID: uuidOf(testUUID3), UserID: uuidOf(ownerID), IsHidden: true},
+		Pin:      pins.Pin{ID: testUUID3, UserID: ownerID, IsHidden: true},
 		Photos:   []pins.PinPhoto{},
 		Category: nil,
 	}

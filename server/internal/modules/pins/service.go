@@ -29,7 +29,7 @@ type photoProblem struct {
 	msg string
 }
 
-func (e *photoProblem) Error() string     { return e.msg }
+func (e *photoProblem) Error() string        { return e.msg }
 func (e *photoProblem) Is(target error) bool { return target == ErrPhotoInvalid }
 
 // Service holds the pin business rules: handlers parse input and format
@@ -37,8 +37,8 @@ func (e *photoProblem) Is(target error) bool { return target == ErrPhotoInvalid 
 // the event publisher so multi-step writes (stage files, insert row, clean up
 // on failure, publish) live in one testable place with no HTTP dependency.
 type Service struct {
-	repo  Repository
-	store *storage.Local
+	repo   Repository
+	store  *storage.Local
 	events Events
 	// roles resolves moderation rights from the database rather than the JWT,
 	// so a demotion takes effect on the caller's next request.
@@ -92,6 +92,16 @@ func (s *Service) ListByUser(ctx context.Context, userID string, limit int) ([]P
 // not exist unless the viewer owns the pin or moderates. The owner check is
 // free; the moderator lookup runs only for hidden pins owned by someone
 // else, keeping it off the common path.
+// valueOrEmpty dereferences s for fields that are typed *string only to
+// tolerate NULL rows but are never nil in the given flow (CreatePin always
+// sets the owner, and the delete audit runs on a stored pin).
+func valueOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 func (s *Service) GetVisible(ctx context.Context, id, viewerID string) (PinDetail, error) {
 	pin, err := s.repo.GetPin(ctx, id)
 	if err != nil {
@@ -107,7 +117,7 @@ func (s *Service) canViewHidden(ctx context.Context, viewerID string, pin PinDet
 	if viewerID == "" {
 		return false
 	}
-	if viewerID == pin.UserID {
+	if pin.UserID != nil && *pin.UserID == viewerID {
 		return true
 	}
 	if s.roles == nil {
@@ -213,7 +223,7 @@ func (s *Service) CreatePin(ctx context.Context, in CreatePinInput) (CreatePinRe
 	}
 	s.events.PinCreated(ctx, Event{
 		ID:         pin.ID,
-		UserID:     pin.UserID,
+		UserID:     valueOrEmpty(pin.UserID),
 		Location:   fmt.Sprintf("POINT(%v %v)", in.Lng, in.Lat),
 		Caption:    pin.Caption,
 		CategoryID: pin.CategoryID,
@@ -341,8 +351,8 @@ func (s *Service) DeletePin(ctx context.Context, id, userID string, isModerator 
 		return nil
 	}
 
-	if existing.UserID != userID {
-		slog.Info("moderator deleted pin", "moderator_id", userID, "pin_id", id, "owner_id", existing.UserID)
+	if existing.UserID == nil || *existing.UserID != userID {
+		slog.Info("moderator deleted pin", "moderator_id", userID, "pin_id", id, "owner_id", valueOrEmpty(existing.UserID))
 	}
 
 	// Best-effort cleanup. The pin is already gone, so a storage failure

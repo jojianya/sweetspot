@@ -63,7 +63,7 @@ func (s *stubPinRepo) UpdatePin(_ context.Context, _ string, userID string, isMo
 	if s.updateErr != nil {
 		return pins.Pin{}, nil, s.updateErr
 	}
-	if s.pinDetail.UserID != userID && !isModerator {
+	if !(s.pinDetail.UserID != nil && *s.pinDetail.UserID == userID) && !isModerator {
 		return pins.Pin{}, nil, pins.ErrForbidden
 	}
 	return s.updated, s.updatedPhotos, nil
@@ -409,7 +409,7 @@ func authHeaders(token string) map[string]string {
 }
 
 func pinDetailOf(userID string) pins.PinDetail {
-	return pins.PinDetail{Pin: pins.Pin{UserID: userID}}
+	return pins.PinDetail{Pin: pins.Pin{UserID: &userID}}
 }
 
 func pinListEntryOf(id string) pins.PinListEntry {
@@ -742,7 +742,7 @@ func TestPinView(t *testing.T) {
 
 func TestCommentEndpoints(t *testing.T) {
 	commentRepo := &mockCommentRepo{
-		get: comments.Comment{PinID: testUUID1, UserID: testUUID1, Body: "nice"},
+		get: comments.Comment{PinID: testUUID1, UserID: &testUUID1, Body: "nice"},
 	}
 	usersSvc := newUsersSvc()
 	// The moderator path reads the role from the database, so the privilege has

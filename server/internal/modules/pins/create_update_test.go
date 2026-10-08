@@ -21,6 +21,10 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 )
 
+// ptrString returns a pointer to s, for constructing model fields typed
+// *string (pins.Pin.UserID is *string since fix/nullable-ids).
+func ptrString(s string) *string { return &s }
+
 var errTestBoom = errors.New("boom")
 
 const testOwnerID = "123e4567-e89b-42d3-a456-426614174000"
@@ -230,7 +234,7 @@ func newUpdateHarness(t *testing.T, repo *stubRepo, dir string, roles users.Role
 
 func baseUpdateRepo() *stubRepo {
 	return &stubRepo{
-		detail:         PinDetail{Pin: Pin{UserID: testOwnerID}, Photos: []PinPhoto{}},
+		detail:         PinDetail{Pin: Pin{UserID: ptrString(testOwnerID)}, Photos: []PinPhoto{}},
 		categoryExists: true,
 		visible:        true,
 	}
@@ -475,7 +479,7 @@ func TestUpdatePinHiddenPinIsNotFound(t *testing.T) {
 
 func baseUpdateRepoOther() *stubRepo {
 	return &stubRepo{
-		detail:         PinDetail{Pin: Pin{UserID: "223e4567-e89b-42d3-a456-426614174000"}, Photos: []PinPhoto{}},
+		detail:         PinDetail{Pin: Pin{UserID: ptrString("223e4567-e89b-42d3-a456-426614174000")}, Photos: []PinPhoto{}},
 		categoryExists: true,
 		visible:        true,
 	}

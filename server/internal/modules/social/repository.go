@@ -106,7 +106,7 @@ func (r *postgresRepository) Feed(ctx context.Context, userID string, limit int)
 		`+database.CoverPhotoLateral+`
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE f.follower_id = $1 AND p.is_hidden = false
-		ORDER BY p.created_at DESC
+		ORDER BY p.created_at DESC, p.id DESC
 		LIMIT $2
 	`, userID, limit)
 	if err != nil {

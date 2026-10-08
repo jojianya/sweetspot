@@ -419,3 +419,18 @@ func (s *stubUserService) Register(_ context.Context, req RegisterRequest) (user
 	s.users[u.ID] = u
 	return u, nil
 }
+// TestAbsentAccountHashGet returns the absent account hash and validates it.
+// It fails if the hash is empty or bcrypt.Cost can't read it.
+func TestAbsentAccountHashGet(t *testing.T) {
+	hash := password.GetAbsentAccountHash()
+	if hash == "" {
+		t.Fatal("GetAbsentAccountHash returned empty string")
+	}
+	cost, _ := bcrypt.Cost([]byte(hash))
+	if cost < 0 {
+		t.Fatalf("bcrypt.Cost returned %d, expected >= 0", cost)
+	}
+	if cost < 12 {
+		t.Errorf("bcrypt.Cost = %d, want >= 12", cost)
+	}
+}

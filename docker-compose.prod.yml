@@ -126,7 +126,7 @@ services:
       MAILER_WEBHOOK_KEY: ${MAILER_WEBHOOK_KEY:-}
       # Set this to true for the first deploy after upgrading to quarantined
       # hidden pins: the sweep logs checked/moved counts without moving files.
-      QUARANTINE_SWEEP_DRY_RUN: ${QUARANTINE_SWEEP_DRY_RUN:-false}
+      QUARANTINE_SWEEP_DRY_RUN: ${QUARANTINE_SWEEP_DRY_RUN:-true}
       # Trust only this compose network for X-Forwarded-* headers. The Next
       # rewrite does not forward X-Forwarded-For yet, so per-IP rate limits
       # remain shared per proxy until that changes (see docs/SECURITY.md).

@@ -14,14 +14,23 @@ import (
 
 const tokenExpiry = 30 * 24 * time.Hour
 
-// absentAccountHash is a real bcrypt hash (cost 12, matching production) of a
-// value no one can submit. Login compares against it when the identifier does
-// not exist, so a missing account costs the same as a wrong password and the
-// two cannot be told apart by response time — otherwise "no such user" answers
-// in microseconds while "wrong password" takes the ~250ms of a bcrypt compare,
-// which enumerates accounts. Generated once; it is not derived from any secret.
-const absentAccountHash = "$2a$12$C6UzMDM.H6dfI/f/IKcEe.7DKQ7CxSbLuKQpFWTVtL8T0dQVBOWGu"
+// AbsentAccountHash() is a bcrypt hash of a value no one can submit.
+// It is generated at init time using the same cost as real passwords (via
+// server/pkg/password.init()), so a missing account costs the same as a wrong
+// password and the two cannot be told apart by response time. The hash is
+// produced by pkg/password.AbsentAccountHash, which is generated once at
+// package initialization using bcryptCost = 12.
 
+
+// AbsentAccountHash returns the absent account hash, lazily initialized
+// via sync.Once in pkg/password. This ensures the hash is always available
+// when needed and prevents a read before the first Once.Do.
+// AbsentAccountHash returns the absent account hash, lazily initialized
+// via sync.Once in pkg/password. This ensures the hash is always available
+// when needed and prevents a read before the first Once.Do.
+func AbsentAccountHash() string {
+	return password.GetAbsentAccountHash()
+}
 // Service interface and implementation.
 type Service interface {
 	Register(ctx context.Context, req RegisterRequest) (users.User, string, error)
@@ -73,7 +82,7 @@ func (s *service) Login(ctx context.Context, req LoginRequest) (users.User, stri
 		if errors.Is(err, users.ErrNotFound) {
 			// Spend the same time as a wrong password would, so an absent
 			// account is not distinguishable by how fast the 401 arrives.
-			password.Verify(req.Password, absentAccountHash)
+			password.Verify(req.Password, AbsentAccountHash())
 			return users.User{}, "", ErrInvalidCredentials
 		}
 		return users.User{}, "", err

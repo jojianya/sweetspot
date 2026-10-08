@@ -19,9 +19,11 @@ const (
 )
 
 type Report struct {
-	ID         string     `json:"id"`
-	PinID      string     `json:"pin_id"`
-	ReporterID string     `json:"reporter_id"`
+	ID    string `json:"id"`
+	PinID string `json:"pin_id"`
+	// ReporterID is nil for reports whose reporter was deleted:
+	// reports.reporter_id is NULLable (ON DELETE SET NULL in 0004_reports.sql).
+	ReporterID *string    `json:"reporter_id"`
 	Reason     string     `json:"reason"`
 	Status     string     `json:"status"`
 	ResolvedBy *string    `json:"resolved_by"`

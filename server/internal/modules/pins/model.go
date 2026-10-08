@@ -11,8 +11,11 @@ type Category struct {
 }
 
 type Pin struct {
-	ID         string    `json:"id"`
-	UserID     string    `json:"user_id"`
+	ID string `json:"id"`
+	// UserID is nil for orphan pins whose author was deleted: pins.user_id is
+	// NULLable (ON DELETE SET NULL in 0003_pins.sql), so pgx cannot scan it
+	// into a plain string.
+	UserID     *string   `json:"user_id"`
 	Location   string    `json:"location"`
 	Geohash    string    `json:"geohash"`
 	Caption    *string   `json:"caption"`

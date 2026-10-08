@@ -70,7 +70,7 @@ func (s *Service) Delete(ctx context.Context, id, userID string, isModerator boo
 	if isModerator {
 		return s.repo.Hide(ctx, comment.ID)
 	}
-	if comment.UserID == userID {
+	if comment.UserID != nil && *comment.UserID == userID {
 		return s.repo.Delete(ctx, comment.ID)
 	}
 	return ErrForbidden

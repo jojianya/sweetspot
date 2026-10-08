@@ -6,9 +6,11 @@ import (
 
 // Comment is a comment on a pin, joined with its author's public identity.
 type Comment struct {
-	ID        string    `json:"id"`
-	PinID     string    `json:"pin_id"`
-	UserID    string    `json:"user_id"`
+	ID    string `json:"id"`
+	PinID string `json:"pin_id"`
+	// UserID is nil for comments whose author was deleted: comments.user_id is
+	// NULLable (ON DELETE SET NULL in 0009_comments.sql).
+	UserID    *string   `json:"user_id"`
 	Body      string    `json:"body"`
 	IsHidden  bool      `json:"is_hidden"`
 	CreatedAt time.Time `json:"created_at"`

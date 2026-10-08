@@ -82,7 +82,7 @@ func (s *stubRepo) UpdatePin(_ context.Context, id, userID string, isModerator b
 	if !s.visible {
 		return Pin{}, nil, ErrNotFound
 	}
-	if s.detail.UserID != userID && !isModerator {
+	if !(s.detail.UserID != nil && *s.detail.UserID == userID) && !isModerator {
 		return Pin{}, nil, ErrForbidden
 	}
 	s.updatedID = id

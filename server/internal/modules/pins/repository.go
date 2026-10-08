@@ -128,7 +128,8 @@ func (r *postgresRepository) DeletePin(ctx context.Context, id, userID string, i
 	// Classify the miss for a truthful status: missing/already-hidden → 404,
 	// visible-but-not-owned (and not a moderator) → 403. This SELECT only
 	// decides the error code; the hide itself already happened atomically.
-	var ownerID string
+	// ownerID is *string: an orphan pin (author deleted) has a NULL user_id.
+	var ownerID *string
 	var hidden bool
 	err = r.pool.QueryRow(ctx, `SELECT user_id::text, is_hidden FROM pins WHERE id = $1`, id).Scan(&ownerID, &hidden)
 	if err != nil {

@@ -204,12 +204,7 @@ func (s *Service) CreatePin(ctx context.Context, in CreatePinInput) (CreatePinRe
 			n = len(thumbURLs)
 		}
 		for i := 0; i < n; i++ {
-			if derr := s.store.Delete(photoURLs[i]); derr != nil {
-				slog.Warn("cleanup failed: photo", "url", photoURLs[i], "error", derr)
-			}
-			if derr := s.store.Delete(thumbURLs[i]); derr != nil {
-				slog.Warn("cleanup failed: thumbnail", "url", thumbURLs[i], "error", derr)
-			}
+			s.deletePhotoPair("cleanup failed: photo", "cleanup failed: thumbnail", nil, photoURLs[i], thumbURLs[i])
 		}
 		return CreatePinResult{}, err
 	}
@@ -232,6 +227,29 @@ func (s *Service) CreatePin(ctx context.Context, in CreatePinInput) (CreatePinRe
 	})
 
 	return CreatePinResult{Pin: pin, PhotoURLs: photoURLs, ThumbURLs: thumbURLs}, nil
+}
+
+// deleteFiles removes each URL, skipping blanks and logging (not returning)
+// failures with msg. Extra fields are appended after url/error. Callers use
+// it for best-effort photo cleanup so a failed delete cannot orphan files
+// silently; a failure on one URL never stops the rest.
+func (s *Service) deleteFiles(msg string, fields []any, urls ...string) {
+	for _, u := range urls {
+		if u == "" {
+			continue
+		}
+		if derr := s.store.Delete(u); derr != nil {
+			slog.Warn(msg, append([]any{"url", u, "error", derr}, fields...)...)
+		}
+	}
+}
+
+// deletePhotoPair removes one photo/thumbnail pair with per-file messages.
+// It is deleteFiles for the common two-file case, keeping the photo and
+// thumbnail log lines distinguishable.
+func (s *Service) deletePhotoPair(photoMsg, thumbMsg string, fields []any, photoURL, thumbURL string) {
+	s.deleteFiles(photoMsg, fields, photoURL)
+	s.deleteFiles(thumbMsg, fields, thumbURL)
 }
 
 // UpdatePinInput carries an update-pin request after field validation. A nil
@@ -307,12 +325,7 @@ func (s *Service) UpdatePin(ctx context.Context, in UpdatePinInput) (UpdatePinRe
 		// The new photos are already on disk; remove them so a failed update
 		// cannot orphan files. Deletion failures are logged, not discarded.
 		for _, ph := range patch.Photos {
-			if derr := s.store.Delete(ph.PhotoURL); derr != nil {
-				slog.Warn("update pin cleanup: remove photo", "error", derr.Error(), "url", ph.PhotoURL, "pin_id", in.ID)
-			}
-			if derr := s.store.Delete(ph.ThumbnailURL); derr != nil {
-				slog.Warn("update pin cleanup: remove thumbnail", "error", derr.Error(), "url", ph.ThumbnailURL, "pin_id", in.ID)
-			}
+			s.deletePhotoPair("update pin cleanup: remove photo", "update pin cleanup: remove thumbnail", []any{"pin_id", in.ID}, ph.PhotoURL, ph.ThumbnailURL)
 		}
 		return UpdatePinResult{}, err
 	}
@@ -320,12 +333,7 @@ func (s *Service) UpdatePin(ctx context.Context, in UpdatePinInput) (UpdatePinRe
 	// Best-effort cleanup of the replaced photos now that the swap succeeded.
 	if patch.Photos != nil {
 		for _, ph := range existing.Photos {
-			if derr := s.store.Delete(ph.PhotoURL); derr != nil {
-				slog.Warn("update pin: remove replaced photo", "error", derr.Error(), "url", ph.PhotoURL, "pin_id", in.ID)
-			}
-			if derr := s.store.Delete(ph.ThumbnailURL); derr != nil {
-				slog.Warn("update pin: remove replaced thumbnail", "error", derr.Error(), "url", ph.ThumbnailURL, "pin_id", in.ID)
-			}
+			s.deletePhotoPair("update pin: remove replaced photo", "update pin: remove replaced thumbnail", []any{"pin_id", in.ID}, ph.PhotoURL, ph.ThumbnailURL)
 		}
 	}
 
@@ -359,12 +367,7 @@ func (s *Service) DeletePin(ctx context.Context, id, userID string, isModerator 
 	// must not fail the request; the files are unreferenced either way.
 	// Logged so an operator can sweep them.
 	for _, ph := range existing.Photos {
-		if derr := s.store.Delete(ph.PhotoURL); derr != nil {
-			slog.Warn("delete pin: remove photo", "error", derr.Error(), "url", ph.PhotoURL, "pin_id", id)
-		}
-		if derr := s.store.Delete(ph.ThumbnailURL); derr != nil {
-			slog.Warn("delete pin: remove thumbnail", "error", derr.Error(), "url", ph.ThumbnailURL, "pin_id", id)
-		}
+		s.deletePhotoPair("delete pin: remove photo", "delete pin: remove thumbnail", []any{"pin_id", id}, ph.PhotoURL, ph.ThumbnailURL)
 	}
 
 	// Publish pin_removed for realtime updates (best-effort; never fatal).

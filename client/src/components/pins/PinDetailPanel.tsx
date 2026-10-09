@@ -130,7 +130,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
                 <span className="text-zinc-300 dark:text-zinc-600">·</span>
               </>
             )}
-            {pin.username && (
+            {pin.username ? (
               <Link
                 href={pin.user_id ? `/users/${pin.user_id}` : "#"}
                 className="flex min-w-0 items-center gap-1.5 hover:underline"
@@ -138,6 +138,11 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
                 <PersonIcon />
                 <span className="truncate">{pin.username}</span>
               </Link>
+            ) : (
+              <span className="flex min-w-0 items-center gap-1.5 text-zinc-400 dark:text-zinc-500">
+                <PersonIcon />
+                <span className="truncate">deleted user</span>
+              </span>
             )}
             <span className="text-zinc-300 dark:text-zinc-600">·</span>
             <PinViews views={pin.views} />

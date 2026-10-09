@@ -9,7 +9,7 @@ export interface PinPhoto {
 
 export interface PinListEntry {
   id: string;
-  user_id: string;
+  user_id: string | null;
   location: string;
   geohash: string;
   caption: string | null;
@@ -29,7 +29,7 @@ export interface TrendingPin extends PinListEntry {
 
 export interface PinDetail {
   id: string;
-  user_id: string;
+  user_id: string | null;
   location: string;
   geohash: string;
   caption: string | null;
@@ -51,7 +51,7 @@ export interface NewPinPhoto {
 
 export interface CreatedPin {
   id: string;
-  user_id: string;
+  user_id: string | null;
   location: string;
   geohash: string;
   caption: string | null;

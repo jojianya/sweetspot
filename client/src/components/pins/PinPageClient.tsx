@@ -142,7 +142,7 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
                   {pin.category}
                 </span>
               )}
-              {pin.username && (
+              {pin.username ? (
                 <Link
                   href={pin.user_id ? `/users/${pin.user_id}` : "#"}
                   className="flex items-center gap-1 hover:underline"
@@ -150,6 +150,11 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
                   <PersonIcon />
                   {pin.username}
                 </Link>
+              ) : (
+                <span className="flex items-center gap-1 text-zinc-400 dark:text-zinc-500">
+                  <PersonIcon />
+                  deleted user
+                </span>
               )}
               <span className="text-zinc-300 dark:text-zinc-600">·</span>
               <time dateTime={pin.created_at}>{formatTime(pin.created_at)}</time>

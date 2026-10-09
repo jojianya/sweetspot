@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const pinBaseSchema = z.object({
   id: z.string(),
-  user_id: z.string(),
+  user_id: z.string().nullable(),
   location: z.string(),
   geohash: z.string(),
   caption: z.string().nullable(),
@@ -70,7 +70,7 @@ export const newPinPhotoSchema = z.object({
 export const commentSchema = z.object({
   id: z.string(),
   pin_id: z.string(),
-  user_id: z.string(),
+  user_id: z.string().nullable(),
   body: z.string(),
   is_hidden: z.boolean(),
   created_at: z.string(),
@@ -120,7 +120,7 @@ export const privateUserSchema = publicUserSchema.extend({
 export const reportSchema = z.object({
   id: z.string(),
   pin_id: z.string(),
-  reporter_id: z.string(),
+  reporter_id: z.string().nullable(),
   reason: z.string(),
   status: z.enum(["pending", "reviewed", "actioned"]),
   resolved_by: z.string().nullable(),

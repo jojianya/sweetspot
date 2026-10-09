@@ -17,14 +17,14 @@ A monorepo with two runtimes (Go + Node) and one docker-compose stack. Product n
 |---|---|---|---|
 | Database | `postgis/postgis` | 16-3.4 | Postgres 16 + PostGIS 3.4 |
 | Cache | `redis` | 7-alpine | JWT blacklist store |
-| Server | `golang:1.27-alpine` -> `alpine:3.20` | Go 1.27.1 | Multi-stage; installs `libvips` |
+| Server | `golang:1.27-alpine` -> `alpine:3.20` | Go 1.27.2 | Multi-stage; installs `libvips` |
 | Client | `node:20-alpine` | Node 20 -> Next 16.3.4, pnpm 10.28.0 | Standalone output, `node server.js` |
 
 - All ports (`5432`, `6379`, `8081`, `3000`) published loopback-only (`127.0.0.1`).
 - Compose reads 5 secrets from root `.env` with `??` fail-fast:
   - `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `JWT_SECRET`, `NEXT_PUBLIC_MAPTILER_API_KEY`, `NEXT_PUBLIC_API_URL`
 
-## 2. Backend — Go 1.27.1 (`server/go.mod`)
+## 2. Backend — Go 1.27.2 (`server/go.mod`)
 
 ### Framework / web stack
 | Library | Version | Purpose |

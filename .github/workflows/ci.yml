@@ -105,7 +105,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.27'
+          go-version: '1.27.2'
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -178,10 +178,9 @@ jobs:
         run: go vet ./...
 
       - name: Vulnerability scan
-        # Non-blocking: govulncheck currently reports reachable stdlib
-        # findings (GO-2026-6603..GO-2026-6617, see the step log) that need a
-        # Go toolchain bump to fix. Keep the signal visible without failing
-        # every push until that upgrade is scheduled. Pinned version, not
-        # @latest, for reproducible scans.
+        # Blocking: the tree is clean (go1.27.2 + x/net v0.60.0 fixed the
+        # GO-2026-6603..6617 batch). Pinned version, not @latest, for
+        # reproducible scans. If this step turns red, triage before merging:
+        # either bump the toolchain/dep or document why the finding cannot
+        # reach production code.
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
-        continue-on-error: true

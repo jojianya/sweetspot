@@ -90,7 +90,7 @@ server {
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
 
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         # nginx is the first hop: overwrite, do not append. Any spoofed
         # X-Forwarded-For from the internet is discarded before the Go API's
@@ -114,7 +114,11 @@ server {
 
         proxy_http_version 1.1;
         proxy_set_header Connection "";
-        proxy_set_header Host $host;
+        # $http_host keeps the port: Go's CORS layer treats Origin as
+        # same-origin only when it matches Host exactly, and $host drops
+        # :8443 (which turned every browser POST into a 403). Nothing in Go
+        # routes on Host, so forwarding it verbatim is safe.
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -139,7 +143,9 @@ server {
 
         proxy_http_version 1.1;
         proxy_set_header Connection "";
-        proxy_set_header Host $host;
+        # $http_host keeps the port (see /api/ above): Go's CORS same-origin
+        # bypass compares Origin against Host exactly.
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;

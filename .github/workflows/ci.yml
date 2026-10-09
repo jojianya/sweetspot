@@ -1,5 +1,11 @@
 name: CI
 
+# The GITHUB_TOKEN granted to every job. Nothing in this workflow pushes,
+# opens PRs or calls the API with a token, so read-only is sufficient and it
+# keeps a compromised or malicious dependency from writing to the repo.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [development, main, release]

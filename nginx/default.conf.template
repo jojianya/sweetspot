@@ -140,10 +140,16 @@ server {
     # Uploads: read-only GETs served directly by Go.
     location /uploads/ {
         include /etc/nginx/includes/security-headers.conf;
-        # Belt and suspenders at the edge: Go's static serving sets these
+        # Belt and suspenders at the edge: Go's static serving sets this
         # today, but /uploads must not silently depend on upstream middleware.
-        add_header X-Content-Type-Options "nosniff" always;
+        # (nosniff already ships via the include above; repeating it here
+        # would send the header twice.)
         add_header Content-Security-Policy "default-src 'none'; img-src 'self'; frame-ancestors 'none'" always;
+        # nginx is the single source for CSP on /uploads: hide the copy Go
+        # sends so it ships exactly once. Scoped to this location only —
+        # API responses keep Go's CSP.
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Content-Type-Options;
 
         proxy_http_version 1.1;
         proxy_set_header Connection "";

@@ -64,13 +64,16 @@ type Config struct {
 	// heals moves the immediate path missed. Zero disables the loop (the
 	// boot sweep still runs).
 	QuarantineSweepInterval time.Duration
-	RedisAddr               string
-	RedisPassword           string
-	CORSAllowedOrigins      []string
-	SentryDSN               string
-	SentryEnv               string
-	MaxSSEConnections       int
-	CookieSameSite          string // "strict" or "lax"
+	// ResetCleanupInterval spaces the periodic deletion of dead password
+	// reset rows (used, or expired for over a day). Zero disables it.
+	ResetCleanupInterval time.Duration
+	RedisAddr            string
+	RedisPassword        string
+	CORSAllowedOrigins   []string
+	SentryDSN            string
+	SentryEnv            string
+	MaxSSEConnections    int
+	CookieSameSite       string // "strict" or "lax"
 	// TrustedProxies is the gin trusted-proxy list. nginx proxies /api/*,
 	// /events and /uploads/* straight to Go and overwrites X-Forwarded-For
 	// with the real peer, so ClientIP() sees the real client for proxied
@@ -138,17 +141,20 @@ func Load() *Config {
 		// like every other malformed setting, so a typo cannot silently
 		// disable healing.
 		QuarantineSweepInterval: mustParseSweepInterval(getEnv("QUARANTINE_SWEEP_INTERVAL", "1h")),
-		RedisAddr:               getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:           getEnv("REDIS_PASSWORD", ""),
-		CORSAllowedOrigins:      getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
-		SentryDSN:               getEnv("SENTRY_DSN", ""),
-		SentryEnv:               getEnv("SENTRY_ENV", "development"),
-		MaxSSEConnections:       getEnvInt("MAX_SSE_CONNECTIONS", 1000),
-		CookieSameSite:          strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", defaultCookieSameSite))),
-		TrustedProxies:          mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
-		PublicBaseURL:           strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "http://localhost:3000")), "/"),
-		MailerWebhookURL:        strings.TrimSpace(getEnv("MAILER_WEBHOOK_URL", "")),
-		MailerWebhookKey:        os.Getenv("MAILER_WEBHOOK_KEY"),
+		// Dead reset rows are inert, so the janitor runs daily; like the
+		// sweep loop, "0" disables it.
+		ResetCleanupInterval: mustParseResetCleanupInterval(getEnv("PASSWORD_RESET_CLEANUP_INTERVAL", "24h")),
+		RedisAddr:            getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:        getEnv("REDIS_PASSWORD", ""),
+		CORSAllowedOrigins:   getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
+		SentryDSN:            getEnv("SENTRY_DSN", ""),
+		SentryEnv:            getEnv("SENTRY_ENV", "development"),
+		MaxSSEConnections:    getEnvInt("MAX_SSE_CONNECTIONS", 1000),
+		CookieSameSite:       strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", defaultCookieSameSite))),
+		TrustedProxies:       mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
+		PublicBaseURL:        strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "http://localhost:3000")), "/"),
+		MailerWebhookURL:     strings.TrimSpace(getEnv("MAILER_WEBHOOK_URL", "")),
+		MailerWebhookKey:     os.Getenv("MAILER_WEBHOOK_KEY"),
 	}
 
 	if err := validateJWTSecret(cfg.JWTSecret); err != nil {
@@ -388,41 +394,60 @@ func getOrigins(raw string) []string {
 	return origins
 }
 
-// sweepIntervalBounds bound QUARANTINE_SWEEP_INTERVAL: hourly by default,
-// never more often than once a minute (a sweep is cheap but pointless to
-// spin), and "0" disables the periodic loop while keeping the boot sweep.
-const (
-	defaultSweepInterval = time.Hour
-	minSweepInterval     = time.Minute
-)
+// sweepIntervalBounds bound the periodic maintenance loops: "0" disables a
+// loop while keeping any boot-time pass, and intervals never run more often
+// than once a minute (a sweep is cheap but pointless to spin).
+const minSweepInterval = time.Minute
 
-// parseSweepInterval parses QUARANTINE_SWEEP_INTERVAL. Empty means the
-// default; "0" disables the periodic loop; anything else must be a valid
-// duration at or above the minimum.
-func parseSweepInterval(raw string) (time.Duration, error) {
+// parseInterval parses a loop-interval env var. Empty means def; "0"
+// disables the loop; anything else must be a valid duration at or above the
+// minimum. Errors name the variable and the offending value.
+func parseInterval(name, raw string, def time.Duration) (time.Duration, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return defaultSweepInterval, nil
+		return def, nil
 	}
 	d, err := time.ParseDuration(raw)
 	if err != nil {
-		return 0, fmt.Errorf("QUARANTINE_SWEEP_INTERVAL %q is not a valid duration (e.g. \"1h\", \"15m\")", raw)
+		return 0, fmt.Errorf("%s %q is not a valid duration (e.g. \"1h\", \"15m\")", name, raw)
 	}
 	if d < 0 {
-		return 0, fmt.Errorf("QUARANTINE_SWEEP_INTERVAL %q must not be negative", raw)
+		return 0, fmt.Errorf("%s %q must not be negative", name, raw)
 	}
 	if d == 0 {
 		return 0, nil
 	}
 	if d < minSweepInterval {
-		return 0, fmt.Errorf("QUARANTINE_SWEEP_INTERVAL %q is below the 1m minimum", raw)
+		return 0, fmt.Errorf("%s %q is below the 1m minimum", name, raw)
 	}
 	return d, nil
+}
+
+// parseSweepInterval parses QUARANTINE_SWEEP_INTERVAL. Empty means hourly;
+// "0" disables the periodic loop; anything else must be a valid duration
+// at or above the minimum.
+func parseSweepInterval(raw string) (time.Duration, error) {
+	return parseInterval("QUARANTINE_SWEEP_INTERVAL", raw, time.Hour)
 }
 
 // mustParseSweepInterval fails fast at startup on an invalid interval.
 func mustParseSweepInterval(raw string) time.Duration {
 	d, err := parseSweepInterval(raw)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return d
+}
+
+// parseResetCleanupInterval parses PASSWORD_RESET_CLEANUP_INTERVAL with the
+// same empty/zero/minimum semantics as the sweep loop.
+func parseResetCleanupInterval(raw string) (time.Duration, error) {
+	return parseInterval("PASSWORD_RESET_CLEANUP_INTERVAL", raw, 24*time.Hour)
+}
+
+// mustParseResetCleanupInterval fails fast at startup on an invalid interval.
+func mustParseResetCleanupInterval(raw string) time.Duration {
+	d, err := parseResetCleanupInterval(raw)
 	if err != nil {
 		log.Fatal(err)
 	}

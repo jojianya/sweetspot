@@ -10,6 +10,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/config"
 	"github.com/jojianya/sweetspot247-backend/internal/di"
 	"github.com/jojianya/sweetspot247-backend/internal/http"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/auth"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/observability/logger"
 	"github.com/jojianya/sweetspot247-backend/internal/observability/report"
@@ -87,6 +88,25 @@ func Run(cfg *config.Config, pool *pgxpool.Pool, rep *report.Reporter) error {
 	if cfg.QuarantineSweepInterval > 0 {
 		go sweepLoop(sweepCtx, cfg.QuarantineSweepInterval, func(runCtx context.Context) {
 			sweepOnce(runCtx, lg, pool, container.Store, cfg.QuarantineDryRun)
+		})
+	}
+
+	// Dead reset rows are inert, so their janitor runs on its own (usually
+	// daily) cadence beside the quarantine resweep. Same loop shape, same
+	// shutdown and no-overlap guarantees.
+	resetStore := auth.NewResetStore(pool)
+	if cfg.ResetCleanupInterval > 0 {
+		go sweepLoop(sweepCtx, cfg.ResetCleanupInterval, func(runCtx context.Context) {
+			deleted, err := resetStore.CleanupPasswordResets(runCtx)
+			if err != nil {
+				lg.Warn("password reset cleanup failed", "error", err.Error())
+				return
+			}
+			if deleted > 0 {
+				lg.Info("password reset cleanup done", "deleted", deleted)
+			} else {
+				lg.Debug("password reset cleanup done", "deleted", 0)
+			}
 		})
 	}
 

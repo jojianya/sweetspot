@@ -159,6 +159,25 @@ func TestParseSweepInterval(t *testing.T) {
 	}
 }
 
+func TestParseResetCleanupInterval(t *testing.T) {
+	if d, err := parseResetCleanupInterval(""); err != nil || d != 24*time.Hour {
+		t.Errorf("empty = (%v, %v), want (24h, nil)", d, err)
+	}
+	if d, err := parseResetCleanupInterval("0"); err != nil || d != 0 {
+		t.Errorf("0 = (%v, %v), want (0, nil) for disabled", d, err)
+	}
+	for _, bad := range []string{"abc", "30s", "-1h"} {
+		_, err := parseResetCleanupInterval(bad)
+		if err == nil {
+			t.Errorf("parseResetCleanupInterval(%q): expected rejection, got nil", bad)
+			continue
+		}
+		if !strings.Contains(err.Error(), "PASSWORD_RESET_CLEANUP_INTERVAL") || !strings.Contains(err.Error(), bad) {
+			t.Errorf("parseResetCleanupInterval(%q) error %q must name the variable and value", bad, err)
+		}
+	}
+}
+
 func TestValidateStorageBase(t *testing.T) {
 	t.Run("LocalDevelopment", func(t *testing.T) {
 		if err := validateStorageBase("http://localhost:8081", "development"); err != nil {

@@ -87,7 +87,13 @@ The server mounts two data volumes: `server_uploads:/app/uploads` and
 first `up -d`. When a pin is hidden, its files move from `/app/uploads` to the
 same relative path under `/app/quarantine`, which nothing serves
 (`GET /uploads/<file>` then 404s). A startup sweep finishes moves left over
-from before this wiring existed; it is idempotent and never deletes.
+from before this wiring existed, and an hourly resweep
+(`QUARANTINE_SWEEP_INTERVAL`, default `1h`) heals later misses; both are
+idempotent and never delete.
+
+Dead password-reset rows (used, or expired for over a day) are deleted by a
+daily janitor (`PASSWORD_RESET_CLEANUP_INTERVAL`, default `24h`); they can
+never validate, so this is pure hygiene and needs no operator action.
 
 Root-owned volume fix: images before this change never created
 `/app/quarantine`, so a pre-existing `quarantine_data` volume can be

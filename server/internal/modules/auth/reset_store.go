@@ -80,6 +80,44 @@ func (s *ResetStore) IssueToken(ctx context.Context, userID string) (raw string,
 	return raw, expiresAt, nil
 }
 
+// resetCleanupBatch bounds rows per DELETE so a big first backfill cannot
+// hold locks or run long; CleanupPasswordResets repeats until a pass deletes
+// less than a full batch.
+const resetCleanupBatch = 1000
+
+// CleanupPasswordResets deletes dead reset rows: used ones, and unused ones
+// expired for over a day. Neither can ever validate (ConsumeToken requires
+// unused and unexpired, with a day of grace past the 30-minute life), and
+// IssueToken's UPDATE ... WHERE used_at IS NULL only serializes against the
+// janitor on rows already unusable. A cancelled context stops the loop
+// between batches, reporting what was deleted with no error: shutdown is
+// not a failure.
+func (s *ResetStore) CleanupPasswordResets(ctx context.Context) (deleted int, err error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return deleted, nil
+		default:
+		}
+		tag, err := s.pool.Exec(ctx, `
+			DELETE FROM password_resets
+			WHERE id IN (
+				SELECT id FROM password_resets
+				WHERE used_at IS NOT NULL OR expires_at < now() - interval '1 day'
+				LIMIT $1
+			)
+		`, resetCleanupBatch)
+		if err != nil {
+			return deleted, err
+		}
+		n := int(tag.RowsAffected())
+		deleted += n
+		if n < resetCleanupBatch {
+			return deleted, nil
+		}
+	}
+}
+
 // ConsumeToken validates the token and, in the same transaction, sets the new
 // password hash, revokes every existing session (sessions_valid_after), and
 // marks the token used. Any validation failure returns ErrInvalidResetToken.

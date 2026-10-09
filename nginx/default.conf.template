@@ -140,6 +140,10 @@ server {
     # Uploads: read-only GETs served directly by Go.
     location /uploads/ {
         include /etc/nginx/includes/security-headers.conf;
+        # Belt and suspenders at the edge: Go's static serving sets these
+        # today, but /uploads must not silently depend on upstream middleware.
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Content-Security-Policy "default-src 'none'; img-src 'self'; frame-ancestors 'none'" always;
 
         proxy_http_version 1.1;
         proxy_set_header Connection "";

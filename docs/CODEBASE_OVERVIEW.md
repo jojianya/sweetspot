@@ -962,6 +962,16 @@ toast) is all present and exercised by tests — but the payload contract betwee
 [§9.1](#91-sse-payload-doesn't-match-the-client-schema--live-pins-never-arrive).
 
 ---
+SSE work scales as connections x events per process, because each connection
+parses and filters every event; it is bounded by the 1000-connection cap and
+accepted at current scale. To measure it later, run a benchmark of N sinks x M
+events with no Redis needed — watch for sustained viewers x event rate growing,
+or visible Redis subscription CPU as triggers to revisit.
+
+This is inherently per-process: adding more server instances does not reduce the
+per-process load, so the 1000-connection cap is the effective ceiling. Do not
+build a shared hub to work around it; instead revisit the design when viewer
+counts or event rates grow beyond the current accepted scale.
 
 ## 9. Known issues and open items
 

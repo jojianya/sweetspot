@@ -11,16 +11,21 @@
  * /auth/login is a 401 as well, but the caller has no session to lose there —
  * clearing on it would turn a typo into a logout.
  */
-const CREDENTIAL_PATHS = ["/auth/login", "/auth/register"];
+const CREDENTIAL_PATHS: ReadonlySet<string> = new Set([
+  "/auth/login",
+  "/auth/register",
+]);
 
 /**
  * Returns true when a 401 from `requestUrl` should clear the cached user.
  *
  * `requestUrl` is the request path as configured on the axios instance, so it
- * is relative ("/feed"), not absolute. An unknown or missing URL is treated as
+ * is relative ("/feed"), not absolute. Matching is exact: a substring check
+ * here would let a future path that merely contains a credential segment
+ * inherit the exemption. An unknown or missing URL is treated as
  * not-a-session-failure: guessing wrong here would silently sign the user out.
  */
 export function isSessionEnded(requestUrl: string | undefined): boolean {
   if (!requestUrl) return false;
-  return !CREDENTIAL_PATHS.some((path) => requestUrl.includes(path));
+  return !CREDENTIAL_PATHS.has(requestUrl);
 }

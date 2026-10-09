@@ -175,7 +175,8 @@ If you deployed with `CERTBOT_STAGING=true` and now need the real certificate:
 
 ## 9. Quarantine Sweep
 
-Keep `QUARANTINE_SWEEP_DRY_RUN=true` until the log shows clean `checked`/`moved` counts (no unexpected moves). Then:
+Dry-run is opt-in for the first sweep against existing data: keep
+`QUARANTINE_SWEEP_DRY_RUN=true` until the log shows clean `checked`/`moved` counts (no unexpected moves). Then:
 
 1. Edit `.env`: `QUARANTINE_SWEEP_DRY_RUN=false`.
 2. Recreate the server to pick up the change:

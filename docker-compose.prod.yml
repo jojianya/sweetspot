@@ -133,9 +133,10 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       MAILER_WEBHOOK_URL: ${MAILER_WEBHOOK_URL:-}
       MAILER_WEBHOOK_KEY: ${MAILER_WEBHOOK_KEY:-}
-      # Set this to true for the first deploy after upgrading to quarantined
-      # hidden pins: the sweep logs checked/moved counts without moving files.
-      QUARANTINE_SWEEP_DRY_RUN: ${QUARANTINE_SWEEP_DRY_RUN:-true}
+      # Dry-run is opt-in: set to true only for the first run against
+      # existing data, to review checked/moved counts before anything moves.
+      # Default false so hidden pins' files are actually quarantined.
+      QUARANTINE_SWEEP_DRY_RUN: ${QUARANTINE_SWEEP_DRY_RUN:-false}
       # Trust only this compose network for X-Forwarded-* headers. nginx
       # proxies /api/*, /events and /uploads/* straight to Go and overwrites
       # X-Forwarded-For with the real peer, so per-IP rate limits see the

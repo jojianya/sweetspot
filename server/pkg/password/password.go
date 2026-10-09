@@ -38,8 +38,6 @@ func GetAbsentAccountHash() string {
 	return absentAccountHash
 }
 
-
-
 // GenerateAbsentAccountHash generates a bcrypt hash of a random value that no one can submit.
 // The caller (Login) compares passwords against this hash when the account does not exist,
 // so a missing account costs the same as a wrong password and the two cannot be told apart

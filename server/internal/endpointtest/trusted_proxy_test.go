@@ -42,7 +42,9 @@ func TestTrustedProxyClientIP(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 
-	var body struct{ ClientIP string `json:"client_ip"` }
+	var body struct {
+		ClientIP string `json:"client_ip"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -76,7 +78,9 @@ func TestUntrustedProxyClientIP(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 
-	var body struct{ ClientIP string `json:"client_ip"` }
+	var body struct {
+		ClientIP string `json:"client_ip"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -291,4 +295,3 @@ func TestPerIPBucketsSeparateAcrossForwardedClients(t *testing.T) {
 		t.Fatalf("untrusted spoofed hit: expected 429, got %d (%s)", w.Code, w.Body.String())
 	}
 }
-

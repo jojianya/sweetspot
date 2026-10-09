@@ -112,24 +112,44 @@ func TestDBListEntriesIncludeViews(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE pins SET views = 7 WHERE id = $1`, pinID); err != nil {
 		t.Fatalf("set views: %v", err)
 	}
-	if err := favRepo.Save(ctx, author, pinID); err != nil { t.Fatalf("save favorite: %v", err) }
+	if err := favRepo.Save(ctx, author, pinID); err != nil {
+		t.Fatalf("save favorite: %v", err)
+	}
 	follower := seedDBUserWithRole(t, ctx, pool, fmt.Sprintf("views-%d@example.com", time.Now().UnixNano()), "user")
-	if err := socialRepo.Follow(ctx, follower, author); err != nil { t.Fatalf("follow: %v", err) }
+	if err := socialRepo.Follow(ctx, follower, author); err != nil {
+		t.Fatalf("follow: %v", err)
+	}
 	col, err := colRepo.Create(ctx, author, "viewed", nil, false)
-	if err != nil { t.Fatalf("create collection: %v", err) }
+	if err != nil {
+		t.Fatalf("create collection: %v", err)
+	}
 	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID, author, true) })
-	if err := colRepo.AddPin(ctx, col.ID, pinID); err != nil { t.Fatalf("add pin: %v", err) }
+	if err := colRepo.AddPin(ctx, col.ID, pinID); err != nil {
+		t.Fatalf("add pin: %v", err)
+	}
 
 	favs, _, err := favRepo.List(ctx, author, 50, 0)
-	if err != nil { t.Fatalf("favorites list: %v", err) }
-	if len(favs) != 1 || favs[0].Pin.Views != 7 { t.Fatalf("favorites views = %+v, want 7", favs) }
+	if err != nil {
+		t.Fatalf("favorites list: %v", err)
+	}
+	if len(favs) != 1 || favs[0].Pin.Views != 7 {
+		t.Fatalf("favorites views = %+v, want 7", favs)
+	}
 	feed, err := socialRepo.Feed(ctx, follower, 50)
-	if err != nil { t.Fatalf("feed: %v", err) }
+	if err != nil {
+		t.Fatalf("feed: %v", err)
+	}
 	byID := coverByID(feed, func(e pins.PinListEntry) string { return e.ID })
-	if byID[pinID].Pin.Views != 7 { t.Fatalf("feed views = %d, want 7", byID[pinID].Pin.Views) }
+	if byID[pinID].Pin.Views != 7 {
+		t.Fatalf("feed views = %d, want 7", byID[pinID].Pin.Views)
+	}
 	cps, _, err := colRepo.ListPins(ctx, col.ID, 50, 0)
-	if err != nil { t.Fatalf("collection pins: %v", err) }
-	if len(cps) != 1 || cps[0].Pin.Views != 7 { t.Fatalf("collection pins views = %+v, want 7", cps) }
+	if err != nil {
+		t.Fatalf("collection pins: %v", err)
+	}
+	if len(cps) != 1 || cps[0].Pin.Views != 7 {
+		t.Fatalf("collection pins views = %+v, want 7", cps)
+	}
 }
 
 func TestDBCoverPinsList(t *testing.T) {

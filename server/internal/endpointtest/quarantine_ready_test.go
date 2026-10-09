@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/jojianya/sweetspot247-backend/internal/config"
 	"github.com/jojianya/sweetspot247-backend/internal/di"
 	srvhttp "github.com/jojianya/sweetspot247-backend/internal/http"
@@ -19,6 +18,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/social"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
+	"github.com/redis/go-redis/v9"
 )
 
 // readyBody builds the full production router against the endpoint-test

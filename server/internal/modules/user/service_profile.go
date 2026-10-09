@@ -78,7 +78,7 @@ type avatarProblem struct {
 	msg string
 }
 
-func (e *avatarProblem) Error() string     { return e.msg }
+func (e *avatarProblem) Error() string        { return e.msg }
 func (e *avatarProblem) Is(target error) bool { return target == ErrAvatarInvalid }
 
 // stageAvatar validates, re-encodes, and stores one avatar upload, returning

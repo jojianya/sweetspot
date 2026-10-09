@@ -117,6 +117,7 @@ func TestReviewApproveQuarantinesAllPhotos(t *testing.T) {
 		}
 	}
 }
+
 // TestReviewApproveQuarantineFailureStillHides proves a storage failure never
 // un-hides the pin: the DB commit stands, the request is still 200, the miss
 // is left for the sweep, and nothing panics.

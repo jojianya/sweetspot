@@ -309,7 +309,10 @@ var (
 const malformedLocationLogIntervalSecs = 60
 
 // noteMalformedLocation records and (rate-limited) reports a drop.
-func noteMalformedLocation(kind string, ev interface{ GetID() string; GetLocation() string }) {
+func noteMalformedLocation(kind string, ev interface {
+	GetID() string
+	GetLocation() string
+}) {
 	total := malformedLocationDrops.Add(1)
 
 	now := time.Now().Unix()

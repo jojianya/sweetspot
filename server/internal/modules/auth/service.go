@@ -20,7 +20,6 @@ const tokenExpiry = 30 * 24 * time.Hour
 // produced by pkg/password.AbsentAccountHash, which is generated once at
 // package initialization using bcryptCost = 12.
 
-
 // AbsentAccountHash returns the absent account hash, lazily initialized
 // via sync.Once in pkg/password. This ensures the hash is always available
 // when needed and prevents a read before the first Once.Do.
@@ -30,6 +29,7 @@ const tokenExpiry = 30 * 24 * time.Hour
 func AbsentAccountHash() string {
 	return password.GetAbsentAccountHash()
 }
+
 // Service interface and implementation.
 type Service interface {
 	Register(ctx context.Context, req RegisterRequest) (users.User, string, error)

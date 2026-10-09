@@ -114,25 +114,25 @@ func TestCookieSameSiteDefaultsToStrict(t *testing.T) {
 // router serves /uploads on. `go run` listens on PORT=8080 by default while
 // compose sets PORT=8081, so a hardcoded 8081 default orphans one of them.
 func TestDefaultStorageBaseURLDerivesFromPort(t *testing.T) {
-  if got := defaultStorageBaseURL("8080"); got != "http://localhost:8080" {
-    t.Errorf("port 8080: got %q, want %q", got, "http://localhost:8080")
-  }
-  if got := defaultStorageBaseURL("8081"); got != "http://localhost:8081" {
-    t.Errorf("port 8081: got %q, want %q", got, "http://localhost:8081")
-  }
+	if got := defaultStorageBaseURL("8080"); got != "http://localhost:8080" {
+		t.Errorf("port 8080: got %q, want %q", got, "http://localhost:8080")
+	}
+	if got := defaultStorageBaseURL("8081"); got != "http://localhost:8081" {
+		t.Errorf("port 8081: got %q, want %q", got, "http://localhost:8081")
+	}
 }
 
 func TestValidateQuarantineDir(t *testing.T) {
-  for _, bad := range []string{"", "  ", "./uploads", "uploads", "."} {
-    if err := validateQuarantineDir(bad); err == nil {
-      t.Errorf("validateQuarantineDir(%q): expected rejection, got nil", bad)
-    }
-  }
-  for _, ok := range []string{"./quarantine", "/var/lib/goodspot/quarantine"} {
-    if err := validateQuarantineDir(ok); err != nil {
-      t.Errorf("validateQuarantineDir(%q): unexpected error: %v", ok, err)
-    }
-  }
+	for _, bad := range []string{"", "  ", "./uploads", "uploads", "."} {
+		if err := validateQuarantineDir(bad); err == nil {
+			t.Errorf("validateQuarantineDir(%q): expected rejection, got nil", bad)
+		}
+	}
+	for _, ok := range []string{"./quarantine", "/var/lib/goodspot/quarantine"} {
+		if err := validateQuarantineDir(ok); err != nil {
+			t.Errorf("validateQuarantineDir(%q): unexpected error: %v", ok, err)
+		}
+	}
 }
 
 func TestValidateStorageBase(t *testing.T) {

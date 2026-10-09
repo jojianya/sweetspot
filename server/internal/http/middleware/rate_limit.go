@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -28,6 +29,11 @@ type Limiter struct {
 	// O(n) sweep runs at most once per batch instead of on every request
 	// while the map sits at the cap.
 	pendingSweep int
+	// evicted counts live entries dropped by evictOldest since the last log
+	// line, so key-cap pressure (a flood of distinct keys, or a mis-sized
+	// cap) is visible without flooding the logs.
+	evicted      int
+	lastEvictLog time.Time
 }
 
 type queuedKey struct {
@@ -81,7 +87,10 @@ func (l *Limiter) AllowKey(key string) bool {
 			l.pendingSweep = 0
 		}
 		if len(l.byKey) >= maxKeysBounds {
-			l.evictOldest()
+			if l.evictOldest() {
+				l.evicted++
+				l.maybeLogEvictions(now)
+			}
 		}
 		l.pendingSweep++
 	}
@@ -107,13 +116,16 @@ func (l *Limiter) enqueue(key string, resetAt time.Time) {
 
 // evictOldest drops the oldest window-start entry still present, making room
 // for one new key. Stale queue entries (keys since reset, swept or deleted,
-// or re-queued under a newer window) are skipped. Call with l.mu held.
-func (l *Limiter) evictOldest() {
+// or re-queued under a newer window) are skipped. It reports whether a live
+// entry was dropped, so the caller can count cap pressure. Call with l.mu held.
+func (l *Limiter) evictOldest() bool {
+	evicted := false
 	for l.head < len(l.order) {
 		q := l.order[l.head]
 		l.head++
 		if e, ok := l.byKey[q.key]; ok && e.resetAt.Equal(q.resetAt) {
 			delete(l.byKey, q.key)
+			evicted = true
 			break
 		}
 	}
@@ -122,6 +134,28 @@ func (l *Limiter) evictOldest() {
 		l.order = append([]queuedKey(nil), l.order[l.head:]...)
 		l.head = 0
 	}
+	return evicted
+}
+
+// evictLogInterval bounds eviction warnings: at most one line per interval,
+// carrying the live-eviction count since the previous line.
+const evictLogInterval = time.Minute
+
+// maybeLogEvictions emits the pending eviction count if the interval has
+// elapsed since the last line. Call with l.mu held; logging under the
+// limiter lock is safe (slog never calls back into the limiter).
+func (l *Limiter) maybeLogEvictions(now time.Time) {
+	if now.Sub(l.lastEvictLog) < evictLogInterval {
+		return
+	}
+	l.lastEvictLog = now
+	n := l.evicted
+	l.evicted = 0
+	if n == 0 {
+		return
+	}
+	slog.Warn("rate limiter at key cap evicted live entries",
+		"evicted_since_last_log", n, "limit", l.limit, "max_keys", maxKeysBounds)
 }
 
 // Locked reports whether the key is currently blocked: at least `limit`

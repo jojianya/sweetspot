@@ -56,6 +56,15 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Audit dependencies
+        # Non-blocking: `next` currently pulls two high-severity advisories
+        # (source-map-js GHSA-68fv-2mgg-jv7q, sharp CVE-2026-96889). Failing
+        # the build here would block all work until an upstream fix lands;
+        # triage them explicitly instead. `pnpm audit --prod` exits nonzero
+        # while any advisory matches, hence continue-on-error.
+        run: pnpm audit --prod
+        continue-on-error: true
+
       - name: Build
         # No SITE_URL, NEXT_PUBLIC_API_URL, API_INTERNAL_URL or
         # NEXT_ALLOWED_DEV_ORIGINS: a build has to succeed with the optional
@@ -167,3 +176,12 @@ jobs:
 
       - name: Vet
         run: go vet ./...
+
+      - name: Vulnerability scan
+        # Non-blocking: govulncheck currently reports reachable stdlib
+        # findings (GO-2026-6603..GO-2026-6617, see the step log) that need a
+        # Go toolchain bump to fix. Keep the signal visible without failing
+        # every push until that upgrade is scheduled. Pinned version, not
+        # @latest, for reproducible scans.
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        continue-on-error: true

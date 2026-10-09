@@ -42,9 +42,15 @@ func TestValidateJWTSecret(t *testing.T) {
 	}{
 		{"valid 32 chars", strings.Repeat("a", 32), false},
 		{"valid 64 chars", strings.Repeat("b", 64), false},
+		{"valid 64-char hex", strings.Repeat("a1", 32), false},
 		{"empty", "", true},
 		{"too short 31", strings.Repeat("c", 31), true},
 		{"too short 16", strings.Repeat("d", 16), true},
+		{"leaked placeholder", "change_me_to_a_long_random_secret", true},
+		{"change_me prefix", "change_me_production_0000000000000000", true},
+		{"changeme prefix mixed case", "ChangeMeProd00000000000000000000000", true},
+		{"bare secret", "secret", true},
+		{"bare password", "password", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

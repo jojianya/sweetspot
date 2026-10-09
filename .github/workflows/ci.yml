@@ -172,7 +172,13 @@ jobs:
           PGPASSWORD: testpass
         run: |
           psql -h localhost -U postgres -d goodspotdb -tc "SELECT 1 FROM pg_database WHERE datname='endpoint_test'" | grep -q 1 || psql -h localhost -U postgres -d goodspotdb -c 'CREATE DATABASE endpoint_test'
-          go test ./internal/endpointtest/ -run 'TestDBDeletePin|TestDBPasswordReset|TestDBCollection|TestDBCover|TestDBAuthRevoked|TestDBPinViews|TestDBListEntriesIncludeViews' -race -count=1 -v
+          # The janitor's safety contract (a valid reset token is never
+          # deleted, and a cancelled context stops it between batches) lives
+          # only in these tests, so they have to run here or they run nowhere.
+          # Note that -run is an unanchored regex: TestResetCleanupStopsOnCancel
+          # already matches ...BetweenBatches, but both are listed so the
+          # pattern documents what it covers.
+          go test ./internal/endpointtest/ -run 'TestDBDeletePin|TestDBPasswordReset|TestDBCollection|TestDBCover|TestDBAuthRevoked|TestDBPinViews|TestDBListEntriesIncludeViews|TestDBResetCleanupDeletesOnlyDeadRows|TestDBResetCleanupBatchesBigBackfills|TestResetCleanupStopsOnCancel|TestResetCleanupStopsOnCancelBetweenBatches' -race -count=1 -v
 
       - name: Vet
         run: go vet ./...

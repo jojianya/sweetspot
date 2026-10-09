@@ -76,6 +76,59 @@ func TestReportErrorsUsesAttachedError(t *testing.T) {
 	}
 }
 
+// attrReporter captures report attributes so tests can assert on what is
+// (and is not) shipped to Sentry.
+type attrReporter struct {
+	mu    sync.Mutex
+	attrs []any
+}
+
+func (r *attrReporter) Report(_ context.Context, err error, attrs ...any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.attrs = append([]any(nil), attrs...)
+}
+
+func (r *attrReporter) keys() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for i := 0; i+1 < len(r.attrs); i += 2 {
+		if k, ok := r.attrs[i].(string); ok {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// TestReportErrorsOmitsClientIP proves error reports carry no client IP:
+// the request logger already records it for operators, and Sentry must not
+// receive PII.
+func TestReportErrorsOmitsClientIP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rep := &attrReporter{}
+	r := gin.New()
+	r.Use(ReportErrors(rep))
+	r.GET("/boom", func(c *gin.Context) {
+		_ = c.Error(errors.New("database exploded"))
+		c.Status(http.StatusInternalServerError)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
+	req.RemoteAddr = "192.0.2.9:1234"
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", w.Code)
+	}
+
+	for _, k := range rep.keys() {
+		if k == "ip" {
+			t.Fatalf("report shipped a client-ip attribute: %v", rep.keys())
+		}
+	}
+}
+
 func TestRecoverReportsPanics(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rep := &captureReporter{}

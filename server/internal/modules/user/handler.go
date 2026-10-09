@@ -149,6 +149,9 @@ func parseSocials(raw string) (map[string]any, error) {
 			if utf8.RuneCountInString(val) > maxSocialValLen {
 				return nil, errors.New("social value too long")
 			}
+			if err := validateSocialLink(k, val); err != nil {
+				return nil, err
+			}
 		case bool, float64:
 		default:
 			return nil, errors.New("socials values must be strings, booleans, or numbers")

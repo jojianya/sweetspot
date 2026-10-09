@@ -159,12 +159,12 @@ func TestSweepDryRunReportsWithoutMoving(t *testing.T) {
 	b := saveFile(t, store, "b")
 	urls := []string{a, b}
 
-	checked, moved, err := SweepURLs(context.Background(), urls, store, true)
+	checked, moved, failed, err := SweepURLs(context.Background(), urls, store, true)
 	if err != nil {
 		t.Fatalf("dry-run: %v", err)
 	}
-	if checked != 2 || moved != 2 {
-		t.Fatalf("dry-run = (%d, %d), want (2, 2)", checked, moved)
+	if checked != 2 || moved != 2 || failed != 0 {
+		t.Fatalf("dry-run = (%d, %d, %d), want (2, 2, 0)", checked, moved, failed)
 	}
 	for _, u := range urls {
 		if _, err := os.Stat(filepath.Join(uploads, filepath.Base(u))); err != nil {
@@ -172,20 +172,69 @@ func TestSweepDryRunReportsWithoutMoving(t *testing.T) {
 		}
 	}
 
-	checked, moved, err = SweepURLs(context.Background(), urls, store, false)
+	checked, moved, failed, err = SweepURLs(context.Background(), urls, store, false)
 	if err != nil {
 		t.Fatalf("real sweep: %v", err)
 	}
-	if checked != 2 || moved != 2 {
-		t.Fatalf("real sweep = (%d, %d), want (2, 2)", checked, moved)
+	if checked != 2 || moved != 2 || failed != 0 {
+		t.Fatalf("real sweep = (%d, %d, %d), want (2, 2, 0)", checked, moved, failed)
 	}
 
 	// Second real sweep is a no-op.
-	checked, moved, err = SweepURLs(context.Background(), urls, store, false)
+	checked, moved, failed, err = SweepURLs(context.Background(), urls, store, false)
 	if err != nil {
 		t.Fatalf("resweep: %v", err)
 	}
-	if moved != 0 {
-		t.Fatalf("resweep moved = %d, want 0", moved)
+	if moved != 0 || failed != 0 {
+		t.Fatalf("resweep = moved %d failed %d, want (0, 0)", moved, failed)
+	}
+}
+
+// TestSweepCountsFailedMoves proves a storage failure surfaces in the failed
+// count (not just the log) so the per-run summary can warn on it. The walk
+// itself still succeeds; the source file stays put for a later retry.
+func TestSweepCountsFailedMoves(t *testing.T) {
+	root := t.TempDir()
+	uploads := filepath.Join(root, "uploads")
+	blocker := filepath.Join(root, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Quarantine dir is a file, so every move fails at MkdirAll.
+	store := storage.NewLocalWithQuarantine(uploads, "http://api.test", blocker)
+	url, err := store.Save([]byte("stuck"), "webp")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	checked, moved, failed, err := SweepURLs(context.Background(), []string{url}, store, false)
+	if err != nil {
+		t.Fatalf("walk must not fail on per-file errors: %v", err)
+	}
+	if checked != 1 || moved != 0 || failed != 1 {
+		t.Fatalf("sweep = (%d, %d, %d), want (1, 0, 1)", checked, moved, failed)
+	}
+	if _, err := os.Stat(filepath.Join(uploads, filepath.Base(url))); err != nil {
+		t.Fatalf("source must remain for retry: %v", err)
+	}
+}
+
+// TestSweepHonorsCancellation proves a cancelled context stops the walk
+// without an error: shutdown is not a failure, and nothing moves.
+func TestSweepHonorsCancellation(t *testing.T) {
+	store, uploads, _ := quarantineStore(t)
+	a := saveFile(t, store, "a")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	checked, moved, failed, err := SweepURLs(ctx, []string{a}, store, false)
+	if err != nil {
+		t.Fatalf("cancelled walk must not error: %v", err)
+	}
+	if checked != 0 || moved != 0 || failed != 0 {
+		t.Fatalf("cancelled sweep = (%d, %d, %d), want (0, 0, 0)", checked, moved, failed)
+	}
+	if _, err := os.Stat(filepath.Join(uploads, filepath.Base(a))); err != nil {
+		t.Fatalf("cancelled sweep must not move %s: %v", a, err)
 	}
 }

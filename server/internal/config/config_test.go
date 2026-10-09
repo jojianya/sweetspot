@@ -135,6 +135,30 @@ func TestValidateQuarantineDir(t *testing.T) {
 	}
 }
 
+func TestParseSweepInterval(t *testing.T) {
+	if d, err := parseSweepInterval(""); err != nil || d != time.Hour {
+		t.Errorf("empty = (%v, %v), want (1h, nil)", d, err)
+	}
+	if d, err := parseSweepInterval("90m"); err != nil || d != 90*time.Minute {
+		t.Errorf("90m = (%v, %v), want (90m, nil)", d, err)
+	}
+	if d, err := parseSweepInterval("0"); err != nil || d != 0 {
+		t.Errorf("0 = (%v, %v), want (0, nil) for disabled", d, err)
+	}
+	for _, bad := range []string{"abc", "30s", "-1h"} {
+		_, err := parseSweepInterval(bad)
+		if err == nil {
+			t.Errorf("parseSweepInterval(%q): expected rejection, got nil", bad)
+			continue
+		}
+		// The error must name the variable and the offending value so the
+		// operator knows exactly which env line to fix.
+		if !strings.Contains(err.Error(), "QUARANTINE_SWEEP_INTERVAL") || !strings.Contains(err.Error(), bad) {
+			t.Errorf("parseSweepInterval(%q) error %q must name the variable and value", bad, err)
+		}
+	}
+}
+
 func TestValidateStorageBase(t *testing.T) {
 	t.Run("LocalDevelopment", func(t *testing.T) {
 		if err := validateStorageBase("http://localhost:8081", "development"); err != nil {

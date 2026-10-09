@@ -59,14 +59,18 @@ type Config struct {
 	QuarantineDir string
 	// QuarantineDryRun makes the startup sweep report hidden-pin files that
 	// would move without moving anything.
-	QuarantineDryRun   bool
-	RedisAddr          string
-	RedisPassword      string
-	CORSAllowedOrigins []string
-	SentryDSN          string
-	SentryEnv          string
-	MaxSSEConnections  int
-	CookieSameSite     string // "strict" or "lax"
+	QuarantineDryRun bool
+	// QuarantineSweepInterval spaces the periodic quarantine resweep that
+	// heals moves the immediate path missed. Zero disables the loop (the
+	// boot sweep still runs).
+	QuarantineSweepInterval time.Duration
+	RedisAddr               string
+	RedisPassword           string
+	CORSAllowedOrigins      []string
+	SentryDSN               string
+	SentryEnv               string
+	MaxSSEConnections       int
+	CookieSameSite          string // "strict" or "lax"
 	// TrustedProxies is the gin trusted-proxy list. nginx proxies /api/*,
 	// /events and /uploads/* straight to Go and overwrites X-Forwarded-For
 	// with the real peer, so ClientIP() sees the real client for proxied
@@ -111,36 +115,40 @@ func Load() *Config {
 
 	port := getEnv("PORT", "8080")
 	cfg := &Config{
-		Port:               port,
-		AppEnv:             strings.ToLower(getEnv("APP_ENV", "development")),
-		DBHost:             getEnv("DB_HOST", "localhost"),
-		DBPort:             getEnv("DB_PORT", "5432"),
-		DBUser:             getEnv("DB_USER", "postgres"),
-		DBPass:             getEnv("DB_PASSWORD", ""),
-		DBName:             getEnv("DB_NAME", "goodspotdb"),
-		DBSSLMode:          strings.ToLower(strings.TrimSpace(getEnv("DATABASE_SSLMODE", "disable"))),
-		DBPoolMaxConns:     getEnvInt("DB_POOL_MAX_CONNS", 10),
-		DBPoolMaxLifetime:  getEnvDuration("DB_POOL_MAX_LIFETIME", 30*time.Minute),
-		DBPoolMaxIdle:      getEnvDuration("DB_POOL_MAX_IDLE", 5*time.Minute),
-		DBPoolHealthCheck:  getEnvDuration("DB_POOL_HEALTH_CHECK", time.Minute),
-		LogLevel:           getEnv("LOG_LEVEL", "info"),
-		LogFormat:          getEnv("LOG_FORMAT", "text"),
-		JWTSecret:          getEnv("JWT_SECRET", ""),
-		StorageBackend:     getEnv("STORAGE_BACKEND", "local"),
-		StorageBase:        getEnv("STORAGE_BASE_URL", defaultStorageBaseURL(port)),
-		QuarantineDir:      getEnv("QUARANTINE_DIR", "./quarantine"),
-		QuarantineDryRun:   getEnvBool("QUARANTINE_SWEEP_DRY_RUN", true),
-		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
-		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
-		SentryDSN:          getEnv("SENTRY_DSN", ""),
-		SentryEnv:          getEnv("SENTRY_ENV", "development"),
-		MaxSSEConnections:  getEnvInt("MAX_SSE_CONNECTIONS", 1000),
-		CookieSameSite:     strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", defaultCookieSameSite))),
-		TrustedProxies:     mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
-		PublicBaseURL:      strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "http://localhost:3000")), "/"),
-		MailerWebhookURL:   strings.TrimSpace(getEnv("MAILER_WEBHOOK_URL", "")),
-		MailerWebhookKey:   os.Getenv("MAILER_WEBHOOK_KEY"),
+		Port:              port,
+		AppEnv:            strings.ToLower(getEnv("APP_ENV", "development")),
+		DBHost:            getEnv("DB_HOST", "localhost"),
+		DBPort:            getEnv("DB_PORT", "5432"),
+		DBUser:            getEnv("DB_USER", "postgres"),
+		DBPass:            getEnv("DB_PASSWORD", ""),
+		DBName:            getEnv("DB_NAME", "goodspotdb"),
+		DBSSLMode:         strings.ToLower(strings.TrimSpace(getEnv("DATABASE_SSLMODE", "disable"))),
+		DBPoolMaxConns:    getEnvInt("DB_POOL_MAX_CONNS", 10),
+		DBPoolMaxLifetime: getEnvDuration("DB_POOL_MAX_LIFETIME", 30*time.Minute),
+		DBPoolMaxIdle:     getEnvDuration("DB_POOL_MAX_IDLE", 5*time.Minute),
+		DBPoolHealthCheck: getEnvDuration("DB_POOL_HEALTH_CHECK", time.Minute),
+		LogLevel:          getEnv("LOG_LEVEL", "info"),
+		LogFormat:         getEnv("LOG_FORMAT", "text"),
+		JWTSecret:         getEnv("JWT_SECRET", ""),
+		StorageBackend:    getEnv("STORAGE_BACKEND", "local"),
+		StorageBase:       getEnv("STORAGE_BASE_URL", defaultStorageBaseURL(port)),
+		QuarantineDir:     getEnv("QUARANTINE_DIR", "./quarantine"),
+		QuarantineDryRun:  getEnvBool("QUARANTINE_SWEEP_DRY_RUN", true),
+		// The resweep loop starts in app.Run; an invalid interval is fatal
+		// like every other malformed setting, so a typo cannot silently
+		// disable healing.
+		QuarantineSweepInterval: mustParseSweepInterval(getEnv("QUARANTINE_SWEEP_INTERVAL", "1h")),
+		RedisAddr:               getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:           getEnv("REDIS_PASSWORD", ""),
+		CORSAllowedOrigins:      getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
+		SentryDSN:               getEnv("SENTRY_DSN", ""),
+		SentryEnv:               getEnv("SENTRY_ENV", "development"),
+		MaxSSEConnections:       getEnvInt("MAX_SSE_CONNECTIONS", 1000),
+		CookieSameSite:          strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", defaultCookieSameSite))),
+		TrustedProxies:          mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
+		PublicBaseURL:           strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "http://localhost:3000")), "/"),
+		MailerWebhookURL:        strings.TrimSpace(getEnv("MAILER_WEBHOOK_URL", "")),
+		MailerWebhookKey:        os.Getenv("MAILER_WEBHOOK_KEY"),
 	}
 
 	if err := validateJWTSecret(cfg.JWTSecret); err != nil {
@@ -380,7 +388,47 @@ func getOrigins(raw string) []string {
 	return origins
 }
 
-// parseTrustedProxies parses TRUSTED_PROXIES as comma-separated IPs or CIDRs
+// sweepIntervalBounds bound QUARANTINE_SWEEP_INTERVAL: hourly by default,
+// never more often than once a minute (a sweep is cheap but pointless to
+// spin), and "0" disables the periodic loop while keeping the boot sweep.
+const (
+	defaultSweepInterval = time.Hour
+	minSweepInterval     = time.Minute
+)
+
+// parseSweepInterval parses QUARANTINE_SWEEP_INTERVAL. Empty means the
+// default; "0" disables the periodic loop; anything else must be a valid
+// duration at or above the minimum.
+func parseSweepInterval(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return defaultSweepInterval, nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("QUARANTINE_SWEEP_INTERVAL %q is not a valid duration (e.g. \"1h\", \"15m\")", raw)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("QUARANTINE_SWEEP_INTERVAL %q must not be negative", raw)
+	}
+	if d == 0 {
+		return 0, nil
+	}
+	if d < minSweepInterval {
+		return 0, fmt.Errorf("QUARANTINE_SWEEP_INTERVAL %q is below the 1m minimum", raw)
+	}
+	return d, nil
+}
+
+// mustParseSweepInterval fails fast at startup on an invalid interval.
+func mustParseSweepInterval(raw string) time.Duration {
+	d, err := parseSweepInterval(raw)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return d
+}
+
 // for gin's SetTrustedProxies. Empty input returns nil, which preserves
 // today's behavior (ClientIP returns the direct peer, X-Forwarded-For
 // ignored). Open ranges 0.0.0.0/0 and ::/0 are rejected because trusting every

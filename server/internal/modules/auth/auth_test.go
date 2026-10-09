@@ -107,7 +107,7 @@ func newTestService(stub *stubUserService) Service {
 
 func TestMeServiceErrorReturns500(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h := NewHandler(newTestService(&stubUserService{}), nil, nil, SameSiteStrict, nil)
+	h := NewHandler(newTestService(&stubUserService{}), nil, nil, nil, SameSiteStrict, nil)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/auth/me", nil)
@@ -260,7 +260,7 @@ func TestLogoutSucceedsWhenRedisIsDown(t *testing.T) {
 	// Simulate a Redis outage: use a real Blacklist pointing at a closed port.
 	// Revoke will fail with a connection error, which is what we're testing.
 	bl := cache.New("127.0.0.1:1", "")
-	h := NewHandler(newTestService(&stubUserService{}), bl, nil, SameSiteStrict, nil)
+	h := NewHandler(newTestService(&stubUserService{}), bl, nil, nil, SameSiteStrict, nil)
 
 	// Create a valid JWT so the handler can extract claims.
 	token, err := jwt.Generate("test-secret", "u1", time.Hour)

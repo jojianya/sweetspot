@@ -112,6 +112,10 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		auth.NewService(c.UserService, cfg.JWTSecret),
 		c.Blacklist,
 		middleware.New(5, time.Minute),
+		// Per-account backstop: 20 failures per 15 minutes per identifier
+		// across all IPs. High enough that a stranger cannot lock the real
+		// owner out, low enough to stop a distributed grind.
+		middleware.New(20, 15*time.Minute),
 		auth.SameSiteMode(cfg.CookieSameSite),
 		cfg.TrustedProxies,
 	)

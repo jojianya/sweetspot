@@ -18,7 +18,7 @@ func registerUsernameHandler(t *testing.T, svc *stubUserService) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := NewHandler(NewService(svc, "test-secret"), nil, nil, SameSiteStrict, nil)
+	h := NewHandler(NewService(svc, "test-secret"), nil, nil, nil, SameSiteStrict, nil)
 	r.POST("/auth/register", h.Register)
 	return r
 }

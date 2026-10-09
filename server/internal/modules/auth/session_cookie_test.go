@@ -43,7 +43,7 @@ func TestSessionCookieIsStrictAndHttpOnlyUnderProductionConfig(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	h := NewHandler(NewService(svc, "test-secret"), nil, nil, productionSameSite, nil)
+	h := NewHandler(NewService(svc, "test-secret"), nil, nil, nil, productionSameSite, nil)
 	r := gin.New()
 	r.POST("/auth/login", h.Login)
 

@@ -349,7 +349,7 @@ func setupRouter(usersSvc users.Service, reportRepo reports.Repository, favRepo 
 	jsonRoutes.Use(middleware.BodyLimit(1 << 20))
 
 	authSvc := auth.NewService(usersSvc, testSecret)
-	authH := auth.NewHandler(authSvc, bl, middleware.New(1000, time.Minute), sameSite, nil)
+	authH := auth.NewHandler(authSvc, bl, middleware.New(1000, time.Minute), nil, sameSite, nil)
 	auth.RegisterRoutes(jsonRoutes, authH, auth.RouteOptions{JWTSecret: testSecret, Blacklist: bl, CookieSameSite: sameSite})
 
 	userH := users.NewHandler(usersSvc, store)
@@ -995,7 +995,11 @@ func loginLockoutRouter(t *testing.T, budget int) (*gin.Engine, *middleware.Limi
 		byEmail: map[string]users.User{"lock@example.com": {ID: testUUID1, Email: "lock@example.com", PasswordHash: hash, Role: users.RoleUser}},
 	}
 	lim := middleware.New(budget, time.Minute)
-	authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, lim, auth.SameSiteStrict, nil)
+	// Generous account budget: the per-pair behavior under test must not
+	// trip the per-account backstop. Dedicated tests below cover the
+	// backstop itself with a small budget.
+	acctLim := middleware.New(1000, time.Minute)
+	authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, lim, acctLim, auth.SameSiteStrict, nil)
 	// Only the login route: the per-IP and global limiters registered by
 	// RegisterRoutes would otherwise mask the per-identifier budget under test.
 	r.POST("/auth/login", authH.Login)
@@ -1088,6 +1092,113 @@ func TestLoginSuccessClearsOnlyItsOwnCounter(t *testing.T) {
 	}
 	if lim.Locked("198.51.100.7|lock@example.com") {
 		t.Error("expected the owner key to have been cleared")
+	}
+}
+
+// loginAccountLockoutRouter wires a login route with separate per-pair and
+// per-account failure budgets for the distributed-guessing tests.
+func loginAccountLockoutRouter(t *testing.T, pairBudget, acctBudget int) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	_ = r.SetTrustedProxies(nil)
+	r.Use(middleware.Recover(nil))
+
+	hash, _ := passwordHash("password123")
+	usersSvc := &mockUserService{
+		byEmail: map[string]users.User{"lock@example.com": {ID: testUUID1, Email: "lock@example.com", PasswordHash: hash, Role: users.RoleUser}},
+	}
+	authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil,
+		middleware.New(pairBudget, time.Minute), middleware.New(acctBudget, time.Minute),
+		auth.SameSiteStrict, nil)
+	r.POST("/auth/login", authH.Login)
+	return r
+}
+
+// Rotating IPs must not escape the lockout: failures against one identifier
+// from many addresses share the per-account budget. Each per-pair counter
+// below sees a single failure, so only the account limiter can trip.
+func TestLoginAccountLimitTripsAcrossIPs(t *testing.T) {
+	r := loginAccountLockoutRouter(t, 1000, 3)
+
+	for i, ip := range []string{"192.0.2.1", "192.0.2.2", "192.0.2.3"} {
+		if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, ip); w.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: expected 401, got %d (%s)", i+1, w.Code, w.Body.String())
+		}
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.4"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 once the account budget is spent, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+// A successful login clears the per-account counter for that identifier.
+func TestLoginAccountLimitSuccessResets(t *testing.T) {
+	r := loginAccountLockoutRouter(t, 1000, 3)
+
+	for _, ip := range []string{"192.0.2.1", "192.0.2.2"} {
+		if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, ip); w.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d (%s)", w.Code, w.Body.String())
+		}
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"password123"}`, "198.51.100.7"); w.Code != http.StatusOK {
+		t.Fatalf("owner login: %d (%s)", w.Code, w.Body.String())
+	}
+	// Two more failures fit the cleared budget; the third spends it.
+	for _, ip := range []string{"192.0.2.5", "192.0.2.6"} {
+		if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, ip); w.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 after reset, got %d (%s)", w.Code, w.Body.String())
+		}
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.7"); w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on the budget-spending attempt, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, "192.0.2.8"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 once re-locked, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+// Locking one identifier must not affect another, existing or not.
+func TestLoginAccountLimitDoesNotBleedAcrossIdentifiers(t *testing.T) {
+	r := loginAccountLockoutRouter(t, 1000, 3)
+
+	for i, ip := range []string{"192.0.2.1", "192.0.2.2", "192.0.2.3", "192.0.2.4"} {
+		want := http.StatusUnauthorized
+		if i == 3 {
+			want = http.StatusTooManyRequests
+		}
+		if w := doLogin(t, r, `{"identifier":"lock@example.com","password":"wrong"}`, ip); w.Code != want {
+			t.Fatalf("attempt %d: expected %d, got %d (%s)", i+1, want, w.Code, w.Body.String())
+		}
+	}
+	if w := doLogin(t, r, `{"identifier":"nobody@example.com","password":"whatever"}`, "192.0.2.1"); w.Code == http.StatusTooManyRequests {
+		t.Fatalf("a different identifier was locked out too: %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+// Tripping the account limit must look identical for an existing account
+// and a nonexistent one: same status, same body.
+func TestLoginAccountLockoutIdenticalForUnknownIdentifier(t *testing.T) {
+	r := loginAccountLockoutRouter(t, 1000, 2)
+
+	trip := func(identifier string) *httptest.ResponseRecorder {
+		ips := []string{"192.0.2.11", "192.0.2.12", "192.0.2.13"}
+		var w *httptest.ResponseRecorder
+		for _, ip := range ips {
+			w = doLogin(t, r, `{"identifier":"`+identifier+`","password":"wrong"}`, ip)
+			if w.Code != http.StatusUnauthorized && w.Code != http.StatusTooManyRequests {
+				t.Fatalf("%s from %s: unexpected %d (%s)", identifier, ip, w.Code, w.Body.String())
+			}
+		}
+		return w
+	}
+
+	existing := trip("lock@example.com")
+	absent := trip("nobody@example.com")
+	if existing.Code != http.StatusTooManyRequests || absent.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected both locked: existing=%d absent=%d", existing.Code, absent.Code)
+	}
+	if existing.Body.String() != absent.Body.String() {
+		t.Fatalf("lockout bodies differ: %q vs %q", existing.Body.String(), absent.Body.String())
 	}
 }
 

@@ -104,7 +104,7 @@ func TestTrustedProxyLockoutSeparation(t *testing.T) {
 			"bob@example.com":   {ID: "u2", Email: "bob@example.com", Username: "bob", PasswordHash: hash, Role: users.RoleUser},
 		},
 	}
-	authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, lim, auth.SameSiteStrict, []string{"10.0.0.1"})
+	authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, lim, nil, auth.SameSiteStrict, []string{"10.0.0.1"})
 	r.POST("/auth/login", authH.Login)
 
 	// Attacker uses X-Forwarded-For: 203.0.113.10
@@ -199,7 +199,7 @@ func TestTrustedProxySecureCookie(t *testing.T) {
 					"test@example.com": {ID: "u1", Email: "test@example.com", Username: "test", PasswordHash: hash, Role: users.RoleUser},
 				},
 			}
-			authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, nil, auth.SameSiteStrict, []string{"10.0.0.1"})
+			authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, nil, nil, auth.SameSiteStrict, []string{"10.0.0.1"})
 			r.POST("/auth/login", authH.Login)
 
 			var req *http.Request

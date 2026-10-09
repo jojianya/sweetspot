@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	stdhttp "net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -182,6 +183,59 @@ func selectMailer(cfg *config.Config) auth.Mailer {
 	return auth.LogMailer{LogTokens: cfg.AppEnv != "production"}
 }
 
+// Bounds for the POST /errors payload before it reaches the reporter. The
+// endpoint is public, so attacker-shaped reports must not produce unbounded
+// Sentry events: the message was already capped, and stack, url and extra
+// get the same treatment here. The 1 MB body cap and the 30/min limiter are
+// the outer bounds; these keep any single report small inside them.
+const (
+	clientErrorMaxStackRunes      = 8 * 1024
+	clientErrorMaxURLRunes        = 2 * 1024
+	clientErrorMaxExtraKeys       = 20
+	clientErrorMaxExtraValueRunes = 1024
+)
+
+// truncateRunes cuts s to at most max runes, so multi-byte characters are
+// never split mid-encoding.
+func truncateRunes(s string, max int) string {
+	if r := []rune(s); len(r) > max {
+		return string(r[:max])
+	}
+	return s
+}
+
+// capExtra keeps the first clientErrorMaxExtraKeys entries by sorted key
+// (deterministic under Go's random map order) and truncates string values,
+// so a hand-crafted report cannot smuggle an unbounded payload to Sentry.
+// Non-string scalars pass through; composites are bounded by the 1 MB body
+// cap and Sentry's own event limits.
+func capExtra(extra map[string]any) map[string]any {
+	if len(extra) <= clientErrorMaxExtraKeys {
+		out := make(map[string]any, len(extra))
+		for k, v := range extra {
+			out[k] = capExtraValue(v)
+		}
+		return out
+	}
+	keys := make([]string, 0, len(extra))
+	for k := range extra {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make(map[string]any, clientErrorMaxExtraKeys)
+	for _, k := range keys[:clientErrorMaxExtraKeys] {
+		out[k] = capExtraValue(extra[k])
+	}
+	return out
+}
+
+func capExtraValue(v any) any {
+	if s, ok := v.(string); ok {
+		return truncateRunes(s, clientErrorMaxExtraValueRunes)
+	}
+	return v
+}
+
 // ClientErrorIngest handles POST /errors: it forwards a client-side error
 // report to the reporter under the "client" source so crashes in the browser
 // land in the same monitoring pipeline as server errors. It always answers 204
@@ -208,9 +262,9 @@ func ClientErrorIngest(rep middleware.ErrorReporter) gin.HandlerFunc {
 		if rep != nil {
 			rep.Report(c.Request.Context(), errors.New(msg),
 				"source", "client",
-				"url", payload.URL,
-				"stack", payload.Stack,
-				"extra", payload.Extra,
+				"url", truncateRunes(payload.URL, clientErrorMaxURLRunes),
+				"stack", truncateRunes(payload.Stack, clientErrorMaxStackRunes),
+				"extra", capExtra(payload.Extra),
 			)
 		}
 		c.Status(stdhttp.StatusNoContent)

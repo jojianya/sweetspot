@@ -28,6 +28,14 @@ const (
 // database; raw tokens exist in memory and in the one email that carries them.
 type ResetStore struct {
 	pool *pgxpool.Pool
+	// BatchSize overrides resetCleanupBatch when positive. Production never
+	// sets it; only tests use it to shrink one pass so a pack of rows spans
+	// several batches.
+	BatchSize int
+	// AfterBatch, when non-nil, runs right after each DELETE pass commits and
+	// before the loop re-checks the context. Production never sets it; tests
+	// use it to cancel at a deterministic point instead of racing a timer.
+	AfterBatch func()
 }
 
 func NewResetStore(pool *pgxpool.Pool) *ResetStore {
@@ -93,6 +101,10 @@ const resetCleanupBatch = 1000
 // between batches, reporting what was deleted with no error: shutdown is
 // not a failure.
 func (s *ResetStore) CleanupPasswordResets(ctx context.Context) (deleted int, err error) {
+	batch := resetCleanupBatch
+	if s.BatchSize > 0 {
+		batch = s.BatchSize
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -106,13 +118,16 @@ func (s *ResetStore) CleanupPasswordResets(ctx context.Context) (deleted int, er
 				WHERE used_at IS NOT NULL OR expires_at < now() - interval '1 day'
 				LIMIT $1
 			)
-		`, resetCleanupBatch)
+		`, batch)
 		if err != nil {
 			return deleted, err
 		}
 		n := int(tag.RowsAffected())
 		deleted += n
-		if n < resetCleanupBatch {
+		if s.AfterBatch != nil {
+			s.AfterBatch()
+		}
+		if n < batch {
 			return deleted, nil
 		}
 	}

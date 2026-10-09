@@ -98,58 +98,62 @@ func TestResetCleanupStopsOnCancel(t *testing.T) {
 	}
 }
 
-// TestResetCleanupStopsOnCancelBetweenBatches proves a cancelled context
-// ends the janitor between batches: some rows are deleted, but not all.
-// It seeds rows larger than the batch size, starts the cleanup, cancels after
-// the first batch completes, and asserts that only a batch's worth were deleted.
+// TestResetCleanupStopsOnCancelBetweenBatches proves a cancelled context ends
+// the janitor between batches: the passes that ran are kept, the ones that
+// never start are not, and shutdown is not reported as a failure.
+//
+// It cancels from AfterBatch, which runs immediately after a pass commits, so
+// the next loop iteration sees the done context at its top. No timer is
+// involved: batch 100 against 250 dead rows deletes exactly two full passes
+// before the cancel lands, deterministically.
 func TestResetCleanupStopsOnCancelBetweenBatches(t *testing.T) {
 	pool := requireEndpointDB(t)
 	email := fmt.Sprintf("janitor-batchcancel-%d@example.com", time.Now().UnixNano())
 	uid := seedResetUser(t, pool, email)
-	store := auth.NewResetStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Insert stale rows explicitly so the cleanup has work to do.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO password_resets (user_id, token_hash, expires_at, used_at)
 		SELECT $1, md5('janitor-batchcancel-' || g::text), now() - interval '2 days', NULL
-		FROM generate_series(1, 1001) g
+		FROM generate_series(1, 250) g
 	`, uid); err != nil {
 		t.Fatalf("seed rows: %v", err)
 	}
 
-	// Run cleanup in a goroutine so we can cancel between batches.
-	var deleted int
-	done := make(chan struct{})
-	go func() {
-		deleted, _ = store.CleanupPasswordResets(ctx)
-		close(done)
-	}()
+	cancelled := 0
+	store := auth.NewResetStore(pool)
+	store.BatchSize = 100
+	store.AfterBatch = func() {
+		// Cancel after the second pass, so the loop stops before the third.
+		cancelled++
+		if cancelled >= 2 {
+			cancel()
+		}
+	}
 
-	// Cancel after a very short delay to catch the loop between iterations.
-	// The loop does: select, Exec, check n < batch, loop back to select.
-	// With 1001 rows and batch=1000: pass 1 deletes 1000, loop continues,
-	// pass 2 deletes 1, n=1<1000, returns.
-	select {
-	case <-time.After(5 * time.Millisecond):
-		// Cancel between passes.
-	case <-done:
-		// Completed instantly; cancel anyway.
+	deleted, err := store.CleanupPasswordResets(ctx)
+	if err != nil {
+		t.Fatalf("cancelled cleanup must not error: %v", err)
 	}
 	cancel()
 
-	// Wait for the goroutine to exit (it will on context cancel).
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("cleanup goroutine did not finish")
-	}
+	// ctx is done now, so verification queries use a fresh context.
+	verify := context.Background()
 
-	// Some rows were deleted, but not all (since we cancelled between batches).
-	if deleted == 0 {
-		t.Fatalf("expected some rows deleted, got 0")
+	// Two full batches ran before the cancel landed.
+	if deleted != 200 {
+		t.Fatalf("deleted = %d, want 200 (two batches of 100)", deleted)
 	}
-	if deleted >= 1001 {
-		t.Fatalf("expected fewer than 1001 deleted, got %d", deleted)
+	if deleted >= 250 {
+		t.Fatalf("deleted = %d, want fewer than the 250 seeded", deleted)
+	}
+	// The 50 rows the janitor never reached are still there.
+	var remaining int
+	if err := pool.QueryRow(verify,
+		`SELECT count(*) FROM password_resets WHERE user_id = $1`, uid).Scan(&remaining); err != nil {
+		t.Fatalf("count remaining: %v", err)
+	}
+	if remaining != 50 {
+		t.Fatalf("remaining = %d, want 50 rows the janitor never reached", remaining)
 	}
 }

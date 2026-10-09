@@ -177,6 +177,11 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Check formatting
+        # Fails when `gofmt -l` prints anything, so formatting drift cannot
+        # accumulate silently. Run `gofmt -w .` in server/ to fix.
+        run: test -z "$(gofmt -l .)"
+
       - name: Vulnerability scan
         # Blocking: the tree is clean (go1.27.2 + x/net v0.60.0 fixed the
         # GO-2026-6603..6617 batch). Pinned version, not @latest, for

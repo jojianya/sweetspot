@@ -3,7 +3,7 @@ import type { PinListEntry } from "./pin";
 export interface Comment {
   id: string;
   pin_id: string;
-  user_id: string;
+  user_id: string | null;
   body: string;
   is_hidden: boolean;
   created_at: string;

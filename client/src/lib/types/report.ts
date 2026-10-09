@@ -4,7 +4,7 @@ export type ReportStatus = "pending" | "reviewed" | "actioned";
 export interface Report {
   id: string;
   pin_id: string;
-  reporter_id: string;
+  reporter_id: string | null;
   reason: string;
   status: ReportStatus;
   resolved_by: string | null;

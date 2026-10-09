@@ -30,6 +30,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+    networks:
+      - app_net
 
   redis:
     image: redis:7-alpine
@@ -45,6 +47,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - app_net
 
   server:
     # Distinct tag: docker-compose.prod.yml builds ./server with
@@ -81,7 +85,13 @@ services:
       MAILER_WEBHOOK_URL: ${MAILER_WEBHOOK_URL:-}
       MAILER_WEBHOOK_KEY: ${MAILER_WEBHOOK_KEY:-}
       QUARANTINE_SWEEP_DRY_RUN: ${QUARANTINE_SWEEP_DRY_RUN:-false}
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      # Trust only this compose network for X-Forwarded-* headers. nginx
+      # proxies /api/*, /events and /uploads/* straight to Go and overwrites
+      # X-Forwarded-For with the real peer, so per-IP rate limits see the
+      # real client. A CIDR is the narrowest static value: container IPs are
+      # assigned dynamically, so a single IP cannot be pinned. Never widen to
+      # 0.0.0.0/0 (the Go server rejects it at startup).
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.90.0.0/24}
       DB_POOL_MAX_CONNS: ${DB_POOL_MAX_CONNS:-10}
       DB_POOL_MAX_LIFETIME: ${DB_POOL_MAX_LIFETIME:-30m}
       DB_POOL_MAX_IDLE: ${DB_POOL_MAX_IDLE:-5m}
@@ -110,6 +120,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - app_net
 
   client:
     # See the server note above: keep the dev image out of the implicit
@@ -144,6 +156,8 @@ services:
       - /app/.next
     depends_on:
       - server
+    networks:
+      - app_net
 
   nginx:
     # Dev edge proxy, mirroring production TLS termination locally. Separate
@@ -168,8 +182,16 @@ services:
       - nginx_certs_dev:/etc/nginx/certs
     depends_on:
       - client
+    networks:
+      - app_net
 
 volumes:
   postgres_data:
   server_uploads:
   nginx_certs_dev:
+
+networks:
+  app_net:
+    ipam:
+      config:
+        - subnet: 10.90.0.0/24

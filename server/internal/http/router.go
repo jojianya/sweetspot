@@ -34,10 +34,9 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	// TrustedProxies comes from TRUSTED_PROXIES and is validated at startup.
-	// Empty (default) is today's behavior: ClientIP returns the direct peer
-	// and X-Forwarded-For is ignored, which is spoof-safe but means per-IP
-	// rate limits are shared per proxy behind the Next rewrite (which does not
-	// forward X-Forwarded-For). Only list proxy addresses/CIDRs you operate.
+	// nginx proxies /api/*, /events and /uploads/* straight to Go and
+	// overwrites X-Forwarded-For with the real peer, so ClientIP() sees the
+	// real client. Only list proxy addresses/CIDRs you operate.
 	// The list is validated in config.Load, so a failure here means a bug in
 	// that validation; refuse to boot rather than run with the wrong peers.
 	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {

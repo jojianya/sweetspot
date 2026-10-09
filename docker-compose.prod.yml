@@ -136,9 +136,12 @@ services:
       # Set this to true for the first deploy after upgrading to quarantined
       # hidden pins: the sweep logs checked/moved counts without moving files.
       QUARANTINE_SWEEP_DRY_RUN: ${QUARANTINE_SWEEP_DRY_RUN:-true}
-      # Trust only this compose network for X-Forwarded-* headers. The Next
-      # rewrite does not forward X-Forwarded-For yet, so per-IP rate limits
-      # remain shared per proxy until that changes (see docs/SECURITY.md).
+      # Trust only this compose network for X-Forwarded-* headers. nginx
+      # proxies /api/*, /events and /uploads/* straight to Go and overwrites
+      # X-Forwarded-For with the real peer, so per-IP rate limits see the
+      # real client (see docs/SECURITY.md). A /32 cannot be pinned because
+      # compose assigns container IPs dynamically; this /24 holds only our
+      # own containers on this single-host bridge.
       TRUSTED_PROXIES: 10.89.0.0/24
       GOGC: "50"
       GOMEMLIMIT: 2GiB

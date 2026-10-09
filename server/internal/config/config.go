@@ -67,10 +67,12 @@ type Config struct {
 	SentryEnv          string
 	MaxSSEConnections  int
 	CookieSameSite     string // "strict" or "lax"
-	// TrustedProxies is the gin trusted-proxy list. Empty (default) keeps
-	// today's behavior: ClientIP() returns the direct TCP peer and
-	// X-Forwarded-For is ignored, so per-IP rate limits are shared per proxy
-	// behind the Next rewrite (which does not forward X-Forwarded-For).
+	// TrustedProxies is the gin trusted-proxy list. nginx proxies /api/*,
+	// /events and /uploads/* straight to Go and overwrites X-Forwarded-For
+	// with the real peer, so ClientIP() sees the real client for proxied
+	// traffic. Empty (default outside compose) keeps the spoof-safe
+	// behavior: ClientIP() returns the direct TCP peer and X-Forwarded-For
+	// is ignored.
 	TrustedProxies []string
 	// PublicBaseURL is the public site origin. Password reset links are built
 	// only from this value, never from request headers (which an attacker

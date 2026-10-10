@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -12,44 +13,27 @@ import (
 )
 
 // Integration tests against a real PostGIS database.
-// These require DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME env vars.
-// They run alongside the mock-based tests but exercise the real SQL.
+//
+// They run through requireDB, which is requireEndpointDB: the disposable
+// ENDPOINT_TEST_DB, migrated on demand, skipped when that variable is unset.
+// These tests used to build a DSN from DB_NAME — the development database —
+// and seed fixtures straight into it with no cleanup, so every local
+// `go test ./...` leaked rows into a real database. They now share the one
+// disposable database the rest of the package uses.
 
 func requireDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	host := getEnv("DB_HOST", "127.0.0.1")
-	port := getEnv("DB_PORT", "5432")
-	user := getEnv("DB_USER", "postgres")
-	password := getEnv("DB_PASSWORD", "")
-	dbname := getEnv("DB_NAME", "goodspotdb")
-
-	if password == "" {
-		t.Skip("DB_PASSWORD not set, skipping integration test")
-	}
-
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", user, password, host, port, dbname)
-	pool, err := pgxpool.New(context.Background(), dsn)
-	if err != nil {
-		t.Fatalf("db connect: %v", err)
-	}
-	if err := pool.Ping(context.Background()); err != nil {
-		t.Fatalf("db ping: %v", err)
-	}
-	return pool
+	return requireEndpointDB(t)
 }
 
 func TestRealDBTrendingAndBbox(t *testing.T) {
 	pool := requireDB(t)
-	defer pool.Close()
 
 	repo := pins.NewRepository(pool)
 
 	// Seed some pins and comments for a realistic test
 	ctx := context.Background()
-	userID, err := seedUser(ctx, pool, "trending-test@example.com")
-	if err != nil {
-		t.Fatalf("seed user: %v", err)
-	}
+	userID := seedUser(t, ctx, pool, "trending-test@example.com")
 
 	// Create pins in a small area so they all match the bbox.
 	//
@@ -78,12 +62,11 @@ func TestRealDBTrendingAndBbox(t *testing.T) {
 
 	// Debug: check what pins exist and their locations
 	var debugCount int
-	err = pool.QueryRow(ctx, `
+	if err := pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM pins 
 		WHERE ST_Intersects(location, ST_MakeEnvelope(-122.45, 37.75, -122.40, 37.80, 4326))
 		AND is_hidden = false
-	`).Scan(&debugCount)
-	if err != nil {
+	`).Scan(&debugCount); err != nil {
 		t.Fatalf("debug count: %v", err)
 	}
 	t.Logf("Pins in bbox: %d", debugCount)
@@ -164,9 +147,14 @@ func TestRealDBTrendingAndBbox(t *testing.T) {
 
 func TestRealDBListUsersWithCount(t *testing.T) {
 	pool := requireDB(t)
-	defer pool.Close()
 
 	repo := users.NewRepository(pool)
+
+	// Seed one fixture account so the assertion below means "the query sees the
+	// row we just inserted" rather than "some other test happened to run
+	// first". The disposable database starts empty, and the old version of this
+	// test relied on leftovers in the development database.
+	seedUser(t, context.Background(), pool, "list-users-test@example.com")
 
 	// Test with data
 	usersPage, total, err := repo.ListUsers(context.Background(), 5, 0)
@@ -203,13 +191,48 @@ func getEnv(key, def string) string {
 	return def
 }
 
-func seedUser(ctx context.Context, pool *pgxpool.Pool, email string) (string, error) {
+// seedUser inserts a fixture account and registers a cleanup that removes it
+// and everything it owns, so a DB-backed test leaves the database as it found
+// it. It takes t so the cleanup is tied to this test's lifetime.
+//
+// The username is derived from the email rather than hardcoded, because
+// users.username is UNIQUE (0002_users.sql) while ON CONFLICT (email) only
+// covers an email collision — two tests seeding 'testuser' would collide on the
+// username and the second would fail.
+//
+// The pins are deleted before the user, not after: pins.user_id is
+// ON DELETE SET NULL (0003_pins.sql), so deleting the user alone would leave
+// the fixture pins behind with a NULL author. Deleting the pins first also
+// takes their comments with them, since comments.pin_id is ON DELETE CASCADE.
+//
+// Cleanup ordering: requireEndpointDB registers pool.Close as a t.Cleanup
+// before this one runs, and cleanups fire last-registered-first, so this
+// cleanup runs while the pool is still open. Callers must therefore NOT also
+// `defer pool.Close()` — that would close the pool first and every cleanup
+// after it would fail.
+func seedUser(t *testing.T, ctx context.Context, pool *pgxpool.Pool, email string) string {
+	t.Helper()
+	username := "tu-" + strings.SplitN(email, "@", 2)[0]
 	var id string
 	err := pool.QueryRow(ctx, `
 		INSERT INTO users (id, email, username, password_hash, role)
-		VALUES (gen_random_uuid(), $1, 'testuser', 'hash', 'user')
+		VALUES (gen_random_uuid(), $1, $2, 'hash', 'user')
 		ON CONFLICT (email) DO UPDATE SET id = users.id
 		RETURNING id
-	`, email).Scan(&id)
-	return id, err
+	`, email, username).Scan(&id)
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	t.Cleanup(func() {
+		// A fresh context: the test's own ctx may already be cancelled by the
+		// time cleanups run, and a cleanup that cannot connect would leak.
+		cleanup := context.Background()
+		if _, err := pool.Exec(cleanup, `DELETE FROM pins WHERE user_id = $1`, id); err != nil {
+			t.Errorf("cleanup test pins: %v", err)
+		}
+		if _, err := pool.Exec(cleanup, `DELETE FROM users WHERE id = $1`, id); err != nil {
+			t.Errorf("cleanup test user: %v", err)
+		}
+	})
+	return id
 }

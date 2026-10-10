@@ -126,10 +126,10 @@ func Load() *Config {
 		DBPass:            getEnv("DB_PASSWORD", ""),
 		DBName:            getEnv("DB_NAME", "goodspotdb"),
 		DBSSLMode:         strings.ToLower(strings.TrimSpace(getEnv("DATABASE_SSLMODE", "disable"))),
-		DBPoolMaxConns:    getEnvInt("DB_POOL_MAX_CONNS", 10),
-		DBPoolMaxLifetime: getEnvDuration("DB_POOL_MAX_LIFETIME", 30*time.Minute),
-		DBPoolMaxIdle:     getEnvDuration("DB_POOL_MAX_IDLE", 5*time.Minute),
-		DBPoolHealthCheck: getEnvDuration("DB_POOL_HEALTH_CHECK", time.Minute),
+		DBPoolMaxConns:    mustEnvInt("DB_POOL_MAX_CONNS", 10),
+		DBPoolMaxLifetime: mustEnvDuration("DB_POOL_MAX_LIFETIME", 30*time.Minute),
+		DBPoolMaxIdle:     mustEnvDuration("DB_POOL_MAX_IDLE", 5*time.Minute),
+		DBPoolHealthCheck: mustEnvDuration("DB_POOL_HEALTH_CHECK", time.Minute),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
 		LogFormat:         getEnv("LOG_FORMAT", "text"),
 		JWTSecret:         getEnv("JWT_SECRET", ""),
@@ -149,7 +149,7 @@ func Load() *Config {
 		CORSAllowedOrigins:   getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
 		SentryDSN:            getEnv("SENTRY_DSN", ""),
 		SentryEnv:            getEnv("SENTRY_ENV", "development"),
-		MaxSSEConnections:    getEnvInt("MAX_SSE_CONNECTIONS", 1000),
+		MaxSSEConnections:    mustEnvInt("MAX_SSE_CONNECTIONS", 1000),
 		CookieSameSite:       strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", defaultCookieSameSite))),
 		TrustedProxies:       mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
 		PublicBaseURL:        strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "http://localhost:3000")), "/"),
@@ -515,22 +515,54 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-func getEnvInt(key string, fallback int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
+// parseEnvInt reads a positive integer. An unset or empty value keeps the
+// caller's fallback; anything else — unparseable, zero, negative — is an error.
+//
+// Splitting the parse from the exit mirrors parseInterval/mustParseSweepInterval
+// and parseTrustedProxies/mustParseTrustedProxies in this same file: the pure
+// half is what tests can assert on, and the must half is what call sites use.
+func parseEnvInt(key string, fallback int) (int, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback, nil
 	}
-	return fallback
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("%s %q must be a positive integer", key, v)
+	}
+	return n, nil
 }
 
-func getEnvDuration(key string, fallback time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return d
-		}
+// mustEnvInt is parseEnvInt that fails fast, for use in the Load struct literal.
+func mustEnvInt(key string, fallback int) int {
+	n, err := parseEnvInt(key, fallback)
+	if err != nil {
+		log.Fatal(err)
 	}
-	return fallback
+	return n
+}
+
+// parseEnvDuration reads a positive duration, with the same unset/empty and
+// error split as parseEnvInt.
+func parseEnvDuration(key string, fallback time.Duration) (time.Duration, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return 0, fmt.Errorf("%s %q must be a positive duration", key, v)
+	}
+	return d, nil
+}
+
+// mustEnvDuration is parseEnvDuration that fails fast.
+func mustEnvDuration(key string, fallback time.Duration) time.Duration {
+	d, err := parseEnvDuration(key, fallback)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return d
 }
 
 // getEnvBool reads a boolean flag: 1, true, yes (any case) enable it,

@@ -303,8 +303,9 @@ func TestValidateMailer(t *testing.T) {
 	}
 }
 
-// TestGetEnvInt tests the getEnvInt helper.
-func TestGetEnvInt(t *testing.T) {
+// TestMustEnvInt covers the success paths of the int helper: a valid value is
+// used, an unset variable keeps the fallback.
+func TestMustEnvInt(t *testing.T) {
 	oldVal := os.Getenv("TEST_INT")
 	defer func() {
 		if oldVal == "" {
@@ -315,27 +316,79 @@ func TestGetEnvInt(t *testing.T) {
 	}()
 
 	os.Setenv("TEST_INT", "42")
-	if got := getEnvInt("TEST_INT", 0); got != 42 {
-		t.Errorf("getEnvInt(TEST_INT, 0) = %d, want 42", got)
-	}
-
-	os.Setenv("TEST_INT", "invalid")
-	if got := getEnvInt("TEST_INT", 99); got != 99 {
-		t.Errorf("getEnvInt(TEST_INT, 99) = %d, want 99 (fallback)", got)
+	if got := mustEnvInt("TEST_INT", 0); got != 42 {
+		t.Errorf("mustEnvInt(TEST_INT, 0) = %d, want 42", got)
 	}
 
 	os.Unsetenv("TEST_INT")
-	if got := getEnvInt("TEST_INT", 7); got != 7 {
-		t.Errorf("getEnvInt(unset, 7) = %d, want 7 (fallback)", got)
+	if got := mustEnvInt("TEST_INT", 7); got != 7 {
+		t.Errorf("mustEnvInt(unset, 7) = %d, want 7 (fallback)", got)
+	}
+}
+
+// TestParseEnvIntRejectsBadValues is the fix: a typo must not silently revert
+// the setting to its default. The old helper returned the fallback for
+// "invalid", 0 and -1, so DB_POOL_MAX_CONNS=abc quietly ran on 10 connections
+// and DB_POOL_MAX_IDLE=0 quietly disabled the idle sweep.
+func TestParseEnvIntRejectsBadValues(t *testing.T) {
+	for _, tc := range []struct{ name, value string }{
+		{"unparseable", "invalid"},
+		{"zero", "0"},
+		{"negative", "-1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("TEST_INT", tc.value)
+			got, err := parseEnvInt("TEST_INT", 5)
+			if err == nil {
+				t.Fatalf("parseEnvInt(%q, 5) = %d, want an error", tc.value, got)
+			}
+			if !strings.Contains(err.Error(), tc.value) {
+				t.Errorf("error %q does not name the offending value %q", err.Error(), tc.value)
+			}
+		})
+	}
+}
+
+// TestParseEnvIntFallsBackWhenUnset keeps the documented escape hatch: a
+// variable that is simply absent is not an error.
+func TestParseEnvIntFallsBackWhenUnset(t *testing.T) {
+	os.Unsetenv("TEST_INT")
+	got, err := parseEnvInt("TEST_INT", 9)
+	if err != nil {
+		t.Fatalf("parseEnvInt(unset, 9) error = %v, want nil", err)
+	}
+	if got != 9 {
+		t.Errorf("parseEnvInt(unset, 9) = %d, want 9", got)
+	}
+}
+
+// TestParseEnvDuration is the duration twin: unset falls back, a valid value is
+// used, and everything else is an error rather than a silent default.
+func TestParseEnvDuration(t *testing.T) {
+	os.Unsetenv("TEST_DUR")
+	if got, err := parseEnvDuration("TEST_DUR", 30*time.Minute); err != nil || got != 30*time.Minute {
+		t.Errorf("parseEnvDuration(unset) = (%v, %v), want (30m0s, nil)", got, err)
 	}
 
-	// Zero and negative should fall back
-	os.Setenv("TEST_INT", "0")
-	if got := getEnvInt("TEST_INT", 5); got != 5 {
-		t.Errorf("getEnvInt(TEST_INT=0, 5) = %d, want 5 (fallback)", got)
+	t.Setenv("TEST_DUR", "90s")
+	if got, err := parseEnvDuration("TEST_DUR", 30*time.Minute); err != nil || got != 90*time.Second {
+		t.Errorf("parseEnvDuration(90s) = (%v, %v), want (1m30s, nil)", got, err)
 	}
-	os.Setenv("TEST_INT", "-1")
-	if got := getEnvInt("TEST_INT", 5); got != 5 {
-		t.Errorf("getEnvInt(TEST_INT=-1, 5) = %d, want 5 (fallback)", got)
+
+	for _, tc := range []struct{ name, value string }{
+		{"unparseable", "nope"},
+		{"zero", "0s"},
+		{"negative", "-5m"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("TEST_DUR", tc.value)
+			got, err := parseEnvDuration("TEST_DUR", time.Minute)
+			if err == nil {
+				t.Fatalf("parseEnvDuration(%q) = %v, want an error", tc.value, got)
+			}
+			if !strings.Contains(err.Error(), tc.value) {
+				t.Errorf("error %q does not name the offending value %q", err.Error(), tc.value)
+			}
+		})
 	}
 }

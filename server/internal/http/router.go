@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	stdhttp "net/http"
-	"sort"
+	"regexp"
 	"strings"
 	"time"
 
@@ -203,7 +203,7 @@ func selectMailer(cfg *config.Config) auth.Mailer {
 const (
 	clientErrorMaxStackRunes      = 8 * 1024
 	clientErrorMaxURLRunes        = 2 * 1024
-	clientErrorMaxExtraKeys       = 20
+	clientErrorMaxMessageRunes    = 2048
 	clientErrorMaxExtraValueRunes = 1024
 )
 
@@ -216,36 +216,59 @@ func truncateRunes(s string, max int) string {
 	return s
 }
 
-// capExtra keeps the first clientErrorMaxExtraKeys entries by sorted key
-// (deterministic under Go's random map order) and truncates string values,
-// so a hand-crafted report cannot smuggle an unbounded payload to Sentry.
-// Non-string scalars pass through; composites are bounded by the 1 MB body
-// cap and Sentry's own event limits.
-func capExtra(extra map[string]any) map[string]any {
-	if len(extra) <= clientErrorMaxExtraKeys {
-		out := make(map[string]any, len(extra))
-		for k, v := range extra {
-			out[k] = capExtraValue(v)
+// clientErrorAllowedExtraKeys is the allowlist of `extra` keys that survive
+// into the report. The endpoint is public and the payload is attacker-shaped,
+// so anything the real client does not send is dropped rather than forwarded
+// into logs and Sentry. These four are exactly what client/src/lib/monitoring.ts
+// attaches (reportError's context, plus kind for the global handlers).
+//
+// An allowlist rather than a size cap: capping kept the first N keys, which
+// still forwarded N attacker-chosen keys with attacker-chosen names.
+var clientErrorAllowedExtraKeys = map[string]bool{
+	"kind":   true,
+	"method": true,
+	"url":    true,
+	"status": true,
+}
+
+// allowlistExtra keeps only the allowlisted keys, with values truncated and
+// scrubbed. An unknown or oversized key is dropped, so a hand-crafted report
+// can neither smuggle arbitrary context nor use a key name to smuggle content.
+func allowlistExtra(extra map[string]any) map[string]any {
+	out := make(map[string]any, len(clientErrorAllowedExtraKeys))
+	for k, v := range extra {
+		if !clientErrorAllowedExtraKeys[k] {
+			continue
 		}
-		return out
-	}
-	keys := make([]string, 0, len(extra))
-	for k := range extra {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	out := make(map[string]any, clientErrorMaxExtraKeys)
-	for _, k := range keys[:clientErrorMaxExtraKeys] {
-		out[k] = capExtraValue(extra[k])
+		out[k] = capExtraValue(v)
 	}
 	return out
 }
 
 func capExtraValue(v any) any {
 	if s, ok := v.(string); ok {
-		return truncateRunes(s, clientErrorMaxExtraValueRunes)
+		return scrubPII(truncateRunes(s, clientErrorMaxExtraValueRunes))
 	}
 	return v
+}
+
+// Patterns for the two things a browser error message can carry that must not
+// reach a log store: a typed email address, and a credential in a header or a
+// query string. Logs are copied widely and read by many people, so anything in
+// them is effectively published (practice 9.2).
+var (
+	clientErrorEmailRe   = regexp.MustCompile(`[\w.+-]+@[\w-]+\.[\w.-]+`)
+	clientErrorBearerRe  = regexp.MustCompile(`(?i)\bbearer\s+[\w\-.=+/]+`)
+	clientErrorTokenKVRe = regexp.MustCompile(`(?i)\b(token|access_token|api_?key|secret|password|authorization)=([^\s&"']+)`)
+)
+
+// scrubPII replaces emails and credentials in s with a marker that keeps the
+// shape readable without the value. Applied to every client-supplied string
+// before it leaves this handler.
+func scrubPII(s string) string {
+	s = clientErrorEmailRe.ReplaceAllString(s, "[EMAIL]")
+	s = clientErrorBearerRe.ReplaceAllString(s, "Bearer [TOKEN]")
+	return clientErrorTokenKVRe.ReplaceAllString(s, `$1=[TOKEN]`)
 }
 
 // ClientErrorIngest handles POST /errors: it forwards a client-side error
@@ -268,15 +291,15 @@ func ClientErrorIngest(rep middleware.ErrorReporter) gin.HandlerFunc {
 		if msg == "" {
 			msg = "client error"
 		}
-		if r := []rune(msg); len(r) > 2048 {
-			msg = string(r[:2048])
+		if r := []rune(msg); len(r) > clientErrorMaxMessageRunes {
+			msg = string(r[:clientErrorMaxMessageRunes])
 		}
 		if rep != nil {
-			rep.Report(c.Request.Context(), errors.New(msg),
+			rep.Report(c.Request.Context(), errors.New(scrubPII(msg)),
 				"source", "client",
-				"url", truncateRunes(payload.URL, clientErrorMaxURLRunes),
-				"stack", truncateRunes(payload.Stack, clientErrorMaxStackRunes),
-				"extra", capExtra(payload.Extra),
+				"url", scrubPII(truncateRunes(payload.URL, clientErrorMaxURLRunes)),
+				"stack", scrubPII(truncateRunes(payload.Stack, clientErrorMaxStackRunes)),
+				"extra", allowlistExtra(payload.Extra),
 			)
 		}
 		c.Status(stdhttp.StatusNoContent)

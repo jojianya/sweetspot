@@ -40,7 +40,13 @@ func (h *Handler) service() *Service {
 }
 
 // isModerator reports whether the caller holds a moderation role.
+// Without a wired RoleReader nobody is a moderator, matching pins and
+// collections: users.CurrentRole falls back to a live lookup when the
+// middleware cached no role, and that lookup would dereference a nil reader.
 func (h *Handler) isModerator(c *gin.Context) bool {
+	if h.roles == nil {
+		return false
+	}
 	return users.IsModerator(h.roles, c)
 }
 

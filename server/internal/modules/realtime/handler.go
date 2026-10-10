@@ -178,7 +178,18 @@ func (h *Handler) Stream(c *gin.Context) {
 		category = &id
 	}
 
-	sub := h.broker.Subscribe(ctx)
+	sub, err := h.broker.Subscribe(ctx)
+	if err != nil {
+		// Redis is unreachable or refused the subscription. Answering 200 here
+		// would give the client a stream that stays open and never delivers a
+		// pin, and every retry would do the same while holding a limiter slot.
+		// A 503 with Retry-After lets the browser's EventSource back off and
+		// reconnect, so the stream recovers on its own when Redis does.
+		slog.Error("realtime: subscribe failed", "error", err.Error())
+		c.Header("Retry-After", "5")
+		response.Error(c, http.StatusServiceUnavailable, "realtime stream unavailable, try again later")
+		return
+	}
 	defer sub.Close()
 
 	c.Header("Content-Type", "text/event-stream")
@@ -195,7 +206,13 @@ func (h *Handler) Stream(c *gin.Context) {
 	ch := sub.Channel()
 
 	// Also subscribe to pin removed channel
-	removedSub := h.broker.SubscribeRemoved(ctx)
+	removedSub, err := h.broker.SubscribeRemoved(ctx)
+	if err != nil {
+		slog.Error("realtime: subscribe removed failed", "error", err.Error())
+		c.Header("Retry-After", "5")
+		response.Error(c, http.StatusServiceUnavailable, "realtime stream unavailable, try again later")
+		return
+	}
 	defer removedSub.Close()
 	removedCh := removedSub.Channel()
 

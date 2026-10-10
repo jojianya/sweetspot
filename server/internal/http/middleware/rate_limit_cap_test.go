@@ -93,3 +93,46 @@ func TestLimiterSilentBelowCap(t *testing.T) {
 		t.Fatalf("below-cap use logged %q, want silence", buf.String())
 	}
 }
+
+// loginLockKeySpent burns the whole per-(IP, identifier) login budget, the way
+// repeated wrong passwords do, and reports whether that pair is now locked.
+func loginLockKeySpent(l *Limiter, key string, budget int) bool {
+	for i := 0; i < budget; i++ {
+		l.AllowKey(key)
+	}
+	return l.Locked(key)
+}
+
+// A known limitation, pinned so it cannot regress silently: the cap is one map
+// with no exemptions, so a flood of distinct keys evicts the oldest entry —
+// which can be a live login-lockout counter, releasing an in-progress lockout.
+//
+// The alternative, a second map that never evicts, was rejected: it is
+// unbounded by design, so the same flood that exhausts this map would grow
+// that one without limit, and an attacker controls its growth. So the cap is
+// allowed to evict anything, and the eviction is logged and counted instead
+// (see TestLimiterLogsLiveEvictionsAtCap). If that tradeoff ever changes, this
+// test is the thing that must change with it.
+func TestLimiterCanEvictALiveLockoutCounter(t *testing.T) {
+	const budget = 5
+	l := New(budget, time.Minute)
+	const lockKey = "127.0.0.1|user@example.test"
+
+	if !loginLockKeySpent(l, lockKey, budget) {
+		t.Fatal("pair not locked after the budget was spent, want locked")
+	}
+
+	var buf bytes.Buffer
+	captureLogs(t, &buf)
+	// One distinct key more than the cap holds pushes the oldest entry out.
+	for i := 0; i < maxKeysBounds; i++ {
+		l.AllowKey(fmt.Sprintf("flood-%d", i))
+	}
+
+	if l.Locked(lockKey) {
+		t.Fatal("lockout counter survived a full-map flood, want it evicted — the cap has no exemptions")
+	}
+	if got := buf.String(); !strings.Contains(got, "evicted_since_last_log=1") {
+		t.Fatalf("the eviction of a live lockout counter was not logged, got %q", got)
+	}
+}

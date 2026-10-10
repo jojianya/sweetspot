@@ -170,7 +170,7 @@ sweetspot/
 ├── docker-compose.yml               # 4 services: postgres, redis, server, client
 ├── SECURITY.md                      # security audit findings and controls
 │
-├── project_documents/               # product & engineering docs (this folder)
+├── docs/                            # product & engineering docs (see docs/README.md for the index)
 │
 ├── server/                          # Go backend
 │   ├── cmd/api/
@@ -352,7 +352,8 @@ sweetspot/
 
 ## 7. Requirements, estimates, fan-out, failures and deferred items
 
-> Merged from `docs/project_documents/System-Design.md` (removed in this commit).
+> Merged from the former `System-Design` document (removed in this restructure; the
+> exact source path is recorded in the merge commit message).
 > The endpoint sketch (its §2) lives in `../api/rest-api.md`, the schema SQL (its §3)
 > is summarised in §2.4 above with the full history under `server/internal/migrations/`,
 > and the SSE event shape (its §2, SSE part) is covered in §2.3 above — those are not

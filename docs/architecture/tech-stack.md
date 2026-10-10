@@ -9,7 +9,7 @@ A monorepo with two runtimes (Go + Node) and one docker-compose stack. Product n
 | `client/` | Next.js 16 frontend (map app) |
 | `server/` | Go 1.27 backend (Gin API) |
 | `docker-compose.yml` | PostGIS + Redis + server + client |
-| `project_documents/` | PRD, System-Design, Architecture, API docs |
+| `docs/product/` + `docs/architecture/` + `docs/api/` | PRD, workflow, roadmap, system architecture, API docs |
 
 ## 1. Infrastructure & Deployment
 

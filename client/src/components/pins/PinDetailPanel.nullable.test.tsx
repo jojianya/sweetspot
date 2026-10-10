@@ -34,6 +34,11 @@ vi.mock("@/hooks/usePinShare", () => ({
 vi.mock("@/hooks/useOptimisticSave", () => ({
   useOptimisticSave: () => ({ saved: false, saving: false, error: null, handleSave: vi.fn() }),
 }));
+vi.mock("@/hooks/useReaction", () => ({
+  // Mocked for the same reason useOptimisticSave is: the real hook reaches for
+  // the app router, which this plain createRoot harness does not mount.
+  useReaction: () => ({ reacted: false, count: 0, busy: false, error: null, toggle: vi.fn() }),
+}));
 vi.mock("@/hooks/useCategories", () => ({
   useCategories: () => ({ categories: [{ id: 1, name: "Food", slug: "food" }] }),
 }));

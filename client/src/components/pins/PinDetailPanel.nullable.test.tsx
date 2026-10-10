@@ -14,6 +14,7 @@ const makePin = (userId: string | null): PinDetail => ({
   category_id: 1,
   is_hidden: false,
   views: 42,
+  good_spot_count: 0,
   created_at: "2024-01-15T10:00:00Z",
   category: "Food",
   username: userId ? "alice" : null,

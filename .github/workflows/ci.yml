@@ -184,7 +184,7 @@ jobs:
           # Note that -run is an unanchored regex: TestResetCleanupStopsOnCancel
           # already matches ...BetweenBatches, but both are listed so the
           # pattern documents what it covers.
-          go test ./internal/endpointtest/ -run 'TestDBDeletePin|TestDBPasswordReset|TestDBCollection|TestDBCover|TestDBAuthRevoked|TestDBPinViews|TestDBListEntriesIncludeViews|TestDBResetCleanupDeletesOnlyDeadRows|TestDBResetCleanupBatchesBigBackfills|TestResetCleanupStopsOnCancel|TestResetCleanupStopsOnCancelBetweenBatches|TestDBGoodSpotTriggerCounts|TestRealDBTrendingAndBbox|TestRealDBListUsersWithCount|TestDBGoodSpotEndpointToggle|TestDBGoodSpotEndpointIdempotent|TestDBGoodSpotEndpointHiddenPin|TestDBGoodSpotEndpointMissingPin|TestDBGoodSpotEndpointOwnPin|TestDBGoodSpotEndpointGuest|TestDBGoodSpotEndpointUnreactAbsent|TestDBGoodSpotEndpointMalformedID' -race -count=1 -v
+          go test ./internal/endpointtest/ -run 'TestDBDeletePin|TestDBPasswordReset|TestDBCollection|TestDBCover|TestDBAuthRevoked|TestDBPinViews|TestDBListEntriesIncludeViews|TestDBResetCleanupDeletesOnlyDeadRows|TestDBResetCleanupBatchesBigBackfills|TestResetCleanupStopsOnCancel|TestResetCleanupStopsOnCancelBetweenBatches|TestDBGoodSpotTriggerCounts|TestRealDBTrendingAndBbox|TestRealDBListUsersWithCount|TestDBGoodSpotEndpointToggle|TestDBGoodSpotEndpointIdempotent|TestDBGoodSpotEndpointHiddenPin|TestDBGoodSpotEndpointMissingPin|TestDBGoodSpotEndpointOwnPin|TestDBGoodSpotEndpointGuest|TestDBGoodSpotEndpointUnreactAbsent|TestDBGoodSpotEndpointMalformedID|TestDBGoodSpotCountOnListAndDetail|TestDBGoodSpotReactedByMeOnDetail|TestDBGoodSpotHiddenPinDetail404' -race -count=1 -v
 
       - name: Vet
         run: go vet ./...

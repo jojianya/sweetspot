@@ -65,7 +65,7 @@ func (r *postgresRepository) PinExists(ctx context.Context, pinID string) (bool,
 // the user, from COUNT(*) OVER () in the same query.
 func (r *postgresRepository) List(ctx context.Context, userID string, limit, offset int) ([]Entry, int, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
+		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.good_spot_count, p.created_at,
 		       `+database.CoverPhotoCoalesce+`, u.username, f.created_at AS saved_at,
 		       COUNT(*) OVER () AS total
 		FROM favorites f
@@ -86,7 +86,7 @@ func (r *postgresRepository) List(ctx context.Context, userID string, limit, off
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
-			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.CreatedAt, &e.CoverURL, &e.Username, &e.SavedAt, &total); err != nil {
+			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.GoodSpotCount, &e.Pin.CreatedAt, &e.CoverURL, &e.Username, &e.SavedAt, &total); err != nil {
 			return nil, 0, err
 		}
 		entries = append(entries, e)

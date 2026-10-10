@@ -21,12 +21,12 @@ const places = [
 const pins = [
   {
     id: "pin1", user_id: "u1", location: "POINT(2 1)", geohash: "x",
-    caption: "Pin Alpha", category_id: 1, is_hidden: false, views: 0,
+    caption: "Pin Alpha", category_id: 1, is_hidden: false, views: 0, good_spot_count: 0,
     created_at: "2026-01-01", cover_url: "", username: "alice",
   },
   {
     id: "pin2", user_id: "u2", location: "POINT(4 3)", geohash: "y",
-    caption: "Pin Beta", category_id: 1, is_hidden: false, views: 0,
+    caption: "Pin Beta", category_id: 1, is_hidden: false, views: 0, good_spot_count: 0,
     created_at: "2026-01-02", cover_url: "", username: "bob",
   },
 ];

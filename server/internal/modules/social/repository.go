@@ -99,7 +99,7 @@ func (r *postgresRepository) CountPins(ctx context.Context, userID string) (int,
 // Feed returns the newest public pins from the users that userID follows.
 func (r *postgresRepository) Feed(ctx context.Context, userID string, limit int) ([]pins.PinListEntry, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
+		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.good_spot_count, p.created_at,
 		       `+database.CoverPhotoCoalesce+`, u.username
 		FROM follows f
 		JOIN pins p ON p.user_id = f.followee_id
@@ -118,7 +118,7 @@ func (r *postgresRepository) Feed(ctx context.Context, userID string, limit int)
 	for rows.Next() {
 		var e pins.PinListEntry
 		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
-			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.CreatedAt, &e.CoverURL, &e.Username); err != nil {
+			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.GoodSpotCount, &e.Pin.CreatedAt, &e.CoverURL, &e.Username); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)

@@ -20,6 +20,7 @@ export function toPinListEntry(
     category_id: pin.category_id,
     is_hidden: pin.is_hidden,
     views: pin.views,
+    good_spot_count: pin.good_spot_count,
     created_at: pin.created_at,
     cover_url: cover,
     username,

@@ -61,6 +61,9 @@ export function usePinStream(
           // the separate pin_removed event, which usePinStream's onPinRemoved
           // drops from the list. If a pin-update event is ever added, this
           // value must come from that event instead of staying hardcoded.
+          // 0 is accurate, not a placeholder: the stream carries only
+          // just-created pins, and a pin nobody has reacted to yet has none.
+          good_spot_count: 0,
           views: 0, // New pins start at 0 views
           created_at: event.created_at,
           cover_url: event.cover_url ?? "",

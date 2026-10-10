@@ -13,6 +13,7 @@ function pin(overrides: Partial<PinDetail> = {}): PinDetail {
     category_id: 1,
     is_hidden: false,
     views: 4,
+    good_spot_count: 0,
     created_at: "2026-01-02T00:00:00Z",
     category: "Food",
     username: "alice",

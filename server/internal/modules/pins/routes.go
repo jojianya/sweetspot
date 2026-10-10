@@ -15,9 +15,14 @@ type RouteOptions struct {
 	JWTSecret string
 	Blacklist *cache.Blacklist
 	Sessions  middleware.SessionChecker
+	// Reactions, when set, lets GET /pins/:id answer reacted_by_me. Optional:
+	// nil leaves the field false, which is the correct answer for guests and
+	// for any wiring that never supplied a reader.
+	Reactions ReactionReader
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
+	h.SetReactions(opts.Reactions)
 	rg.GET("/categories", h.ListCategories)
 	rg.GET("/pins", h.GetPins)
 	rg.GET("/pins/search", h.SearchPins)

@@ -87,9 +87,9 @@ func (r *postgresRepository) CreatePin(ctx context.Context, pin NewPin) (Pin, er
 	err = tx.QueryRow(ctx, `
 		INSERT INTO pins (user_id, location, geohash, caption, category_id)
 		VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, $4, $5, $6)
-		RETURNING id, user_id, ST_AsText(location) AS location, geohash, caption, category_id, is_hidden, views, created_at
+		RETURNING id, user_id, ST_AsText(location) AS location, geohash, caption, category_id, is_hidden, views, good_spot_count, created_at
 	`, pin.UserID, pin.Lng, pin.Lat, pin.Geohash, pin.Caption, pin.CategoryID).Scan(
-		&p.ID, &p.UserID, &p.Location, &p.Geohash, &p.Caption, &p.CategoryID, &p.IsHidden, &p.Views, &p.CreatedAt,
+		&p.ID, &p.UserID, &p.Location, &p.Geohash, &p.Caption, &p.CategoryID, &p.IsHidden, &p.Views, &p.GoodSpotCount, &p.CreatedAt,
 	)
 	if err != nil {
 		return Pin{}, err
@@ -171,14 +171,14 @@ func (r *postgresRepository) GetPin(ctx context.Context, id string) (PinDetail, 
 	var d PinDetail
 
 	err := r.pool.QueryRow(ctx, `
-		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
+		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.good_spot_count, p.created_at,
 		       c.name, u.username, u.avatar_url
 		FROM pins p
 		LEFT JOIN categories c ON c.id = p.category_id
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE p.id = $1
 	`, id).Scan(
-		&d.ID, &d.UserID, &d.Location, &d.Geohash, &d.Caption, &d.CategoryID, &d.IsHidden, &d.Views, &d.CreatedAt,
+		&d.ID, &d.UserID, &d.Location, &d.Geohash, &d.Caption, &d.CategoryID, &d.IsHidden, &d.Views, &d.GoodSpotCount, &d.CreatedAt,
 		&d.Category, &d.Username, &d.AvatarURL,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -238,7 +238,7 @@ func scanPinPhotos(ctx context.Context, q rowQuerier, pinID string) ([]PinPhoto,
 // pinListEntrySelect is the shared SELECT shape for list/search results: the
 // pin columns plus the first photo's cover URL and the author's username.
 const pinListEntrySelect = `
-	SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
+	SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.good_spot_count, p.created_at,
 	       ` + database.CoverPhotoCoalesce + `, u.username
 	FROM pins p
 	` + database.CoverPhotoLateral + `
@@ -281,7 +281,7 @@ func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, cate
 // comments_pin_idx (pin_id, created_at) instead of scanning the whole
 // comments table. This is P1.1.
 const trendingPinSelect = `
-	SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
+	SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.good_spot_count, p.created_at,
 	       COALESCE(pp.thumbnail_url, pp.photo_url, ''), u.username,
 	       COALESCE(c.comment_count, 0)::int AS comment_count,
 	       ROUND(((p.views + 5.0 * COALESCE(c.comment_count, 0)) /
@@ -325,7 +325,7 @@ func scanTrendingPins(rows pgx.Rows) ([]TrendingPin, error) {
 	for rows.Next() {
 		var e TrendingPin
 		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
-			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.CreatedAt, &e.CoverURL, &e.Username,
+			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.GoodSpotCount, &e.Pin.CreatedAt, &e.CoverURL, &e.Username,
 			&e.CommentCount, &e.Score); err != nil {
 			return nil, err
 		}
@@ -454,7 +454,7 @@ func scanPinListEntries(rows pgx.Rows) ([]PinListEntry, error) {
 	for rows.Next() {
 		var e PinListEntry
 		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
-			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.CreatedAt, &e.CoverURL, &e.Username); err != nil {
+			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.GoodSpotCount, &e.Pin.CreatedAt, &e.CoverURL, &e.Username); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)

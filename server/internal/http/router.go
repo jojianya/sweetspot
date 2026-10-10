@@ -144,7 +144,15 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	jsonRoutes.GET("/events", realtimeHandler.Stream)
 
 	pinHandler := pins.NewHandler(c.PinRepo, c.Store, c.Events, c.UserService)
-	pins.RegisterRoutes(uploadRoutes, pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
+	pins.RegisterRoutes(uploadRoutes, pinHandler, pins.RouteOptions{
+		JWTSecret: cfg.JWTSecret,
+		Blacklist: c.Blacklist,
+		Sessions:  c.UserService,
+		// Only GET /pins/:id answers reacted_by_me. The reaction repository is
+		// passed directly: it already exposes ReactedByMe, and handing the pins
+		// handler the repository (not the service) keeps the dependency narrow.
+		Reactions: c.ReactionRepo,
+	})
 
 	reportHandler := reports.NewHandler(reports.NewService(c.ReportRepo), c.Events).
 		WithQuarantine(c.Store, c.PinRepo)

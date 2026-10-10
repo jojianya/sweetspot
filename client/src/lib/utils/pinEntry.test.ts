@@ -11,6 +11,7 @@ const pin: CreatedPin = {
   category_id: 2,
   is_hidden: false,
   views: 0,
+  good_spot_count: 0,
   created_at: "2026-01-02T00:00:00Z",
 };
 
@@ -48,6 +49,7 @@ describe("toPinListEntry", () => {
       category_id: 2,
       is_hidden: false,
       views: 0,
+      good_spot_count: 0,
       created_at: "2026-01-02T00:00:00Z",
       cover_url: "https://media.example/thumb.webp",
       username: "alice",

@@ -47,7 +47,18 @@ type Handler struct {
 	// roles resolves moderation rights from the database rather than the JWT,
 	// so a demotion takes effect on the caller's next request.
 	roles users.RoleReader
-	svc   *Service
+	// reactions answers "has this viewer already reacted?" for GET /pins/:id.
+	// Optional: nil means false, which is the right answer for tests and for
+	// any wiring that never supplied one. Declared as a narrow interface so pins
+	// never imports reactions (which imports pins for VisiblePinExists).
+	reactions ReactionReader
+	svc       *Service
+}
+
+// ReactionReader reports whether a viewer already reacted to a pin. Implemented
+// by reactions' repository.
+type ReactionReader interface {
+	ReactedByMe(ctx context.Context, userID, pinID string) (bool, error)
 }
 
 func NewHandler(repo Repository, store *storage.Local, events Events, roles users.RoleReader) *Handler {
@@ -56,6 +67,10 @@ func NewHandler(repo Repository, store *storage.Local, events Events, roles user
 	}
 	return &Handler{repo: repo, store: store, events: events, roles: roles, svc: NewService(repo, store, events, roles)}
 }
+
+// SetReactions wires the reaction reader used by GET /pins/:id. Called from
+// router.go, where both modules exist.
+func (h *Handler) SetReactions(r ReactionReader) { h.reactions = r }
 
 // service returns the service, building it from the handler's dependencies
 // when the handler was constructed as a struct literal (as some tests do)
@@ -150,7 +165,8 @@ func (h *Handler) GetTrending(c *gin.Context) {
 }
 
 func (h *Handler) GetPin(c *gin.Context) {
-	pin, err := h.service().GetVisible(c.Request.Context(), c.Param("id"), middleware.GetUserID(c))
+	viewerID := middleware.GetUserID(c)
+	pin, err := h.service().GetVisible(c.Request.Context(), c.Param("id"), viewerID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
@@ -160,7 +176,28 @@ func (h *Handler) GetPin(c *gin.Context) {
 		return
 	}
 
+	// reacted_by_me is answered here and nowhere else: the list endpoints have
+	// no viewer, and the map markers deliberately do not, so this is the only
+	// shape that carries it. A failure to read it is a 500 rather than a
+	// silently false answer, so a broken reaction read cannot be mistaken for
+	// "you have not reacted".
+	pin.ReactedByMe, err = h.reactedByMe(c.Request.Context(), viewerID, pin.ID)
+	if err != nil {
+		response.Internal(c, "pins: reaction state", err, "pin_id", c.Param("id"))
+		return
+	}
+
 	response.OK(c, gin.H{"pin": pin})
+}
+
+// reactedByMe reports the viewer's own reaction state. A nil reader or an
+// anonymous viewer answers false without a database call, which is what keeps
+// the field present (and simply false) for guests and for tests.
+func (h *Handler) reactedByMe(ctx context.Context, viewerID, pinID string) (bool, error) {
+	if h.reactions == nil || viewerID == "" {
+		return false, nil
+	}
+	return h.reactions.ReactedByMe(ctx, viewerID, pinID)
 }
 
 // RegisterView counts a unique per-account view. It is read-safe for

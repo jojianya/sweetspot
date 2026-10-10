@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -305,4 +306,192 @@ func TestDBGoodSpotEndpointMalformedID(t *testing.T) {
 	if code != http.StatusBadRequest {
 		t.Fatalf("PUT on a malformed id status = %d, want 400", code)
 	}
+}
+
+// setupPinRouter builds the pins router with the reaction reader wired, so
+// reacted_by_me is answered the way production answers it.
+func setupPinRouter(t *testing.T) (*gin.Engine, reactionFixture) {
+	t.Helper()
+	f := setupReactionRouter(t)
+	userSvc := users.NewService(users.NewRepository(f.pool))
+	pinH := pins.NewHandler(pins.NewRepository(f.pool), nil, nil, userSvc)
+	r := gin.New()
+	pins.RegisterRoutes(r.Group(""), pinH, pins.RouteOptions{
+		JWTSecret: reactionTestSecret,
+		Sessions:  userSvc,
+		Reactions: reactions.NewRepository(f.pool),
+	})
+	return r, f
+}
+
+func getPin(t *testing.T, r *gin.Engine, path, token string) (int, string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w.Code, w.Body.String()
+}
+
+// countFromBody pulls good_spot_count out of a {"pins":[...]} or {"pin":{...}}
+// envelope by looking for the first matching pin id.
+func countFromBody(t *testing.T, body, pinID, envelope string) int {
+	t.Helper()
+	var top struct {
+		Pin *struct {
+			ID            string `json:"id"`
+			GoodSpotCount int    `json:"good_spot_count"`
+		} `json:"pin"`
+		Pins []struct {
+			ID            string `json:"id"`
+			GoodSpotCount int    `json:"good_spot_count"`
+		} `json:"pins"`
+	}
+	if err := json.Unmarshal([]byte(body), &top); err != nil {
+		t.Fatalf("decode %s envelope: %v", envelope, err)
+	}
+	if envelope == "pin" {
+		if top.Pin == nil {
+			t.Fatalf("no pin in body: %s", body)
+		}
+		if top.Pin.ID != pinID {
+			t.Fatalf("pin id = %s, want %s", top.Pin.ID, pinID)
+		}
+		return top.Pin.GoodSpotCount
+	}
+	for _, p := range top.Pins {
+		if p.ID == pinID {
+			return p.GoodSpotCount
+		}
+	}
+	return -1
+}
+
+func reactedFromBody(t *testing.T, body, pinID string) bool {
+	t.Helper()
+	var top struct {
+		Pin *struct {
+			ID          string `json:"id"`
+			ReactedByMe *bool  `json:"reacted_by_me"`
+		} `json:"pin"`
+	}
+	if err := json.Unmarshal([]byte(body), &top); err != nil {
+		t.Fatalf("decode pin envelope: %v", err)
+	}
+	if top.Pin == nil {
+		t.Fatalf("no pin in body: %s", body)
+	}
+	if top.Pin.ReactedByMe == nil {
+		t.Fatalf("reacted_by_me missing from the detail response: %s", body)
+	}
+	return *top.Pin.ReactedByMe
+}
+
+// TestDBGoodSpotCountOnListAndDetail proves the count reaches the client on
+// both the list and the detail response. The pin sits at (20,20), so the bbox
+// below must contain it.
+func TestDBGoodSpotCountOnListAndDetail(t *testing.T) {
+	r, f := setupPinRouter(t)
+	pin := seedReactionPin(t, f, f.author)
+	tok := reactionToken(t, f.other)
+
+	if _, _, res := callReaction(t, f, http.MethodPut, pin, tok); res.GoodSpotCount != 1 {
+		t.Fatalf("toggle reported count %d, want 1", res.GoodSpotCount)
+	}
+
+	// Detail.
+	code, body := getPin(t, r, "/pins/"+pin, tok)
+	if code != http.StatusOK {
+		t.Fatalf("GET detail status = %d, want 200 (body: %s)", code, body)
+	}
+	if got := countFromBody(t, body, pin, "pin"); got != 1 {
+		t.Fatalf("detail good_spot_count = %d, want 1", got)
+	}
+
+	// List. bbox is minLat,minLng,maxLat,maxLng.
+	code, body = getPin(t, r, "/pins?bbox=19,19,21,21", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET list status = %d, want 200 (body: %s)", code, body)
+	}
+	if got := countFromBody(t, body, pin, "pins"); got != 1 {
+		t.Fatalf("list good_spot_count = %d, want 1", got)
+	}
+}
+
+// TestDBGoodSpotReactedByMeOnDetail proves the flag is true for the reactor,
+// false for a different account, and false for a guest — and that it is present
+// in every case rather than omitted.
+func TestDBGoodSpotReactedByMeOnDetail(t *testing.T) {
+	r, f := setupPinRouter(t)
+	pin := seedReactionPin(t, f, f.author)
+	reactor := reactionToken(t, f.other)
+
+	if _, _, res := callReaction(t, f, http.MethodPut, pin, reactor); !res.Reacted {
+		t.Fatal("toggle did not report reacted:true")
+	}
+
+	// The reactor sees true.
+	_, body := getPin(t, r, "/pins/"+pin, reactor)
+	if !reactedFromBody(t, body, pin) {
+		t.Errorf("reactor's detail reacted_by_me = false, want true")
+	}
+
+	// A different logged-in account sees false, not true and not absent.
+	_, body = getPin(t, r, "/pins/"+pin, reactionToken(t, f.author))
+	if reactedFromBody(t, body, pin) {
+		t.Error("another user's detail reacted_by_me = true, want false")
+	}
+
+	// A guest sees false. Guests still read the count, which is asserted above.
+	_, body = getPin(t, r, "/pins/"+pin, "")
+	if reactedFromBody(t, body, pin) {
+		t.Error("guest detail reacted_by_me = true, want false")
+	}
+	if got := countFromBody(t, body, pin, "pin"); got != 1 {
+		t.Errorf("guest detail good_spot_count = %d, want 1 (guests still see counts)", got)
+	}
+}
+
+// TestDBGoodSpotHiddenPinDetail404 proves the exposure change did not weaken
+// the visibility rule. A hidden pin is a 404 for everyone except its author,
+// who keeps access to their own hidden pin (pins.Service.canViewHidden) — that
+// is pre-existing behaviour, not something reactions introduced, so it is
+// asserted here in both directions to stop either half drifting.
+func TestDBGoodSpotHiddenPinDetail404(t *testing.T) {
+	r, f := setupPinRouter(t)
+	pin := seedReactionPin(t, f, f.author)
+
+	if _, err := f.pool.Exec(context.Background(),
+		`UPDATE pins SET is_hidden = true WHERE id = $1`, pin); err != nil {
+		t.Fatalf("hide pin: %v", err)
+	}
+
+	t.Run("non-owner gets 404", func(t *testing.T) {
+		code, body := getPin(t, r, "/pins/"+pin, reactionToken(t, f.other))
+		if code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404 (body: %s)", code, body)
+		}
+		if strings.Contains(body, "reacted_by_me") || strings.Contains(body, "good_spot_count") {
+			t.Errorf("a 404 for a hidden pin leaked pin fields: %s", body)
+		}
+	})
+
+	t.Run("guest gets 404", func(t *testing.T) {
+		code, _ := getPin(t, r, "/pins/"+pin, "")
+		if code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", code)
+		}
+	})
+
+	t.Run("author keeps access to their own hidden pin", func(t *testing.T) {
+		code, body := getPin(t, r, "/pins/"+pin, reactionToken(t, f.author))
+		if code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 for the author (body: %s)", code, body)
+		}
+		if got := countFromBody(t, body, pin, "pin"); got != 0 {
+			t.Errorf("hidden pin good_spot_count = %d, want 0", got)
+		}
+	})
 }

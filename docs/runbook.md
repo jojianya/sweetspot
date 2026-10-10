@@ -59,14 +59,26 @@ fresh server.
 
 ## 2. Rollback
 
+**Migrations are applied by the app's runner only — never by hand with `psql`.**
+`RunMigrations` writes a row into `schema_migrations` for every file it applies,
+and that row is the only thing that stops it applying the file again. Hand-running
+a `.sql` file changes the schema but leaves no row behind, so the next boot
+retries the migration and dies on "already exists" — which, with
+`restart: unless-stopped`, is a crash-loop, not a one-off failure. `0023_good_spots`
+is the worked example: applied by hand during development, the next start exited
+non-zero on `relation "good_spots" already exists` until the schema and the
+bookkeeping row were brought back in step. If a migration has to be undone by
+hand, also delete its `schema_migrations` row, or run the down script instead.
+
 1. `git checkout <previous-tag>`, rebuild and `up -d` as above.
-2. Database: migrations run forward-only on boot. Down scripts exist for **0015–0022**
+2. Database: migrations run forward-only on boot. Down scripts exist for **0015–0023**
    (`0015_pin_photo_thumbnail_not_null`, `0016_pins_updated_at_trigger`,
    `0017_streams_drop_room_name`, `0018_users_sessions_valid_after`,
    `0019_password_resets`, `0020_collections_is_private`, `0021_pin_views`,
-   `0022_pins_user_created_idx`); `RollbackLastMigration` walks applied migrations
-   newest-first and **skips any without one**, so 0001–0014 cannot be rolled back and a
-   rollback that must undo them requires restoring from a backup (§3) instead. Prefer
+   `0022_pins_user_created_idx`, `0023_good_spots`); `RollbackLastMigration` walks
+   applied migrations newest-first and **skips any without one**, so 0001–0014
+   cannot be rolled back and a rollback that must undo them requires restoring
+   from a backup (§3) instead. Prefer
    forward fixes for schema mistakes.
 
 ## 3. Backup and restore
@@ -98,6 +110,28 @@ idempotent and never delete.
 Dead password-reset rows (used, or expired for over a day) are deleted by a
 daily janitor (`PASSWORD_RESET_CLEANUP_INTERVAL`, default `24h`); they can
 never validate, so this is pure hygiene and needs no operator action.
+
+### Good spot reactions
+
+A logged-in user can mark a pin as a "Good spot" and tap again to undo; one
+reaction per account per pin is the table's primary key, so a double tap cannot
+double count. Authors cannot react to their own pin (403), and hidden pins 404
+exactly like missing ones.
+
+`good_spots` (migration `0023`) holds `(pin_id, user_id, created_at)` with both
+foreign keys `ON DELETE CASCADE`, so deleting a pin or a user removes their
+reactions and leaves nothing orphaned. The count itself is a denormalised column,
+`pins.good_spot_count`, maintained by an `AFTER INSERT OR DELETE` trigger rather
+than a `COUNT` join on every list read — a join costs roughly five times the time
+and buffers at 536 pins and 102k reactions. The trigger also ignores changes to
+that column in `updated_at`, so reacting is not mistaken for editing.
+
+Routes: `PUT`/`DELETE /pins/:id/good-spot`, both requiring auth and both limited
+to 30/min per account with a 120/min per-IP backstop; `GET /pins/:id` additionally
+answers `reacted_by_me` for the caller. Reactions are **not** on the realtime SSE
+stream by design: every connection parses every event, and a reaction is the
+highest-frequency change imaginable, so broadcasting them would multiply load for
+no user-visible gain.
 
 Root-owned volume fix: images before this change never created
 `/app/quarantine`, so a pre-existing `quarantine_data` volume can be

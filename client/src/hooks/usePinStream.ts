@@ -53,6 +53,14 @@ export function usePinStream(
           caption: event.caption,
           category_id: event.category_id,
           is_hidden: false, // New pins are never hidden
+          // Safe only because the server never publishes a hidden pin on the
+          // `pin` channel: CreatePin's INSERT leaves is_hidden at its false
+          // default (pins/repository.go), UpdatePin publishes nothing at all,
+          // and pins.Event has no is_hidden field, so the channel cannot
+          // express "hidden". A pin that becomes hidden is withdrawn through
+          // the separate pin_removed event, which usePinStream's onPinRemoved
+          // drops from the list. If a pin-update event is ever added, this
+          // value must come from that event instead of staying hardcoded.
           views: 0, // New pins start at 0 views
           created_at: event.created_at,
           cover_url: event.cover_url ?? "",

@@ -80,12 +80,12 @@ func savePhotos(store *storage.Local, validated []validatedFile) (photoURLs, thu
 		full, err := store.Save(vf.data, vf.ext)
 		if err != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("%w: save full photo: %v", ErrPhotoSave, err)
+			return nil, nil, fmt.Errorf("%w: save full photo: %w", ErrPhotoSave, err)
 		}
 		thumb, err := store.Save(vf.thumb, vf.ext)
 		if err != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("%w: save thumbnail: %v", ErrPhotoSave, err)
+			return nil, nil, fmt.Errorf("%w: save thumbnail: %w", ErrPhotoSave, err)
 		}
 		written = append(written, stored{full: full, thumb: thumb})
 		photoURLs = append(photoURLs, full)

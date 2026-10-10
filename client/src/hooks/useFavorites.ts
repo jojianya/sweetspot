@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchFavoriteIDs, fetchFavorites, type FavoriteEntry } from "@/lib/api";
+import { fetchFavorites, fetchIsSaved, type FavoriteEntry } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 
 /** Matches the server's maximum page size for the saved-pins list. */
@@ -20,8 +20,10 @@ export function useFavorites() {
 }
 
 /**
- * Whether the given pin is saved by the current user. Fetches the favorite
- * ID list whenever `enabled` (i.e. the user is logged in) or the pin changes.
+ * Whether the given pin is saved by the current user. Queries the server's
+ * per-pin check (`GET /favorites/:id/saved`, one indexed EXISTS probe) rather
+ * than pulling the whole id list, which is capped at 5000 server-side and is
+ * only meant to be fetched as a membership set.
  * `setSaved` lets the caller apply optimistic updates.
  */
 export function useSavedStatus(pinId: string, enabled: boolean) {
@@ -42,9 +44,9 @@ export function useSavedStatus(pinId: string, enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    fetchFavoriteIDs()
-      .then((ids) => {
-        if (!cancelled) setSaved(ids.includes(pinId));
+    fetchIsSaved(pinId)
+      .then((res) => {
+        if (!cancelled) setSaved(res);
       })
       .catch(() => {
         // saved state stays false if the lookup fails

@@ -65,6 +65,23 @@ func (h *Handler) Unsave(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// IsSaved answers "has this caller already saved this pin?" with one indexed
+// EXISTS probe. It is deliberately a separate route from GET /favorites: the
+// id list carries every saved pin (capped at listIDsHardCap) when the client
+// only wants to know about the one it is showing.
+func (h *Handler) IsSaved(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	pinID := c.Param("id")
+
+	saved, err := h.service().IsSaved(c.Request.Context(), userID, pinID)
+	if err != nil {
+		response.Internal(c, "favorite: is saved", err, "user_id", userID, "pin_id", pinID)
+		return
+	}
+
+	response.OK(c, gin.H{"saved": saved})
+}
+
 func (h *Handler) GetSaved(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 

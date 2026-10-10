@@ -78,6 +78,9 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 
 	rg.GET("/favorites", middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions), h.GetSaved)
 	rg.GET("/favorites/ids", middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions), h.GetSavedIDs)
+	// One pin, one EXISTS probe: the client asks this instead of GET
+	// /favorites/ids (which returns every saved id) to learn a single answer.
+	rg.GET("/favorites/:id/saved", middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions), h.IsSaved)
 
 	// Mutating routes: validid first so a malformed id answers 400 without
 	// spending budget, then auth, then the per-IP backstop, then the per-user

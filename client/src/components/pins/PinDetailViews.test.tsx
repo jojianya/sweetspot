@@ -9,7 +9,7 @@ import PinDetailPanel from "./PinDetailPanel";
 const apiMocks = vi.hoisted(() => ({
   fetchPin: vi.fn(),
   fetchCategories: vi.fn().mockResolvedValue([]),
-  fetchFavoriteIDs: vi.fn().mockResolvedValue([]),
+  fetchIsSaved: vi.fn().mockResolvedValue(false),
   fetchFavorites: vi.fn().mockResolvedValue([]),
   saveFavorite: vi.fn(),
   removeFavorite: vi.fn(),

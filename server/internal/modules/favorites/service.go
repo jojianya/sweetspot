@@ -40,6 +40,14 @@ func (s *Service) Unsave(ctx context.Context, userID, pinID string) error {
 	return s.repo.Unsave(ctx, userID, pinID)
 }
 
+// IsSaved reports whether the caller already saved the pin, from one indexed
+// EXISTS probe. It exists so a client can ask about a single pin instead of
+// downloading every saved id (capped at listIDsHardCap) to answer the same
+// question.
+func (s *Service) IsSaved(ctx context.Context, userID, pinID string) (bool, error) {
+	return s.repo.IsSaved(ctx, userID, pinID)
+}
+
 func (s *Service) List(ctx context.Context, userID string, limit, offset int) ([]Entry, int, error) {
 	return s.repo.List(ctx, userID, limit, offset)
 }

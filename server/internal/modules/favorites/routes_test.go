@@ -12,6 +12,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -155,5 +156,42 @@ func TestFavoritesGetRoutesStayUnthrottled(t *testing.T) {
 		if w.Code == http.StatusTooManyRequests {
 			t.Fatalf("GET /favorites/ids was rate limited on request %d, want it left open", i+1)
 		}
+	}
+}
+
+// TestFavoritesIsSavedRouteAnswersFromTheRepository proves the per-pin check
+// is wired to the handler and returns the repository's answer, so the client
+// can learn one pin's saved state without downloading the whole id list.
+func TestFavoritesIsSavedRouteAnswersFromTheRepository(t *testing.T) {
+	r := setupFavoritesLimiterRouter(t, 1, 1)
+
+	tok, err := jwt.Generate(favoritesLimiterTestSecret, "user-a", time.Hour)
+	if err != nil {
+		t.Fatalf("mint token: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/favorites/"+favoritesLimiterPin+"/saved", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /favorites/:id/saved status = %d, want 200", w.Code)
+	}
+	if body := w.Body.String(); !strings.Contains(body, `"saved":true`) {
+		t.Errorf("body %q does not carry the stub's saved:true answer", body)
+	}
+}
+
+// TestFavoritesIsSavedRouteRequiresAuth proves the check is account-scoped:
+// without a token it must not answer, because the answer is per caller.
+func TestFavoritesIsSavedRouteRequiresAuth(t *testing.T) {
+	r := setupFavoritesLimiterRouter(t, 1, 1)
+
+	req := httptest.NewRequest(http.MethodGet, "/favorites/"+favoritesLimiterPin+"/saved", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status = %d, want 401", w.Code)
 	}
 }

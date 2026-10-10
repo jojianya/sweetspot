@@ -7,6 +7,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/comments"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/favorites"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/reactions"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/realtime"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/social"
@@ -22,6 +23,7 @@ type Container struct {
 	PinRepo        pins.Repository
 	ReportRepo     reports.Repository
 	FavoriteRepo   favorites.Repository
+	ReactionRepo   reactions.Repository
 	CommentRepo    comments.Repository
 	SocialRepo     social.Repository
 	CollectionRepo collections.Repository
@@ -39,6 +41,7 @@ func Build(cfg *config.Config, pool *pgxpool.Pool) *Container {
 		PinRepo:        pins.NewRepository(pool),
 		ReportRepo:     reports.NewRepository(pool),
 		FavoriteRepo:   favorites.NewRepository(pool),
+		ReactionRepo:   reactions.NewRepository(pool),
 		CommentRepo:    comments.NewRepository(pool),
 		SocialRepo:     social.NewRepository(pool),
 		CollectionRepo: collections.NewRepository(pool),

@@ -978,12 +978,20 @@ counts or event rates grow beyond the current accepted scale.
 This is the honest list. Where `docs/CODE_REVIEW.md` disagrees with the code, **the code wins** — that document
 is a from-scratch audit whose checkboxes were never ticked, so its `[ ]` markers are stale in both directions.
 
-### 9.1 SSE payload doesn't match the client schema — live pins never arrive
+### 9.1 SSE payload vs client schema — resolved
 
-As proven in [§8.3](#83-the-client-side-and-a-real-bug-in-it). Fix is one of: extend `pins.Event` with
-`geohash`, `is_hidden`, `views` and `username` (requires a join at publish time), or give the client a
-dedicated, looser schema for stream events. Right now the failure is invisible — the `catch` swallows it, so
-"realtime works" and "realtime silently does nothing" look identical from the outside.
+~~**Resolved.** `pins.Event` (server) and `pinEventSchema` (client) now carry the same seven
+fields — `id`, `user_id`, `location`, `caption`, `category_id`, `cover_url`, `created_at` — and
+`openPinStream` parses with `pinEventSchema`, which is the looser schema built for the stream
+rather than `pinListEntrySchema`. Verified by reading both definitions side by side
+(`server/internal/modules/pins/events.go` and `client/src/lib/api/schemas.ts`), not by
+inference.~~
+
+The remaining gap on that path is different and is not a schema mismatch: `usePinStream` enriches
+the minimal event into a `PinListEntry` with fabricated defaults (`geohash: ""`, `username: null`,
+`views: 0`, `is_hidden: false`) that no schema validates. Those are harmless today — see the
+`is_hidden` invariant recorded at `client/src/hooks/usePinStream.ts:55` — but they are assumptions,
+not guarantees, and would need revisiting if a pin-update event were ever added.
 
 ### 9.2 Stale `.env.example` / documentation drift
 

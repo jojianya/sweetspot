@@ -60,10 +60,14 @@ fresh server.
 ## 2. Rollback
 
 1. `git checkout <previous-tag>`, rebuild and `up -d` as above.
-2. Database: migrations run forward-only on boot. Only `0015/0016/0017` have
-   down scripts (`RollbackLastMigration` skips the rest), so a rollback that
-   must undo a migration requires restoring from a backup (§3) instead.
-   Prefer forward fixes for schema mistakes.
+2. Database: migrations run forward-only on boot. Down scripts exist for **0015–0022**
+   (`0015_pin_photo_thumbnail_not_null`, `0016_pins_updated_at_trigger`,
+   `0017_streams_drop_room_name`, `0018_users_sessions_valid_after`,
+   `0019_password_resets`, `0020_collections_is_private`, `0021_pin_views`,
+   `0022_pins_user_created_idx`); `RollbackLastMigration` walks applied migrations
+   newest-first and **skips any without one**, so 0001–0014 cannot be rolled back and a
+   rollback that must undo them requires restoring from a backup (§3) instead. Prefer
+   forward fixes for schema mistakes.
 
 ## 3. Backup and restore
 

@@ -347,3 +347,101 @@ sweetspot/
 7. ✅ SSE real-time layer: one `GET /events` stream, Redis pub/sub bus; batching and outbox are deferred (documented).
 8. ⬜ Production storage swap: Cloudflare R2 (Phase 6)
 9. ⬜ Deploy MVP (Phase 7)
+
+---
+
+## 7. Requirements, estimates, fan-out, failures and deferred items
+
+> Merged from `docs/project_documents/System-Design.md` (removed in this commit).
+> The endpoint sketch (its §2) lives in `../api/rest-api.md`, the schema SQL (its §3)
+> is summarised in §2.4 above with the full history under `server/internal/migrations/`,
+> and the SSE event shape (its §2, SSE part) is covered in §2.3 above — those are not
+> repeated. Everything else below is kept verbatim: requirements and capacity estimates,
+> fan-out design, schema rationale (including geohash), failure handling (including the
+> outbox gap), and deferred items.
+
+## 1. Requirements
+
+### Functional
+
+- Users can register/login (required only to create a pin or take other interactive actions)
+- Anyone (including guests, no login) can browse the map and view pin details
+- Users can pin a location + upload one or more photos + select a fixed, required category
+- Users can view/filter pins within their current map viewport, optionally by category
+- Users receive real-time updates as new pins appear nearby — **planned (Phase 5), not yet implemented**
+- Users can go live at a pinned location; others can watch + chat — **planned (Phase 8), not yet implemented**
+- Admins can review reported pins and hide ones that violate policy; the owner can promote/demote admins
+- (Future) Likes, comments, trending spots, sponsored pins, analytics
+
+### Non-functional
+
+- Low-latency real-time updates (near-instant pin/chat delivery)
+- Handle concentrated concurrency (many users watching one hotspot/event)
+- Horizontally scalable (no single point of failure as usage grows)
+- Reasonable cost at MVP scale; scales predictably beyond it
+
+### Back-of-envelope estimates (MVP → early growth)
+
+| Metric                                 | Estimate                                |
+| --------------------------------------- | ---------------------------------------- |
+| Registered users                       | 10K → 500K                              |
+| Concurrent active users                | 500 → 20K                               |
+| Peak concurrent viewers on one hotspot | 100 → 5,000                             |
+| Pin writes/day                         | 5K → 200K                               |
+| Avg photo size                         | ~2–4MB (compressed on upload to ~500KB) |
+
+**Why `photo_url` moved off `pins` into `pin_photos`:** MVP scope expanded to support multiple photos per pin. A single `TEXT` column can't hold more than one URL, so photos became their own table (one row per photo), joined back to `pins` via `pin_id`, ordered by `position`.
+
+**Why `category_id` is `NOT NULL` with `ON DELETE RESTRICT`:** the PRD defines category as required. `RESTRICT` means a category can't be deleted while any pin still references it, so the "required" guarantee can never be silently broken by a category disappearing out from under existing pins.
+
+**Why geohash column, not just PostGIS GIST index:** geohash exists from the first schema (room assignment was planned) and remains a column; the viewport path is PostGIS GIST, and SSE filtering is done in memory from parsed locations.
+
+## 4. Real-Time Fan-Out Design — **implemented as SSE + Redis**
+
+### Connection model
+
+- One `GET /events?bbox=&category=` stream per open client; no subscriptions, no rooms.
+- Each connection subscribes once to the Redis channel `goodspot:pins` and filters server-side.
+
+### Broadcast flow
+
+```
+1. New pin written to Postgres
+2. events.PinCreated → Broker.PinCreated → PUBLISH "goodspot:pins"
+3. Every Go instance subscribed receives it
+4. Each subscriber's runStreamLoop applies matches(ev, bbox, category) and drops non-matching events
+5. Matching event is written as `event: pin` + JSON payload
+```
+
+### Why single stream + Redis together (replaces rooms+batching design)
+
+- **No rooms/cells** — one global stream per process; bbox/category filtering happens per subscriber at the handler.
+- **Batching** — deferred: each pin create emits one event today.
+- **Redis Pub/Sub** — lets this work across multiple horizontally-scaled Go instances.
+
+### Concurrency handling in Go
+
+- Each SSE connection runs a write loop (`runStreamLoop`) with heartbeat ticker; writes carry a 10 s deadline (`handler.go:56-62`).
+- A process-wide cap (`MAX_SSE_CONNECTIONS`, default 1000) bounds concurrency via `ConnectionLimiter` (`handler.go:67-95`).
+
+## 6. Failure & Edge Case Handling
+
+| Scenario                                                           | Handling                                                                                                                                                        |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Go instance crashes mid-broadcast                                  | Client `EventSource` reconnects and re-filters with the same bbox; Redis Pub/Sub means other instances unaffected. No guaranteed replay of missed events. |
+| Pin saved but Redis publish fails/is skipped                        | **Phase 5, known gap:** pin exists in Postgres but never broadcasts live. Planned fix: transactional outbox table + poller |
+| Photo upload fails mid-way                                          | ✅ Client retries; pin (and its `pin_photos` rows) isn't created until all photos are validated and saved — inserted in one DB transaction |
+| Unauthenticated user attempts a gated action (create pin, go live) | ✅ Middleware rejects with 401 before handler logic runs; client shows login/register prompt                                                                       |
+| Non-admin attempts to review a report, or non-owner attempts a role change | ✅ Middleware rejects with 403 before handler logic runs                                                                                                     |
+| Viewport query on sparse data                                      | ✅ Standard bounding-box query, no special handling needed at this scale                                                                                           |
+| Viewport query on dense hotspot (thousands of pins in view)        | ✅ Paginate via `LIMIT` param (default 200, max 200); marker clustering planned for frontend                                                                    |
+| Redis goes down                                                    | ✅ Real-time updates degrade to single-instance-only (if only one instance up) or pause; core REST API (pins, auth) keeps working since it doesn't depend on Redis (currently Redis is only used for JWT blacklist, so logout is temporarily affected) |
+
+## 7. What's Deliberately Deferred (not yet implemented)
+
+- ~~WebSocket real-time layer (Phase 5)~~ — superseded by SSE (see §4)
+- Cloudflare R2 storage (Phase 6) — env vars documented, not wired
+- Multi-region deployment
+- Dedicated microservice split (Realtime Hub as separate service from API) — start as one Go binary, split only if profiling shows a real need
+- Full Kafka-style event streaming — Redis Pub/Sub is sufficient at MVP/early-growth scale
+- Transactional outbox for pin broadcast events — noted as a known gap in §6, not yet implemented

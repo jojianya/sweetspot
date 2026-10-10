@@ -493,11 +493,6 @@ location /_next/hmr {
 - Squash back-and-forth fixes before merging.
 - Backups and a known rollback before every release.
 
-> TODO: policy conflict — this flow (`development` -> `main` -> `release`, tags from
-> `release` per `docs/development/branching-and-release.md`) disagrees with
-> `docs/runbook.md` §6 ("releases are tags cut from `main`"). Both texts kept as-is;
-> resolve on a follow-up docs branch.
-
 ---
 
 ## Part 7: Working with AI coding agents

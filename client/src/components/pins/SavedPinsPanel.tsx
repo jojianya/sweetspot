@@ -40,7 +40,7 @@ export default function SavedPinsPanel({
 
   const favorites = useFavorites();
   const collections = useCollections();
-  const { entries, loading, error, retry } = favorites;
+  const { entries, total, loading, loadingMore, error, retry, loadMore, hasMore } = favorites;
   const {
     collections: collectionList,
     loading: collectionsLoading,
@@ -58,6 +58,10 @@ export default function SavedPinsPanel({
     e.caption?.trim() || (e.username ? `@${e.username}` : "Untitled");
 
   const subtitle = (e: PinListEntry) => (e.username ? `@${e.username}` : "Pin");
+
+  // The server's own count, not the loaded page's length: `total ?? entries.length`
+  // only matters for a caller that stubs the hook without it.
+  const savedCount = total ?? entries.length;
 
   const handleCreate = async () => {
     const name = newName.trim();
@@ -90,7 +94,7 @@ export default function SavedPinsPanel({
             tab === "saved" &&
             entries.length > 0 && (
               <span className="text-xs font-medium text-zinc-400">
-                {entries.length}
+                {savedCount}
               </span>
             )}
         </div>
@@ -341,6 +345,18 @@ export default function SavedPinsPanel({
                   </button>
                 );
               })}
+              {hasMore && (
+                <div className="mt-2 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="rounded-full border border-zinc-200 px-4 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    {loadingMore ? "Loading…" : `Load more (${entries.length} of ${savedCount})`}
+                  </button>
+                </div>
+              )}
           </>
         ) : (
           <>

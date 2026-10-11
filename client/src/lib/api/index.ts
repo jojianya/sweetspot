@@ -19,3 +19,4 @@ export {
   updateCollection,
 } from "./collections";
 export { openPinStream } from "./realtime";
+export { reactToPin, unreactToPin, type ReactionResult } from "./reactions";

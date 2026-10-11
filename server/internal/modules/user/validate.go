@@ -2,6 +2,8 @@ package users
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -74,4 +76,52 @@ func validateProfileFields(usernameVals, socialsVals []string, hasAvatar bool) (
 	}
 
 	return &patch, ""
+}
+
+// socialLinkKeys are the socials whose values the client renders as anchors
+// (client/src/lib/utils/profile.ts, socialLinks). Unknown keys are passthrough
+// data that nothing ever links, so they need no scheme check.
+var socialLinkKeys = map[string]bool{"website": true, "instagram": true, "twitter": true}
+
+// uriSchemeRe matches a leading URI scheme per RFC 3986:
+// ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) ":". A value with no match
+// carries no scheme at all, which is the plain-handle form.
+var uriSchemeRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.\-]*:`)
+
+// hostPortRe matches only a port, optionally followed by a path. It separates
+// "alice.example:8080" — a bare host with a port, which the client renders as
+// https://alice.example:8080 — from "javascript:alert(1)", whose colon opens a
+// URI scheme. Without this, every host:port value is misread as a scheme.
+var hostPortRe = regexp.MustCompile(`^[0-9]+(/[^:]*)?$`)
+
+// validateSocialLink accepts exactly the two shapes the client knows how to
+// render: a plain handle or host with no scheme ("alice", "@alice",
+// "alice.example", "alice.example:8080"), or an explicit http(s) URL. Every
+// other scheme is rejected, matched case-insensitively so "JaVaScRiPt:" cannot
+// slip past.
+//
+// Why this exists: socialLinks() drops these values straight into an anchor
+// href, and an href like "javascript:…" executes when the link is clicked.
+// The client's own guard (profile.ts:37) prefixes https:// for anything that
+// is not already http(s), which neutralises it there; this is the server-side
+// half, so a stored value is safe no matter which client reads it back.
+//
+// Only the scheme is echoed in the error, never the value, so the response
+// does not reflect the payload it just rejected.
+func validateSocialLink(key, value string) error {
+	if !socialLinkKeys[strings.ToLower(key)] {
+		return nil
+	}
+	v := strings.TrimSpace(value)
+	loc := uriSchemeRe.FindStringIndex(v)
+	if loc == nil {
+		return nil // no colon anywhere: a plain handle or host
+	}
+	if hostPortRe.MatchString(v[loc[1]:]) {
+		return nil // host:port, not a scheme
+	}
+	if scheme := strings.ToLower(v[:loc[1]-1]); scheme != "http" && scheme != "https" {
+		return fmt.Errorf("socials %s must be a plain handle or an http(s) URL, not a %s link", key, scheme)
+	}
+	return nil
 }

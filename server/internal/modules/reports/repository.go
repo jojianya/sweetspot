@@ -5,10 +5,15 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
+
+// pgCodeUniqueViolation is the PostgreSQL SQLSTATE for unique_violation.
+// A named constant because pgerrcode is not a dependency.
+const pgCodeUniqueViolation = "23505"
 
 type Repository interface {
 	PinExists(ctx context.Context, pinID string) (bool, error)
@@ -38,6 +43,10 @@ func (r *postgresRepository) CreateReport(ctx context.Context, pinID, reporterID
 	`, pinID, reporterID, reason).Scan(
 		&rep.ID, &rep.PinID, &rep.ReporterID, &rep.Reason, &rep.Status, &rep.ResolvedBy, &rep.ResolvedAt, &rep.CreatedAt,
 	)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgCodeUniqueViolation {
+		return Report{}, ErrAlreadyReported
+	}
 	return rep, err
 }
 
@@ -112,7 +121,7 @@ func (r *postgresRepository) ListReports(ctx context.Context, status *string, li
 		LEFT JOIN users u ON u.id = r.reporter_id
 		LEFT JOIN pins p ON p.id = r.pin_id
 		WHERE ($1::text IS NULL OR r.status = $1)
-		ORDER BY r.created_at DESC
+		ORDER BY r.created_at DESC, r.id DESC
 		LIMIT $2 OFFSET $3
 	`, status, limit, offset)
 	if err != nil {

@@ -11,8 +11,10 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("collection not found")
-	ErrForbidden = errors.New("forbidden")
+	ErrNotFound     = errors.New("collection not found")
+	ErrForbidden    = errors.New("forbidden")
+	ErrPinNotFound  = errors.New("pin not found")
+	ErrUserNotFound = errors.New("user not found")
 )
 
 type Repository interface {
@@ -88,6 +90,12 @@ func (r *postgresRepository) ListPublicByUser(ctx context.Context, userID string
 	return r.listByUser(ctx, userID, true)
 }
 
+// collectionListHardCap bounds listByUser. The endpoint is not paginated (the
+// client shows the full list), so a server-side ceiling keeps a pathological
+// account from producing an unbounded result set; the cap is far above any
+// real usage.
+const collectionListHardCap = 5000
+
 func (r *postgresRepository) listByUser(ctx context.Context, userID string, publicOnly bool) ([]Collection, error) {
 	visibility := ""
 	if publicOnly {
@@ -110,8 +118,9 @@ func (r *postgresRepository) listByUser(ctx context.Context, userID string, publ
 		LEFT JOIN pins p ON p.id = cp.pin_id AND p.is_hidden = false
 		WHERE c.user_id = $1 `+visibility+`
 		GROUP BY c.id
-		ORDER BY c.created_at DESC
-	`, userID)
+		ORDER BY c.created_at DESC, c.id DESC
+		LIMIT $2
+	`, userID, collectionListHardCap)
 	if err != nil {
 		return nil, err
 	}
@@ -165,11 +174,11 @@ func (r *postgresRepository) Delete(ctx context.Context, id, userID string, isMo
 
 // ListPins returns a page of the collection's visible pins plus the total
 // number of them, from COUNT(*) OVER () in the same query. The (position,
-// created_at) ordering is stable across pages, so offset paging does not
-// duplicate or skip a pin when positions are rewritten.
+// created_at, pin_id) ordering is stable across pages, so offset paging does
+// not duplicate or skip a pin even when two rows share a position.
 func (r *postgresRepository) ListPins(ctx context.Context, id string, limit, offset int) ([]pins.PinListEntry, int, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.created_at,
+		SELECT p.id, p.user_id, ST_AsText(p.location) AS location, p.geohash, p.caption, p.category_id, p.is_hidden, p.views, p.good_spot_count, p.created_at,
 		       `+database.CoverPhotoCoalesce+`, u.username,
 		       COUNT(*) OVER () AS total
 		FROM collection_pins cp
@@ -177,7 +186,7 @@ func (r *postgresRepository) ListPins(ctx context.Context, id string, limit, off
 		`+database.CoverPhotoLateral+`
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE cp.collection_id = $1
-		ORDER BY cp.position, cp.created_at
+		ORDER BY cp.position, cp.created_at, cp.pin_id
 		LIMIT $2 OFFSET $3
 	`, id, limit, offset)
 	if err != nil {
@@ -190,7 +199,7 @@ func (r *postgresRepository) ListPins(ctx context.Context, id string, limit, off
 	for rows.Next() {
 		var e pins.PinListEntry
 		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
-			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.CreatedAt, &e.CoverURL, &e.Username, &total); err != nil {
+			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.GoodSpotCount, &e.Pin.CreatedAt, &e.CoverURL, &e.Username, &total); err != nil {
 			return nil, 0, err
 		}
 		entries = append(entries, e)

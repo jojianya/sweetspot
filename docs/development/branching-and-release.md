@@ -21,6 +21,10 @@ development  ──▶  main  ──▶  release
 4. `git checkout release && git merge --ff-only main`
 5. `git tag vX.Y.Z release && git push origin vX.Y.Z`
 
+> TODO: policy conflict — this flow cuts tags from `release`, but `docs/runbook.md` §6
+> says releases are tags cut from `main`. Both texts kept as-is; resolve on a follow-up
+> docs branch. (`docs/good-and-bad-practices.md` Part 6 agrees with this file.)
+
 ## Hotfix Path
 1. `git checkout release -b hotfix/X`
 2. Fix, test, commit

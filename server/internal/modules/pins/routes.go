@@ -15,9 +15,14 @@ type RouteOptions struct {
 	JWTSecret string
 	Blacklist *cache.Blacklist
 	Sessions  middleware.SessionChecker
+	// Reactions, when set, lets GET /pins/:id answer reacted_by_me. Optional:
+	// nil leaves the field false, which is the correct answer for guests and
+	// for any wiring that never supplied a reader.
+	Reactions ReactionReader
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
+	h.SetReactions(opts.Reactions)
 	rg.GET("/categories", h.ListCategories)
 	rg.GET("/pins", h.GetPins)
 	rg.GET("/pins/search", h.SearchPins)
@@ -30,9 +35,10 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 
 	// View counting reads the session when present but stays open: anonymous
 	// visitors get the current count without recording anything. Budgets are
-	// per account because browsers share one ClientIP behind the Next proxy
-	// (TRUSTED_PROXIES is empty): 60 opens a minute per account is far above
-	// human pace, and a 600/min per-IP backstop still stops floods.
+	// per account because browsers reaching Go directly through the Next
+	// rewrite (dev :3000 without nginx) still share one ClientIP:
+	// 60 opens a minute per account is far above human pace, and a 600/min
+	// per-IP backstop still stops floods.
 	// Anonymous opens never write, so only the backstop applies to them.
 	viewBackstop := middleware.New(600, time.Minute)
 	viewPerUser := middleware.New(60, time.Minute)

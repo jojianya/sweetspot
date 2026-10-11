@@ -42,9 +42,15 @@ func TestValidateJWTSecret(t *testing.T) {
 	}{
 		{"valid 32 chars", strings.Repeat("a", 32), false},
 		{"valid 64 chars", strings.Repeat("b", 64), false},
+		{"valid 64-char hex", strings.Repeat("a1", 32), false},
 		{"empty", "", true},
 		{"too short 31", strings.Repeat("c", 31), true},
 		{"too short 16", strings.Repeat("d", 16), true},
+		{"leaked placeholder", "change_me_to_a_long_random_secret", true},
+		{"change_me prefix", "change_me_production_0000000000000000", true},
+		{"changeme prefix mixed case", "ChangeMeProd00000000000000000000000", true},
+		{"bare secret", "secret", true},
+		{"bare password", "password", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -108,25 +114,68 @@ func TestCookieSameSiteDefaultsToStrict(t *testing.T) {
 // router serves /uploads on. `go run` listens on PORT=8080 by default while
 // compose sets PORT=8081, so a hardcoded 8081 default orphans one of them.
 func TestDefaultStorageBaseURLDerivesFromPort(t *testing.T) {
-  if got := defaultStorageBaseURL("8080"); got != "http://localhost:8080" {
-    t.Errorf("port 8080: got %q, want %q", got, "http://localhost:8080")
-  }
-  if got := defaultStorageBaseURL("8081"); got != "http://localhost:8081" {
-    t.Errorf("port 8081: got %q, want %q", got, "http://localhost:8081")
-  }
+	if got := defaultStorageBaseURL("8080"); got != "http://localhost:8080" {
+		t.Errorf("port 8080: got %q, want %q", got, "http://localhost:8080")
+	}
+	if got := defaultStorageBaseURL("8081"); got != "http://localhost:8081" {
+		t.Errorf("port 8081: got %q, want %q", got, "http://localhost:8081")
+	}
 }
 
 func TestValidateQuarantineDir(t *testing.T) {
-  for _, bad := range []string{"", "  ", "./uploads", "uploads", "."} {
-    if err := validateQuarantineDir(bad); err == nil {
-      t.Errorf("validateQuarantineDir(%q): expected rejection, got nil", bad)
-    }
-  }
-  for _, ok := range []string{"./quarantine", "/var/lib/goodspot/quarantine"} {
-    if err := validateQuarantineDir(ok); err != nil {
-      t.Errorf("validateQuarantineDir(%q): unexpected error: %v", ok, err)
-    }
-  }
+	for _, bad := range []string{"", "  ", "./uploads", "uploads", "."} {
+		if err := validateQuarantineDir(bad); err == nil {
+			t.Errorf("validateQuarantineDir(%q): expected rejection, got nil", bad)
+		}
+	}
+	for _, ok := range []string{"./quarantine", "/var/lib/goodspot/quarantine"} {
+		if err := validateQuarantineDir(ok); err != nil {
+			t.Errorf("validateQuarantineDir(%q): unexpected error: %v", ok, err)
+		}
+	}
+}
+
+func TestParseSweepInterval(t *testing.T) {
+	if d, err := parseSweepInterval(""); err != nil || d != time.Hour {
+		t.Errorf("empty = (%v, %v), want (1h, nil)", d, err)
+	}
+	if d, err := parseSweepInterval("90m"); err != nil || d != 90*time.Minute {
+		t.Errorf("90m = (%v, %v), want (90m, nil)", d, err)
+	}
+	if d, err := parseSweepInterval("0"); err != nil || d != 0 {
+		t.Errorf("0 = (%v, %v), want (0, nil) for disabled", d, err)
+	}
+	for _, bad := range []string{"abc", "30s", "-1h"} {
+		_, err := parseSweepInterval(bad)
+		if err == nil {
+			t.Errorf("parseSweepInterval(%q): expected rejection, got nil", bad)
+			continue
+		}
+		// The error must name the variable and the offending value so the
+		// operator knows exactly which env line to fix.
+		if !strings.Contains(err.Error(), "QUARANTINE_SWEEP_INTERVAL") || !strings.Contains(err.Error(), bad) {
+			t.Errorf("parseSweepInterval(%q) error %q must name the variable and value", bad, err)
+		}
+	}
+}
+
+func TestParseResetCleanupInterval(t *testing.T) {
+	if d, err := parseResetCleanupInterval(""); err != nil || d != 24*time.Hour {
+		t.Errorf("empty = (%v, %v), want (24h, nil)", d, err)
+	}
+	if d, err := parseResetCleanupInterval("0"); err != nil || d != 0 {
+		t.Errorf("0 = (%v, %v), want (0, nil) for disabled", d, err)
+	}
+	for _, bad := range []string{"abc", "30s", "-1h"} {
+		_, err := parseResetCleanupInterval(bad)
+		if err == nil {
+			t.Errorf("parseResetCleanupInterval(%q): expected rejection, got nil", bad)
+			continue
+		}
+		if !strings.Contains(err.Error(), "PASSWORD_RESET_CLEANUP_INTERVAL") || !strings.Contains(err.Error(), bad) {
+			t.Errorf("parseResetCleanupInterval(%q) error %q must name the variable and value", bad, err)
+		}
+	}
 }
 
 func TestValidateStorageBase(t *testing.T) {

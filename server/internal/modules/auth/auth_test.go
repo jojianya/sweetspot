@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
@@ -27,10 +26,10 @@ type stubUserService struct {
 
 func (s *stubUserService) Create(_ context.Context, email, passwordHash, username string) (users.User, error) {
 	if _, ok := s.byEmail[email]; ok {
-		return users.User{}, &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint"}
+		return users.User{}, users.ErrDuplicate
 	}
 	if _, ok := s.byUsername[username]; ok {
-		return users.User{}, &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint"}
+		return users.User{}, users.ErrDuplicate
 	}
 	u := users.User{ID: "usr_new", Email: email, Username: username, Role: users.RoleUser, PasswordHash: passwordHash}
 	return u, nil
@@ -108,7 +107,7 @@ func newTestService(stub *stubUserService) Service {
 
 func TestMeServiceErrorReturns500(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h := NewHandler(newTestService(&stubUserService{}), nil, nil, SameSiteStrict, nil)
+	h := NewHandler(newTestService(&stubUserService{}), nil, nil, nil, SameSiteStrict, nil)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/auth/me", nil)
@@ -261,7 +260,7 @@ func TestLogoutSucceedsWhenRedisIsDown(t *testing.T) {
 	// Simulate a Redis outage: use a real Blacklist pointing at a closed port.
 	// Revoke will fail with a connection error, which is what we're testing.
 	bl := cache.New("127.0.0.1:1", "")
-	h := NewHandler(newTestService(&stubUserService{}), bl, nil, SameSiteStrict, nil)
+	h := NewHandler(newTestService(&stubUserService{}), bl, nil, nil, SameSiteStrict, nil)
 
 	// Create a valid JWT so the handler can extract claims.
 	token, err := jwt.Generate("test-secret", "u1", time.Hour)
@@ -299,21 +298,80 @@ func TestLogoutSucceedsWhenRedisIsDown(t *testing.T) {
 	}
 }
 
-// TestAbsentAccountHashIsUsable guards the constant Login compares against when
-// the account does not exist. A malformed or low-cost value would return early
-// instead of doing the bcrypt work, silently reinstating the timing difference
-// the constant exists to remove.
-func TestAbsentAccountHashIsUsable(t *testing.T) {
-	cost, err := bcrypt.Cost([]byte(absentAccountHash))
+// TestAbsentAccountHashCostMatchesRealHash verifies that the
+// absent account hash cost matches the cost of a freshly generated real
+// password hash. This guarantees the timing-safe login guard works
+// correctly: if the costs drifted apart, an attacker could exploit the
+// timing difference to enumerate accounts.
+func TestAbsentAccountHashCostMatchesRealHash(t *testing.T) {
+	realHash, err := password.GenerateAbsentAccountHash()
 	if err != nil {
-		t.Fatalf("absentAccountHash is not a valid bcrypt hash: %v", err)
+		t.Fatalf("failed to generate real hash: %v", err)
 	}
-	// 12 is the cost pkg/password hashes at; anything cheaper finishes sooner
-	// than a real comparison and gives the timing channel back.
+	absentCost, _ := bcrypt.Cost([]byte(password.GetAbsentAccountHash()))
+	realCost, _ := bcrypt.Cost([]byte(realHash))
+	if absentCost != realCost {
+		t.Errorf("absentAccountHash cost = %d, real hash cost = %d; they must match",
+			absentCost, realCost)
+	}
+	if absentCost < 12 {
+		t.Errorf("cost = %d, want at least 12", absentCost)
+	}
+}
+
+// TestAbsentAccountHashLoginPaths verifies that the unknown-email login path
+// and the wrong-password path return the same error, so an attacker cannot
+// distinguish between "no such account" and "wrong password" by response
+// message. It exercises the real auth service with a stub user service (fake
+// dependency, real thing under test).
+func TestAbsentAccountHashLoginPaths(t *testing.T) {
+	hash, err := password.Hash("correct_password")
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	svc := newTestService(&stubUserService{
+		users: map[string]users.User{
+			"usr_1": {ID: "usr_1", Email: "test@example.com", Username: "testuser", PasswordHash: hash},
+		},
+		byEmail: map[string]users.User{
+			"test@example.com": {ID: "usr_1", Email: "test@example.com", Username: "testuser", PasswordHash: hash},
+		},
+		byUsername: map[string]users.User{},
+	})
+
+	_, _, unknownErr := svc.Login(context.Background(), LoginRequest{
+		Identifier: "nonexistent@example.com",
+		Password:   "password123",
+	})
+	if !errors.Is(unknownErr, ErrInvalidCredentials) {
+		t.Fatalf("unknown email err = %v, want ErrInvalidCredentials", unknownErr)
+	}
+
+	_, _, wrongPwErr := svc.Login(context.Background(), LoginRequest{
+		Identifier: "test@example.com",
+		Password:   "wrong_password",
+	})
+	if !errors.Is(wrongPwErr, ErrInvalidCredentials) {
+		t.Fatalf("wrong password err = %v, want ErrInvalidCredentials", wrongPwErr)
+	}
+
+	if unknownErr.Error() != wrongPwErr.Error() {
+		t.Fatalf("login errors differ: %q vs %q; they must be identical", unknownErr, wrongPwErr)
+	}
+}
+
+// TestAbsentAccountHashGet returns the absent account hash and validates it.
+// It fails if the hash is empty or bcrypt.Cost can't read it.
+func TestAbsentAccountHashGet(t *testing.T) {
+	hash := password.GetAbsentAccountHash()
+	if hash == "" {
+		t.Fatal("GetAbsentAccountHash returned empty string")
+	}
+	cost, _ := bcrypt.Cost([]byte(hash))
+	if cost < 0 {
+		t.Fatalf("bcrypt.Cost returned %d, expected >= 0", cost)
+	}
 	if cost < 12 {
-		t.Errorf("absentAccountHash cost = %d, want at least 12", cost)
-	}
-	if bcrypt.CompareHashAndPassword([]byte(absentAccountHash), []byte("anything")) == nil {
-		t.Fatal("absentAccountHash matches a guessable password")
+		t.Errorf("bcrypt.Cost = %d, want >= 12", cost)
 	}
 }

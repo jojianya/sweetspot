@@ -5,11 +5,22 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 )
 
 var ErrNotFound = errors.New("comment not found")
+
+// ErrPinNotFound reports that the pin a comment targets does not exist or is
+// hidden. The repository translates the comments_pin_id_fkey violation, so
+// callers match with errors.Is instead of reading driver error codes.
+var ErrPinNotFound = errors.New("pin not found")
+
+// pgCodeForeignKeyViolation is the PostgreSQL SQLSTATE for
+// foreign_key_violation. A named constant because pgerrcode is not a
+// dependency.
+const pgCodeForeignKeyViolation = "23503"
 
 type Repository interface {
 	// ListByPin returns a page of comments on the pin plus the total number of
@@ -38,7 +49,8 @@ func (r *postgresRepository) PinExistsVisible(ctx context.Context, pinID string)
 
 // ListByPin returns a page of comments on the pin plus the total number of
 // visible comments, from COUNT(*) OVER () in the same query. Comments read
-// oldest-first, so the ordering column is stable across pages.
+// oldest-first, and the id tiebreaker keeps the sort stable across pages even
+// when two comments share a created_at.
 func (r *postgresRepository) ListByPin(ctx context.Context, pinID string, limit, offset int) ([]Comment, int, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT c.id, c.pin_id, c.user_id, c.body, c.is_hidden, c.created_at, u.username, u.avatar_url,
@@ -46,7 +58,7 @@ func (r *postgresRepository) ListByPin(ctx context.Context, pinID string, limit,
 		FROM comments c
 		LEFT JOIN users u ON u.id = c.user_id
 		WHERE c.pin_id = $1 AND c.is_hidden = false
-		ORDER BY c.created_at ASC
+		ORDER BY c.created_at ASC, c.id ASC
 		LIMIT $2 OFFSET $3
 	`, pinID, limit, offset)
 	if err != nil {
@@ -92,6 +104,12 @@ func (r *postgresRepository) Create(ctx context.Context, pinID, userID, body str
 		&c.ID, &c.PinID, &c.UserID, &c.Body, &c.IsHidden, &c.CreatedAt, &c.Username, &c.AvatarURL,
 	)
 	if err != nil {
+		// Safety net: the pin vanished between the visibility check and the
+		// insert (or raced a hide) — report it as a missing pin, not a 500.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgCodeForeignKeyViolation {
+			return Comment{}, ErrPinNotFound
+		}
 		return Comment{}, err
 	}
 	return c, nil

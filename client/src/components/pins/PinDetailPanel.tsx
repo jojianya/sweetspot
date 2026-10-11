@@ -27,6 +27,7 @@ import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/hooks/useOptimisticSave";
 import { usePinView } from "@/hooks/usePinView";
 import { usePinShare } from "@/hooks/usePinShare";
+import GoodSpotButton from "./GoodSpotButton";
 import PinViews from "./PinViews";
 import { useAuth } from "@/store/auth";
 
@@ -130,7 +131,7 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
                 <span className="text-zinc-300 dark:text-zinc-600">·</span>
               </>
             )}
-            {pin.username && (
+            {pin.username ? (
               <Link
                 href={pin.user_id ? `/users/${pin.user_id}` : "#"}
                 className="flex min-w-0 items-center gap-1.5 hover:underline"
@@ -138,6 +139,11 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
                 <PersonIcon />
                 <span className="truncate">{pin.username}</span>
               </Link>
+            ) : (
+              <span className="flex min-w-0 items-center gap-1.5 text-zinc-400 dark:text-zinc-500">
+                <PersonIcon />
+                <span className="truncate">deleted user</span>
+              </span>
             )}
             <span className="text-zinc-300 dark:text-zinc-600">·</span>
             <PinViews views={pin.views} />
@@ -145,6 +151,14 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
 
           {/* Actions */}
           <div className="mt-5 flex items-start justify-around">
+            <GoodSpotButton
+              pin={{
+                id: pin.id,
+                reactedByMe: pin.reacted_by_me,
+                goodSpotCount: pin.good_spot_count,
+              }}
+              isOwnPin={pin.user_id != null && user != null && pin.user_id === user.id}
+            />
             <div className="flex flex-col items-center gap-1.5">
               <button
                 type="button"

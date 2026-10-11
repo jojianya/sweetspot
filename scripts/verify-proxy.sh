@@ -32,7 +32,8 @@ echo "HTTP ${code}"
 echo ""
 echo "Check the Go server logs for the ClientIP seen:"
 echo "  docker compose -f docker-compose.prod.yml logs --since 5s server | grep '\"ip\"' | tail -1"
-echo "Expected: IP should be the real peer (e.g., 10.89.0.7 or your VM's IP), NOT 1.2.3.4"
+echo "Expected: the real client IP (what nginx saw as \$remote_addr), NOT 1.2.3.4"
+echo "and NOT a 10.89.0.x container address (that would mean per-IP buckets are shared again)."
 echo ""
 
 # 2. Verify per-IP rate limits are independent

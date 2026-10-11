@@ -962,18 +962,36 @@ toast) is all present and exercised by tests — but the payload contract betwee
 [§9.1](#91-sse-payload-doesn't-match-the-client-schema--live-pins-never-arrive).
 
 ---
+SSE work scales as connections x events per process, because each connection
+parses and filters every event; it is bounded by the 1000-connection cap and
+accepted at current scale. To measure it later, run a benchmark of N sinks x M
+events with no Redis needed — watch for sustained viewers x event rate growing,
+or visible Redis subscription CPU as triggers to revisit.
+
+This is inherently per-process: adding more server instances does not reduce the
+per-process load, so the 1000-connection cap is the effective ceiling. Do not
+build a shared hub to work around it; instead revisit the design when viewer
+counts or event rates grow beyond the current accepted scale.
 
 ## 9. Known issues and open items
 
 This is the honest list. Where `docs/CODE_REVIEW.md` disagrees with the code, **the code wins** — that document
 is a from-scratch audit whose checkboxes were never ticked, so its `[ ]` markers are stale in both directions.
 
-### 9.1 SSE payload doesn't match the client schema — live pins never arrive
+### 9.1 SSE payload vs client schema — resolved
 
-As proven in [§8.3](#83-the-client-side-and-a-real-bug-in-it). Fix is one of: extend `pins.Event` with
-`geohash`, `is_hidden`, `views` and `username` (requires a join at publish time), or give the client a
-dedicated, looser schema for stream events. Right now the failure is invisible — the `catch` swallows it, so
-"realtime works" and "realtime silently does nothing" look identical from the outside.
+~~**Resolved.** `pins.Event` (server) and `pinEventSchema` (client) now carry the same seven
+fields — `id`, `user_id`, `location`, `caption`, `category_id`, `cover_url`, `created_at` — and
+`openPinStream` parses with `pinEventSchema`, which is the looser schema built for the stream
+rather than `pinListEntrySchema`. Verified by reading both definitions side by side
+(`server/internal/modules/pins/events.go` and `client/src/lib/api/schemas.ts`), not by
+inference.~~
+
+The remaining gap on that path is different and is not a schema mismatch: `usePinStream` enriches
+the minimal event into a `PinListEntry` with fabricated defaults (`geohash: ""`, `username: null`,
+`views: 0`, `is_hidden: false`) that no schema validates. Those are harmless today — see the
+`is_hidden` invariant recorded at `client/src/hooks/usePinStream.ts:55` — but they are assumptions,
+not guarantees, and would need revisiting if a pin-update event were ever added.
 
 ### 9.2 Stale `.env.example` / documentation drift
 
@@ -993,10 +1011,10 @@ dedicated, looser schema for stream events. Right now the failure is invisible �
   Sentry.~~ Fixed: the dev server service now passes `CORS_ALLOWED_ORIGINS`, `SENTRY_DSN`, `SENTRY_ENV`
   (and `LOG_FORMAT`, `PUBLIC_BASE_URL`, `MAILER_WEBHOOK_*`, `QUARANTINE_SWEEP_DRY_RUN`, `TRUSTED_PROXIES`,
   `DB_POOL_*`) through from the root `.env`.
-- `docs/TECH_STACK.md`, `docs/project_documents/{Architecture,API}.md` and `docs/DEVELOPMENT.md` are behind the
-  code (`docs/roadmap.md` item **J** tracks this).
+- `docs/architecture/tech-stack.md`, `docs/architecture/system-architecture.md`, `docs/api/rest-api.md` and `docs/development/local-development.md` are behind the
+  code (`docs/product/roadmap.md` item **J** tracks this).
 - `docs/SECURITY.md` still states "there is no cookie-based session, so CSRF does not apply". There **is** now.
-- `docs/DEVELOPMENT.md` tells you to run `make docker-up` / `make backup`, but **there is no root
+- `docs/development/local-development.md` tells you to run `make docker-up` / `make backup`, but **there is no root
   `Makefile`** — those targets live in `server/Makefile`, and running `docker compose` from `server/` finds no
   compose file. Run compose from the repo root.
 
@@ -1115,7 +1133,7 @@ Stated plainly rather than guessed:
 - Whether any GitHub issues from `scripts/review-issues/` are still open.
 - Whether production is deployed at all. There is a production `client/Dockerfile` and
   `server/deployments/docker/server.Dockerfile`, and `config.validateStorageBase` has explicit production
-  rules, but `docs/DEVELOPMENT.md` describes a single-host local-disk deployment and there are no k8s
+  rules, but `docs/development/local-development.md` describes a single-host local-disk deployment and there are no k8s
   manifests (`server/deployments/k8s/` is an empty tracked directory).
 
 ---
@@ -1151,7 +1169,7 @@ Air (`server/deployments/docker/server.Dockerfile.dev`, config `server/.air.toml
 Both databases publish on loopback only. Migrations run automatically on every server start and are
 idempotent (`schema_migrations`).
 
-**The `make` targets in `docs/DEVELOPMENT.md` don't work from the repo root** (there is no root `Makefile`).
+**The `make` targets in `docs/development/local-development.md` don't work from the repo root** (there is no root `Makefile`).
 `make build/run/test/vet/lint/fmt` do work from `server/`. For the compose lifecycle and backups, use plain
 `docker compose` from the repo root, or run `make docker-up` from `server/` with `COMPOSE_FILE=../docker-compose.yml`
 — but I'd just use the plain command.

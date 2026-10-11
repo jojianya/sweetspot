@@ -1,5 +1,11 @@
 name: CI
 
+# The GITHUB_TOKEN granted to every job. Nothing in this workflow pushes,
+# opens PRs or calls the API with a token, so read-only is sufficient and it
+# keeps a compromised or malicious dependency from writing to the repo.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [development, main, release]
@@ -56,6 +62,15 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Audit dependencies
+        # Non-blocking: `next` currently pulls two high-severity advisories
+        # (source-map-js GHSA-68fv-2mgg-jv7q, sharp CVE-2026-96889). Failing
+        # the build here would block all work until an upstream fix lands;
+        # triage them explicitly instead. `pnpm audit --prod` exits nonzero
+        # while any advisory matches, hence continue-on-error.
+        run: pnpm audit --prod
+        continue-on-error: true
+
       - name: Build
         # No SITE_URL, NEXT_PUBLIC_API_URL, API_INTERNAL_URL or
         # NEXT_ALLOWED_DEV_ORIGINS: a build has to succeed with the optional
@@ -96,7 +111,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.27'
+          go-version: '1.27.2'
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -163,7 +178,26 @@ jobs:
           PGPASSWORD: testpass
         run: |
           psql -h localhost -U postgres -d goodspotdb -tc "SELECT 1 FROM pg_database WHERE datname='endpoint_test'" | grep -q 1 || psql -h localhost -U postgres -d goodspotdb -c 'CREATE DATABASE endpoint_test'
-          go test ./internal/endpointtest/ -run 'TestDBDeletePin|TestDBPasswordReset|TestDBCollection|TestDBCover|TestDBAuthRevoked|TestDBPinViews|TestDBListEntriesIncludeViews' -race -count=1 -v
+          # The janitor's safety contract (a valid reset token is never
+          # deleted, and a cancelled context stops it between batches) lives
+          # only in these tests, so they have to run here or they run nowhere.
+          # Note that -run is an unanchored regex: TestResetCleanupStopsOnCancel
+          # already matches ...BetweenBatches, but both are listed so the
+          # pattern documents what it covers.
+          go test ./internal/endpointtest/ -run 'TestDBDeletePin|TestDBPasswordReset|TestDBCollection|TestDBCover|TestDBAuthRevoked|TestDBPinViews|TestDBListEntriesIncludeViews|TestDBResetCleanupDeletesOnlyDeadRows|TestDBResetCleanupBatchesBigBackfills|TestResetCleanupStopsOnCancel|TestResetCleanupStopsOnCancelBetweenBatches|TestDBGoodSpotTriggerCounts|TestRealDBTrendingAndBbox|TestRealDBListUsersWithCount|TestDBGoodSpotEndpointToggle|TestDBGoodSpotEndpointIdempotent|TestDBGoodSpotEndpointHiddenPin|TestDBGoodSpotEndpointMissingPin|TestDBGoodSpotEndpointOwnPin|TestDBGoodSpotEndpointGuest|TestDBGoodSpotEndpointUnreactAbsent|TestDBGoodSpotEndpointMalformedID|TestDBGoodSpotCountOnListAndDetail|TestDBGoodSpotReactedByMeOnDetail|TestDBGoodSpotHiddenPinDetail404' -race -count=1 -v
 
       - name: Vet
         run: go vet ./...
+
+      - name: Check formatting
+        # Fails when `gofmt -l` prints anything, so formatting drift cannot
+        # accumulate silently. Run `gofmt -w .` in server/ to fix.
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vulnerability scan
+        # Blocking: the tree is clean (go1.27.2 + x/net v0.60.0 fixed the
+        # GO-2026-6603..6617 batch). Pinned version, not @latest, for
+        # reproducible scans. If this step turns red, triage before merging:
+        # either bump the toolchain/dep or document why the finding cannot
+        # reach production code.
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...

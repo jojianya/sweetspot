@@ -54,6 +54,7 @@ function pin(id: string, views: number): PinDetail {
     category_id: 1,
     is_hidden: false,
     views,
+    good_spot_count: 0,
     created_at: "2026-01-02T00:00:00Z",
     category: "Food",
     username: "alice",

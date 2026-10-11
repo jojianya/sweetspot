@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"bytes"
 	"fmt"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 )
@@ -39,5 +42,54 @@ func TestLimiterLimitsFreshKeyAfterEvictions(t *testing.T) {
 	}
 	if l.AllowKey("victim") {
 		t.Fatal("hit over the limit allowed, want rejected")
+	}
+}
+
+// captureLogs routes the default slog output into buf for the duration of
+// the test, restoring the previous default afterwards.
+func captureLogs(t *testing.T, buf *bytes.Buffer) {
+	t.Helper()
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+}
+
+// Filling past the cap must evict a live entry and log it once, with the
+// count; further evictions inside the same minute stay silent.
+func TestLimiterLogsLiveEvictionsAtCap(t *testing.T) {
+	var buf bytes.Buffer
+	captureLogs(t, &buf)
+
+	l := New(1<<30, time.Hour)
+	for i := 0; i < maxKeysBounds; i++ {
+		l.AllowKey(fmt.Sprintf("key-%d", i))
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("at-cap fill logged %q, want silence", buf.String())
+	}
+
+	l.AllowKey("one-more")
+	if got := buf.String(); !strings.Contains(got, "evicted_since_last_log=1") {
+		t.Fatalf("expected one eviction log line, got %q", got)
+	}
+
+	buf.Reset()
+	l.AllowKey("another")
+	if buf.Len() != 0 {
+		t.Fatalf("second eviction inside the minute logged %q, want silence", buf.String())
+	}
+}
+
+// Below the cap nothing is ever evicted, so nothing is logged.
+func TestLimiterSilentBelowCap(t *testing.T) {
+	var buf bytes.Buffer
+	captureLogs(t, &buf)
+
+	l := New(10, time.Hour)
+	for i := 0; i < 100; i++ {
+		l.AllowKey(fmt.Sprintf("key-%d", i))
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("below-cap use logged %q, want silence", buf.String())
 	}
 }

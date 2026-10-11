@@ -38,6 +38,13 @@ describe("isSessionEnded", () => {
     expect(isSessionEnded("/pins/abc/report")).toBe(true);
   });
 
+  it.each(["/x/auth/login", "/auth/login-callback", "/auth/login?next=/feed"])(
+    "treats %s as an ended session: matching is exact, not substring",
+    (url) => {
+      expect(isSessionEnded(url)).toBe(true);
+    }
+  );
+
   it("does not clear auth when the URL is unknown", () => {
     // Guessing wrong here would silently sign the user out, so an absent URL
     // is treated as "not a session failure".

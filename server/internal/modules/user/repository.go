@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
+	"github.com/jojianya/sweetspot247-backend/internal/session"
 )
 
 type Repository interface {
@@ -20,7 +20,7 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (User, error)
 	// GetSessionState loads the session posture (live role + revocation
 	// floor) in one indexed lookup for the auth middleware.
-	GetSessionState(ctx context.Context, id string) (middleware.SessionState, error)
+	GetSessionState(ctx context.Context, id string) (session.State, error)
 	CountUsers(ctx context.Context) (int, error)
 	CountOwners(ctx context.Context) (int, error)
 	// ListUsers returns a page of users plus the total count. The count comes
@@ -51,6 +51,10 @@ type UpdateProfilePatch struct {
 	Socials   *map[string]any
 }
 
+// pgCodeUniqueViolation is the PostgreSQL SQLSTATE for unique_violation.
+// A named constant because pgerrcode is not a dependency.
+const pgCodeUniqueViolation = "23505"
+
 type postgresRepository struct {
 	pool *pgxpool.Pool
 }
@@ -68,6 +72,10 @@ func (r *postgresRepository) Create(ctx context.Context, email, passwordHash, us
 	`, strings.ToLower(email), passwordHash, username).Scan(
 		&u.ID, &u.Email, &u.Username, &u.AvatarURL, &u.Socials, &u.Role, &u.CreatedAt, &u.UpdatedAt,
 	)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgCodeUniqueViolation {
+		return User{}, ErrDuplicate
+	}
 	if err != nil {
 		return User{}, err
 	}
@@ -144,18 +152,18 @@ func (r *postgresRepository) GetByID(ctx context.Context, id string) (User, erro
 	return u, nil
 }
 
-func (r *postgresRepository) GetSessionState(ctx context.Context, id string) (middleware.SessionState, error) {
-	var state middleware.SessionState
+func (r *postgresRepository) GetSessionState(ctx context.Context, id string) (session.State, error) {
+	var state session.State
 	var validAfter *time.Time
 	var role string
 	err := r.pool.QueryRow(ctx, `
 		SELECT role, sessions_valid_after FROM users WHERE id = $1
 	`, id).Scan(&role, &validAfter)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return middleware.SessionState{}, ErrNotFound
+		return session.State{}, ErrNotFound
 	}
 	if err != nil {
-		return middleware.SessionState{}, err
+		return session.State{}, err
 	}
 	state.Role = role
 	if validAfter != nil {
@@ -184,13 +192,14 @@ func (r *postgresRepository) CountUsers(ctx context.Context) (int, error) {
 // ListUsers returns a page of users plus the total count. The count comes
 // from COUNT(*) OVER () in the same query (P1.4), avoiding a separate
 // round-trip. If the page is empty we cannot read the window function's
-// result, so we fall back to CountUsers.
+// result, so we fall back to CountUsers. The id tiebreaker keeps the sort
+// stable across pages when two users share a created_at.
 func (r *postgresRepository) ListUsers(ctx context.Context, limit, offset int) ([]User, int, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at,
 		       COUNT(*) OVER () AS total
 		FROM users
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
@@ -302,7 +311,7 @@ func (r *postgresRepository) UpdateProfile(ctx context.Context, id string, patch
 		return User{}, ErrNotFound
 	}
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+	if errors.As(err, &pgErr) && pgErr.Code == pgCodeUniqueViolation {
 		return User{}, ErrUsernameTaken
 	}
 	if err != nil {

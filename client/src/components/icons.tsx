@@ -261,3 +261,25 @@ export function GlobeIcon({ className = "h-5 w-5" }: IconProps) {
     </svg>
   );
 }
+
+export function GoodSpotIcon({
+  filled = false,
+  className = "h-5 w-5",
+}: IconProps & { filled?: boolean }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {/* A thumbs-up, matching the stroke style of the other action icons. */}
+      <path d="M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h3Z" />
+      <path d="M7 10l4.2-7a2 2 0 0 1 3.6 1.4L14 9h4.6a2 2 0 0 1 2 2.4l-1.4 7a2 2 0 0 1-2 1.6H7" />
+    </svg>
+  );
+}

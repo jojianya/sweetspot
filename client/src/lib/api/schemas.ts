@@ -2,13 +2,18 @@ import { z } from "zod";
 
 export const pinBaseSchema = z.object({
   id: z.string(),
-  user_id: z.string(),
+  user_id: z.string().nullable(),
   location: z.string(),
   geohash: z.string(),
   caption: z.string().nullable(),
   category_id: z.number(),
   is_hidden: z.boolean(),
   views: z.number(),
+  // "Good spot" reaction total. A denormalised column on the server (0023
+  // trigger), so it is present on every pin shape. Required: a response that
+  // omits it is a server/client mismatch and must fail loudly rather than
+  // silently render a wrong count.
+  good_spot_count: z.number(),
   created_at: z.string(),
 });
 
@@ -57,8 +62,14 @@ export const pinDetailSchema = pinBaseSchema.extend({
   username: z.string().nullable(),
   avatar_url: z.string().nullable(),
   photos: z.array(pinPhotoSchema),
+  // Whether the viewer already reacted. Only GET /pins/:id answers this — it is
+  // the one pin endpoint that knows who is asking — and it is false for guests.
+  // Optional so a shape shared with a viewer-less response still validates.
+  reacted_by_me: z.boolean().optional(),
 });
 
+// The created-pin response reuses the base shape exactly, so it gains
+// good_spot_count through pinBaseSchema (a brand-new pin starts at 0).
 export const createdPinSchema = pinBaseSchema;
 
 export const newPinPhotoSchema = z.object({
@@ -70,7 +81,7 @@ export const newPinPhotoSchema = z.object({
 export const commentSchema = z.object({
   id: z.string(),
   pin_id: z.string(),
-  user_id: z.string(),
+  user_id: z.string().nullable(),
   body: z.string(),
   is_hidden: z.boolean(),
   created_at: z.string(),
@@ -120,7 +131,7 @@ export const privateUserSchema = publicUserSchema.extend({
 export const reportSchema = z.object({
   id: z.string(),
   pin_id: z.string(),
-  reporter_id: z.string(),
+  reporter_id: z.string().nullable(),
   reason: z.string(),
   status: z.enum(["pending", "reviewed", "actioned"]),
   resolved_by: z.string().nullable(),

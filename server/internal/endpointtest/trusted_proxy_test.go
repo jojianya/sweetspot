@@ -42,7 +42,9 @@ func TestTrustedProxyClientIP(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 
-	var body struct{ ClientIP string `json:"client_ip"` }
+	var body struct {
+		ClientIP string `json:"client_ip"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -76,7 +78,9 @@ func TestUntrustedProxyClientIP(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 
-	var body struct{ ClientIP string `json:"client_ip"` }
+	var body struct {
+		ClientIP string `json:"client_ip"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -104,7 +108,7 @@ func TestTrustedProxyLockoutSeparation(t *testing.T) {
 			"bob@example.com":   {ID: "u2", Email: "bob@example.com", Username: "bob", PasswordHash: hash, Role: users.RoleUser},
 		},
 	}
-	authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, lim, auth.SameSiteStrict, []string{"10.0.0.1"})
+	authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, lim, nil, auth.SameSiteStrict, []string{"10.0.0.1"})
 	r.POST("/auth/login", authH.Login)
 
 	// Attacker uses X-Forwarded-For: 203.0.113.10
@@ -199,7 +203,7 @@ func TestTrustedProxySecureCookie(t *testing.T) {
 					"test@example.com": {ID: "u1", Email: "test@example.com", Username: "test", PasswordHash: hash, Role: users.RoleUser},
 				},
 			}
-			authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, nil, auth.SameSiteStrict, []string{"10.0.0.1"})
+			authH := auth.NewHandler(auth.NewService(usersSvc, testSecret), nil, nil, nil, auth.SameSiteStrict, []string{"10.0.0.1"})
 			r.POST("/auth/login", authH.Login)
 
 			var req *http.Request
@@ -245,3 +249,49 @@ func doLoginWithForwarded(r *gin.Engine, body, remoteAddr, forwardedFor string) 
 	return w
 }
 
+// TestPerIPBucketsSeparateAcrossForwardedClients is the C-01 regression:
+// two browsers behind the same trusted proxy (nginx) must not share one
+// rate-limit bucket, and a spoofed X-Forwarded-For from an untrusted peer
+// must not mint a fresh bucket per header value.
+func TestPerIPBucketsSeparateAcrossForwardedClients(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	_ = r.SetTrustedProxies([]string{"10.89.0.0/24"})
+
+	lim := middleware.New(1, time.Minute)
+	r.POST("/limited", lim.Middleware(), func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ip": c.ClientIP()})
+	})
+
+	post := func(remoteAddr, xff string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/limited", strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = remoteAddr
+		if xff != "" {
+			req.Header.Set("X-Forwarded-For", xff)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	// Two real clients through the same nginx peer: separate buckets.
+	if w := post("10.89.0.2:1111", "203.0.113.9"); w.Code != http.StatusOK {
+		t.Fatalf("first client: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w := post("10.89.0.2:2222", "198.51.100.7"); w.Code != http.StatusOK {
+		t.Fatalf("second client behind same proxy: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w := post("10.89.0.2:3333", "203.0.113.9"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("repeat client: expected 429, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	// Untrusted peer: the spoofed header is ignored, so both hits land in
+	// the peer bucket and the second is limited.
+	if w := post("192.0.2.50:1111", ""); w.Code != http.StatusOK {
+		t.Fatalf("untrusted first hit: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w := post("192.0.2.50:2222", "203.0.113.99"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("untrusted spoofed hit: expected 429, got %d (%s)", w.Code, w.Body.String())
+	}
+}

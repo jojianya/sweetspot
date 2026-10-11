@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	stdhttp "net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/modules/comments"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/favorites"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/reactions"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/realtime"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/reports"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/social"
@@ -34,11 +36,14 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	// TrustedProxies comes from TRUSTED_PROXIES and is validated at startup.
-	// Empty (default) is today's behavior: ClientIP returns the direct peer
-	// and X-Forwarded-For is ignored, which is spoof-safe but means per-IP
-	// rate limits are shared per proxy behind the Next rewrite (which does not
-	// forward X-Forwarded-For). Only list proxy addresses/CIDRs you operate.
-	_ = r.SetTrustedProxies(cfg.TrustedProxies)
+	// nginx proxies /api/*, /events and /uploads/* straight to Go and
+	// overwrites X-Forwarded-For with the real peer, so ClientIP() sees the
+	// real client. Only list proxy addresses/CIDRs you operate.
+	// The list is validated in config.Load, so a failure here means a bug in
+	// that validation; refuse to boot rather than run with the wrong peers.
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		panic("set trusted proxies: " + err.Error())
+	}
 	r.Use(middleware.Recover(rep), middleware.RequestLogger(lg, "/health"), middleware.ReportErrors(rep), middleware.CORS(cfg.CORSAllowedOrigins...), middleware.SecurityHeaders())
 
 	r.Static("/uploads", "./uploads")
@@ -109,6 +114,10 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 		auth.NewService(c.UserService, cfg.JWTSecret),
 		c.Blacklist,
 		middleware.New(5, time.Minute),
+		// Per-account backstop: 20 failures per 15 minutes per identifier
+		// across all IPs. High enough that a stranger cannot lock the real
+		// owner out, low enough to stop a distributed grind.
+		middleware.New(20, 15*time.Minute),
 		auth.SameSiteMode(cfg.CookieSameSite),
 		cfg.TrustedProxies,
 	)
@@ -135,7 +144,15 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	jsonRoutes.GET("/events", realtimeHandler.Stream)
 
 	pinHandler := pins.NewHandler(c.PinRepo, c.Store, c.Events, c.UserService)
-	pins.RegisterRoutes(uploadRoutes, pinHandler, pins.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
+	pins.RegisterRoutes(uploadRoutes, pinHandler, pins.RouteOptions{
+		JWTSecret: cfg.JWTSecret,
+		Blacklist: c.Blacklist,
+		Sessions:  c.UserService,
+		// Only GET /pins/:id answers reacted_by_me. The reaction repository is
+		// passed directly: it already exposes ReactedByMe, and handing the pins
+		// handler the repository (not the service) keeps the dependency narrow.
+		Reactions: c.ReactionRepo,
+	})
 
 	reportHandler := reports.NewHandler(reports.NewService(c.ReportRepo), c.Events).
 		WithQuarantine(c.Store, c.PinRepo)
@@ -156,6 +173,9 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, c *di.Container, lg *slog
 	commentHandler := comments.NewHandler(c.CommentRepo, c.UserService)
 	comments.RegisterRoutes(jsonRoutes, commentHandler, comments.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
 
+	reactionHandler := reactions.NewHandler(c.ReactionRepo)
+	reactions.RegisterRoutes(jsonRoutes, reactionHandler, reactions.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
+
 	socialHandler := social.NewHandler(c.SocialRepo)
 	social.RegisterRoutes(jsonRoutes, socialHandler, social.RouteOptions{JWTSecret: cfg.JWTSecret, Blacklist: c.Blacklist, Sessions: c.UserService})
 
@@ -173,6 +193,59 @@ func selectMailer(cfg *config.Config) auth.Mailer {
 		return auth.WebhookMailer{URL: cfg.MailerWebhookURL, Key: cfg.MailerWebhookKey}
 	}
 	return auth.LogMailer{LogTokens: cfg.AppEnv != "production"}
+}
+
+// Bounds for the POST /errors payload before it reaches the reporter. The
+// endpoint is public, so attacker-shaped reports must not produce unbounded
+// Sentry events: the message was already capped, and stack, url and extra
+// get the same treatment here. The 1 MB body cap and the 30/min limiter are
+// the outer bounds; these keep any single report small inside them.
+const (
+	clientErrorMaxStackRunes      = 8 * 1024
+	clientErrorMaxURLRunes        = 2 * 1024
+	clientErrorMaxExtraKeys       = 20
+	clientErrorMaxExtraValueRunes = 1024
+)
+
+// truncateRunes cuts s to at most max runes, so multi-byte characters are
+// never split mid-encoding.
+func truncateRunes(s string, max int) string {
+	if r := []rune(s); len(r) > max {
+		return string(r[:max])
+	}
+	return s
+}
+
+// capExtra keeps the first clientErrorMaxExtraKeys entries by sorted key
+// (deterministic under Go's random map order) and truncates string values,
+// so a hand-crafted report cannot smuggle an unbounded payload to Sentry.
+// Non-string scalars pass through; composites are bounded by the 1 MB body
+// cap and Sentry's own event limits.
+func capExtra(extra map[string]any) map[string]any {
+	if len(extra) <= clientErrorMaxExtraKeys {
+		out := make(map[string]any, len(extra))
+		for k, v := range extra {
+			out[k] = capExtraValue(v)
+		}
+		return out
+	}
+	keys := make([]string, 0, len(extra))
+	for k := range extra {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make(map[string]any, clientErrorMaxExtraKeys)
+	for _, k := range keys[:clientErrorMaxExtraKeys] {
+		out[k] = capExtraValue(extra[k])
+	}
+	return out
+}
+
+func capExtraValue(v any) any {
+	if s, ok := v.(string); ok {
+		return truncateRunes(s, clientErrorMaxExtraValueRunes)
+	}
+	return v
 }
 
 // ClientErrorIngest handles POST /errors: it forwards a client-side error
@@ -201,9 +274,9 @@ func ClientErrorIngest(rep middleware.ErrorReporter) gin.HandlerFunc {
 		if rep != nil {
 			rep.Report(c.Request.Context(), errors.New(msg),
 				"source", "client",
-				"url", payload.URL,
-				"stack", payload.Stack,
-				"extra", payload.Extra,
+				"url", truncateRunes(payload.URL, clientErrorMaxURLRunes),
+				"stack", truncateRunes(payload.Stack, clientErrorMaxStackRunes),
+				"extra", capExtra(payload.Extra),
 			)
 		}
 		c.Status(stdhttp.StatusNoContent)

@@ -1,0 +1,30 @@
+-- 0022_pins_user_created_idx.sql
+--
+-- ListByUser (pins/repository.go) filters `p.user_id = $1` and orders by
+-- `p.created_at DESC, p.id DESC`. Before this index the planner could only
+-- use pins_visible_created_idx, which is ordered by created_at alone, so it
+-- walked every visible pin and threw away the ones belonging to other users:
+-- on a 10,031-row table it removed 9,831 rows by filter to return one user's
+-- 200. That cost grows with the whole table, not with the user's own pins.
+--
+-- This composite index satisfies the filter and the sort in one scan, so the
+-- query reads exactly the rows it returns. created_at DESC matches the
+-- ORDER BY, so no sort step is needed at all.
+--
+-- CONCURRENTLY because pins is the hottest table in the app and a plain
+-- CREATE INDEX would take an ACCESS EXCLUSIVE lock for the duration, blocking
+-- every read and write on every deploy. The migration runner
+-- (platform/database/migrate.go, executeMigration) detects CONCURRENTLY and
+-- splits the file into individual statements, because it cannot run inside a
+-- transaction block. Do not merge this into a multi-statement migration.
+--
+-- IF NOT EXISTS so a re-run against a database where the index already exists
+-- is a no-op rather than a failed deploy. Note the one caveat this does not
+-- cover: if a previous CONCURRENTLY attempt was interrupted, Postgres leaves
+-- an INVALID index behind under this name, and IF NOT EXISTS then skips
+-- creation and keeps the broken one. Recovery is a manual
+--   DROP INDEX CONCURRENTLY pins_user_created_idx;
+-- followed by a restart. Check with:
+--   SELECT indexrelid::regclass, indisvalid FROM pg_index WHERE indexrelid::regclass::text = 'pins_user_created_idx';
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS pins_user_created_idx ON pins (user_id, created_at DESC);

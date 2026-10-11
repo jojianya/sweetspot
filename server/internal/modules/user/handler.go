@@ -1,9 +1,11 @@
 package users
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
-	"io"
+	"mime/multipart"
+	"net/http"
 	"strings"
 	"unicode/utf8"
 
@@ -11,7 +13,6 @@ import (
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
-	"github.com/jojianya/sweetspot247-backend/internal/platform/imaging"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/storage"
 )
 
@@ -87,16 +88,6 @@ func (h *Handler) UpdateRole(c *gin.Context) {
 func (h *Handler) UpdateMe(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	current, err := h.service.GetByID(c.Request.Context(), userID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.NotFound(c, "user not found")
-			return
-		}
-		response.Internal(c, "user: get", err)
-		return
-	}
-
 	if err := c.Request.ParseMultipartForm(maxMultipartMem); err != nil {
 		response.BadRequest(c, "could not parse form")
 		return
@@ -109,73 +100,28 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 		return
 	}
 
-	var patch UpdateProfilePatch
-	patch.Username = input.username
-	patch.Socials = input.socials
-
-	var newAvatar *string
+	var avatar *multipart.FileHeader
 	if fhs := c.Request.MultipartForm.File["avatar"]; len(fhs) > 0 {
-		fh := fhs[0]
-		if fh.Size > maxAvatarSize {
-			response.BadRequest(c, "avatar exceeds 5MB")
-			return
-		}
-		src, err := fh.Open()
-		if err != nil {
-			response.Internal(c, "user: open avatar", err)
-			return
-		}
-		// Cap at max+1 so the length check below enforces actual bytes, not
-		// the client-claimed FileHeader.Size.
-		data, readErr := io.ReadAll(io.LimitReader(src, maxAvatarSize+1))
-		src.Close()
-		if readErr != nil {
-			response.Internal(c, "user: read avatar", readErr)
-			return
-		}
-		if len(data) > maxAvatarSize {
-			response.BadRequest(c, "avatar exceeds 5MB")
-			return
-		}
-		if err := imaging.Validate(data); err != nil {
-			response.BadRequest(c, err.Error())
-			return
-		}
-		processed, err := imaging.Avatar(data)
-		if err != nil {
-			response.Internal(c, "user: process avatar", err)
-			return
-		}
-		url, err := h.store.Save(processed, "webp")
-		if err != nil {
-			response.Internal(c, "user: save avatar", err)
-			return
-		}
-		newAvatar = &url
-		patch.AvatarURL = &url
+		avatar = fhs[0]
 	}
 
-	updated, err := h.service.UpdateProfile(c.Request.Context(), userID, patch)
+	updater := &profileUpdater{svc: h.service, store: h.store}
+	updated, err := updater.UpdateProfileWithAvatar(c.Request.Context(), userID, UpdateProfilePatch{
+		Username: input.username,
+		Socials:  input.socials,
+	}, avatar)
 	if err != nil {
-		if newAvatar != nil {
-			_ = h.store.Delete(*newAvatar)
-		}
 		switch {
 		case errors.Is(err, ErrNotFound):
 			response.NotFound(c, "user not found")
-			return
 		case errors.Is(err, ErrUsernameTaken):
 			response.Conflict(c, "username already taken")
-			return
+		case errors.Is(err, ErrAvatarTooLarge), errors.Is(err, ErrAvatarInvalid):
+			response.BadRequest(c, err.Error())
 		default:
 			response.Internal(c, "user: update profile", err)
-			return
 		}
-	}
-
-	// The previous avatar file is superseded; drop it (best-effort).
-	if newAvatar != nil && current.AvatarURL != nil && *current.AvatarURL != *newAvatar {
-		_ = h.store.Delete(*current.AvatarURL)
+		return
 	}
 
 	response.OK(c, updated.ToPrivate())
@@ -202,6 +148,9 @@ func parseSocials(raw string) (map[string]any, error) {
 		case string:
 			if utf8.RuneCountInString(val) > maxSocialValLen {
 				return nil, errors.New("social value too long")
+			}
+			if err := validateSocialLink(k, val); err != nil {
+				return nil, err
 			}
 		case bool, float64:
 		default:
@@ -257,4 +206,67 @@ func (h *Handler) List(c *gin.Context) {
 		items = append(items, found[i].ToPublic())
 	}
 	response.OK(c, gin.H{"users": items, "total": total})
+}
+
+// RoleReader is the subset of Service needed to resolve a caller's role.
+//
+// Narrower than Service on purpose: every module that needs a role check
+// depends on this single-method interface instead of the full user service,
+// which keeps the dependency obvious and lets tests supply a one-method stub
+// rather than implementing all ten.
+type RoleReader interface {
+	GetByID(ctx context.Context, id string) (User, error)
+}
+
+// CurrentRole resolves the caller role from the request context using the user
+// service.
+//
+// When the auth middleware already resolved the session it caches the live
+// role on the context, and that cached value wins: it came from the same
+// database read that enforced session revocation, so reusing it adds no query
+// and cannot disagree with the middleware. Otherwise this falls back to a
+// live lookup, preserving the stale-JWT-role fix for callers outside
+// middleware (tests, optional-auth paths without a checker).
+func CurrentRole(svc RoleReader, c *gin.Context) string {
+	if role := c.GetString(middleware.CtxRole); role != "" {
+		return role
+	}
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return ""
+	}
+	user, err := svc.GetByID(c.Request.Context(), userID)
+	if err != nil {
+		return ""
+	}
+	return user.Role
+}
+
+// IsModerator reports whether the caller currently holds a moderation role.
+//
+// Like CurrentRole this reads through to the database, so a demotion takes
+// effect on the caller's next request.
+func IsModerator(svc RoleReader, c *gin.Context) bool {
+	role := CurrentRole(svc, c)
+	return role == RoleAdmin || role == RoleOwner
+}
+
+func RequireAdmin(svc RoleReader) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if role := CurrentRole(svc, c); role != RoleAdmin && role != RoleOwner {
+			response.AbortError(c, http.StatusForbidden, "admin access required")
+			return
+		}
+		c.Next()
+	}
+}
+
+func RequireOwner(svc RoleReader) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if role := CurrentRole(svc, c); role != RoleOwner {
+			response.AbortError(c, http.StatusForbidden, "owner access required")
+			return
+		}
+		c.Next()
+	}
 }

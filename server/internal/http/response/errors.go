@@ -15,7 +15,11 @@ import (
 func Internal(c *gin.Context, msg string, err error, fields ...any) {
 	if err != nil {
 		slog.Error(msg, append([]any{"error", err.Error()}, fields...)...)
-		_ = c.Error(err)
+		// Attaching never fails for a non-nil err, but log rather than drop
+		// it so a future gin behavior change cannot swallow it silently.
+		if cerr := c.Error(err); cerr != nil {
+			slog.Warn("attach error to gin context", "error", cerr.Error())
+		}
 	}
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 }

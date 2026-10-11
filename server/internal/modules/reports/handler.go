@@ -116,9 +116,9 @@ func (h *Handler) Review(c *gin.Context) {
 	// publish failure is logged and never fails this request. A failed move
 	// keeps the pin hidden and is finished by the startup sweep.
 	if req.Action == "approve" {
-		h.quarantinePinFiles(c.Request.Context(), report.PinID.String())
+		h.quarantinePinFiles(c.Request.Context(), report.PinID)
 		if h.events != nil && pinLocation != nil {
-			h.events.PublishRemoval(c.Request.Context(), report.PinID.String(), *pinLocation)
+			h.events.PublishRemoval(c.Request.Context(), report.PinID, *pinLocation)
 		}
 	}
 

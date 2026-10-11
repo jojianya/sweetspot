@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func init() { gin.SetMode(gin.TestMode) }
@@ -48,21 +47,13 @@ func reviewRequest(t *testing.T, h *Handler, reportID, action string) *httptest.
 	return w
 }
 
-func uuidPtr(s string) pgtype.UUID {
-	var u pgtype.UUID
-	if err := u.Scan(s); err != nil {
-		panic(err)
-	}
-	return u
-}
-
 // TestReviewApprovePublishesRemoval proves report approve publishes a removal
 // with the reported pin's id and committed location via the reports-local
 // Publisher (no pins import involved).
 func TestReviewApprovePublishesRemoval(t *testing.T) {
 	loc := "POINT(25 15)"
 	svc := &stubReviewService{
-		report:   Report{PinID: uuidPtr("11111111-1111-1111-1111-111111111111")},
+		report:   Report{PinID: "11111111-1111-1111-1111-111111111111"},
 		location: &loc,
 	}
 	pub := &recordingPublisher{}

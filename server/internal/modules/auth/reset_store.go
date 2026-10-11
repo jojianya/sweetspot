@@ -28,6 +28,14 @@ const (
 // database; raw tokens exist in memory and in the one email that carries them.
 type ResetStore struct {
 	pool *pgxpool.Pool
+	// BatchSize overrides resetCleanupBatch when positive. Production never
+	// sets it; only tests use it to shrink one pass so a pack of rows spans
+	// several batches.
+	BatchSize int
+	// AfterBatch, when non-nil, runs right after each DELETE pass commits and
+	// before the loop re-checks the context. Production never sets it; tests
+	// use it to cancel at a deterministic point instead of racing a timer.
+	AfterBatch func()
 }
 
 func NewResetStore(pool *pgxpool.Pool) *ResetStore {
@@ -78,6 +86,51 @@ func (s *ResetStore) IssueToken(ctx context.Context, userID string) (raw string,
 		return "", time.Time{}, err
 	}
 	return raw, expiresAt, nil
+}
+
+// resetCleanupBatch bounds rows per DELETE so a big first backfill cannot
+// hold locks or run long; CleanupPasswordResets repeats until a pass deletes
+// less than a full batch.
+const resetCleanupBatch = 1000
+
+// CleanupPasswordResets deletes dead reset rows: used ones, and unused ones
+// expired for over a day. Neither can ever validate (ConsumeToken requires
+// unused and unexpired, with a day of grace past the 30-minute life), and
+// IssueToken's UPDATE ... WHERE used_at IS NULL only serializes against the
+// janitor on rows already unusable. A cancelled context stops the loop
+// between batches, reporting what was deleted with no error: shutdown is
+// not a failure.
+func (s *ResetStore) CleanupPasswordResets(ctx context.Context) (deleted int, err error) {
+	batch := resetCleanupBatch
+	if s.BatchSize > 0 {
+		batch = s.BatchSize
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return deleted, nil
+		default:
+		}
+		tag, err := s.pool.Exec(ctx, `
+			DELETE FROM password_resets
+			WHERE id IN (
+				SELECT id FROM password_resets
+				WHERE used_at IS NOT NULL OR expires_at < now() - interval '1 day'
+				LIMIT $1
+			)
+		`, batch)
+		if err != nil {
+			return deleted, err
+		}
+		n := int(tag.RowsAffected())
+		deleted += n
+		if s.AfterBatch != nil {
+			s.AfterBatch()
+		}
+		if n < batch {
+			return deleted, nil
+		}
+	}
 }
 
 // ConsumeToken validates the token and, in the same transaction, sets the new

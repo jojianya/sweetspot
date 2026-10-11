@@ -49,7 +49,7 @@ func seedCollection(t *testing.T, ctx context.Context, repo collections.Reposito
 		t.Fatalf("seed collection: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = repo.Delete(context.Background(), c.ID.String(), userID, true)
+		_ = repo.Delete(context.Background(), c.ID, userID, true)
 	})
 	return c
 }
@@ -94,7 +94,7 @@ func TestDBCollectionPrivacy(t *testing.T) {
 
 	t.Run("OwnerSeesPrivate", func(t *testing.T) {
 		r := privacyRouter(h, &owner)
-		w := getJSON(t, r, "/collections/"+private.ID.String())
+		w := getJSON(t, r, "/collections/"+private.ID)
 		if w.Code != http.StatusOK {
 			t.Fatalf("owner get private: got %d (%s)", w.Code, w.Body.String())
 		}
@@ -103,43 +103,43 @@ func TestDBCollectionPrivacy(t *testing.T) {
 			t.Fatalf("owner list: got %d", w.Code)
 		}
 		body := w.Body.String()
-		if !strings.Contains(body, public.ID.String()) || !strings.Contains(body, private.ID.String()) {
+		if !strings.Contains(body, public.ID) || !strings.Contains(body, private.ID) {
 			t.Fatalf("owner list missing collections: %s", body)
 		}
 	})
 
 	t.Run("OtherUserGets404AndPublicOnly", func(t *testing.T) {
 		r := privacyRouter(h, &other)
-		w := getJSON(t, r, "/collections/"+private.ID.String())
+		w := getJSON(t, r, "/collections/"+private.ID)
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("other get private: got %d (%s), want 404", w.Code, w.Body.String())
 		}
-		w = getJSON(t, r, "/collections/"+public.ID.String())
+		w = getJSON(t, r, "/collections/"+public.ID)
 		if w.Code != http.StatusOK {
 			t.Fatalf("other get public: got %d", w.Code)
 		}
 		w = getJSON(t, r, "/users/"+owner+"/collections")
 		body := w.Body.String()
-		if !strings.Contains(body, public.ID.String()) {
+		if !strings.Contains(body, public.ID) {
 			t.Fatalf("other list missing public collection: %s", body)
 		}
-		if strings.Contains(body, private.ID.String()) {
+		if strings.Contains(body, private.ID) {
 			t.Fatalf("other list leaks private collection: %s", body)
 		}
 	})
 
 	t.Run("LoggedOutGets404AndPublicOnly", func(t *testing.T) {
 		r := privacyRouter(h, nil)
-		w := getJSON(t, r, "/collections/"+private.ID.String())
+		w := getJSON(t, r, "/collections/"+private.ID)
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("logged-out get private: got %d (%s), want 404", w.Code, w.Body.String())
 		}
 		w = getJSON(t, r, "/users/"+owner+"/collections")
 		body := w.Body.String()
-		if !strings.Contains(body, public.ID.String()) {
+		if !strings.Contains(body, public.ID) {
 			t.Fatalf("logged-out list missing public collection: %s", body)
 		}
-		if strings.Contains(body, private.ID.String()) {
+		if strings.Contains(body, private.ID) {
 			t.Fatalf("logged-out list leaks private collection: %s", body)
 		}
 	})
@@ -167,7 +167,7 @@ func TestDBCollectionPrivacyToggle(t *testing.T) {
 			g.Next()
 		}, h.Update)
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPatch, "/collections/"+c.ID.String(), strings.NewReader(body))
+		req := httptest.NewRequest(http.MethodPatch, "/collections/"+c.ID, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 		return w
@@ -178,7 +178,7 @@ func TestDBCollectionPrivacyToggle(t *testing.T) {
 		t.Fatalf("make private: got %d (%s)", w.Code, w.Body.String())
 	}
 	r := privacyRouter(h, &other)
-	if w := getJSON(t, r, "/collections/"+c.ID.String()); w.Code != http.StatusNotFound {
+	if w := getJSON(t, r, "/collections/"+c.ID); w.Code != http.StatusNotFound {
 		t.Fatalf("other after privatize: got %d, want 404", w.Code)
 	}
 
@@ -186,7 +186,7 @@ func TestDBCollectionPrivacyToggle(t *testing.T) {
 	if w := patch(&owner, `{"name":"toggle"}`); w.Code != http.StatusNoContent {
 		t.Fatalf("name-only update: got %d (%s)", w.Code, w.Body.String())
 	}
-	if w := getJSON(t, r, "/collections/"+c.ID.String()); w.Code != http.StatusNotFound {
+	if w := getJSON(t, r, "/collections/"+c.ID); w.Code != http.StatusNotFound {
 		t.Fatalf("other after name-only update: got %d, want 404", w.Code)
 	}
 
@@ -194,7 +194,7 @@ func TestDBCollectionPrivacyToggle(t *testing.T) {
 	if w := patch(&owner, `{"name":"toggle","is_private":false}`); w.Code != http.StatusNoContent {
 		t.Fatalf("make public: got %d (%s)", w.Code, w.Body.String())
 	}
-	if w := getJSON(t, r, "/collections/"+c.ID.String()); w.Code != http.StatusOK {
+	if w := getJSON(t, r, "/collections/"+c.ID); w.Code != http.StatusOK {
 		t.Fatalf("other after publicize: got %d (%s), want 200", w.Code, w.Body.String())
 	}
 }

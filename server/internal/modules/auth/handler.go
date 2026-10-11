@@ -19,12 +19,17 @@ type Handler struct {
 	service  Service
 	bl       *cache.Blacklist
 	emailLim *middleware.Limiter
+	// acctLim bounds failures per identifier across all client IPs, so a
+	// distributed grind cannot dodge the per-pair lockout by rotating
+	// addresses. Higher budget and longer window than emailLim: tripping it
+	// takes a sustained attack, not a stranger's typos.
+	acctLim  *middleware.Limiter
 	sameSite SameSiteMode
 	trusted  []*net.IPNet
 }
 
-func NewHandler(service Service, bl *cache.Blacklist, emailLim *middleware.Limiter, sameSite SameSiteMode, trustedProxies []string) *Handler {
-	return &Handler{service: service, bl: bl, emailLim: emailLim, sameSite: sameSite, trusted: parseTrustedProxies(trustedProxies)}
+func NewHandler(service Service, bl *cache.Blacklist, emailLim, acctLim *middleware.Limiter, sameSite SameSiteMode, trustedProxies []string) *Handler {
+	return &Handler{service: service, bl: bl, emailLim: emailLim, acctLim: acctLim, sameSite: sameSite, trusted: parseTrustedProxies(trustedProxies)}
 }
 
 func (h *Handler) Register(c *gin.Context) {
@@ -83,12 +88,23 @@ func (h *Handler) Login(c *gin.Context) {
 		response.TooManyRequests(c, "account locked, try again later")
 		return
 	}
+	// Per-account backstop: same response, no new signal. Unknown
+	// identifiers count too, so exhausting the budget reveals nothing about
+	// whether the account exists (both cases already share the 401 below).
+	acctKey := loginAccountKey(req.Identifier)
+	if h.acctLim != nil && h.acctLim.Locked(acctKey) {
+		response.TooManyRequests(c, "account locked, try again later")
+		return
+	}
 
 	u, token, err := h.service.Login(c.Request.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
 			if h.emailLim != nil {
 				h.emailLim.AllowKey(lockKey)
+			}
+			if h.acctLim != nil {
+				h.acctLim.AllowKey(acctKey)
 			}
 			response.Unauthorized(c, "invalid email, username, or password")
 			return
@@ -101,6 +117,10 @@ func (h *Handler) Login(c *gin.Context) {
 		// Success clears only this IP+identifier counter, so one user signing
 		// in does not release a lockout an attacker earned from their own IP.
 		h.emailLim.Reset(lockKey)
+	}
+	if h.acctLim != nil {
+		// Success clears the per-account counter for this identifier only.
+		h.acctLim.Reset(acctKey)
 	}
 
 	SetSessionCookie(c.Writer, c.Request, token, tokenExpiry, h.sameSite, h.trusted)
@@ -154,4 +174,13 @@ func (h *Handler) Me(c *gin.Context) {
 // lockout slightly eager and only for the attacker's own IP.
 func loginLockKey(ip, identifier string) string {
 	return ip + "|" + strings.ToLower(identifier)
+}
+
+// loginAccountKey is the per-account failure counter: the identifier alone,
+// lowercased exactly like loginLockKey so case variants share one budget.
+// It carries no IP, so rotating addresses cannot escape it; the higher
+// threshold (see router wiring) keeps one stranger from locking the real
+// owner out.
+func loginAccountKey(identifier string) string {
+	return "acct:" + strings.ToLower(identifier)
 }

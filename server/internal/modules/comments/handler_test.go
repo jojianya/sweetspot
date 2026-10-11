@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 )
 
@@ -37,12 +36,13 @@ func commentRequest(method, body string) *http.Request {
 	return req
 }
 
-// TestCreateMapsFKViolationTo404 proves the pg 23503 safety net: if the pin
-// disappears between the visibility check and the insert, the caller gets
-// a 404, never a 500.
+// TestCreateMapsFKViolationTo404 proves the raced-hide safety net: if the pin
+// disappears between the visibility check and the insert, the repository
+// translates the FK violation to ErrPinNotFound and the caller gets a 404,
+// never a 500. The fake returns what the real repository returns.
 func TestCreateMapsFKViolationTo404(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h := NewHandler(&fakeRepo{pinVisible: true, createErr: &pgconn.PgError{Code: "23503"}}, nil)
+	h := NewHandler(&fakeRepo{pinVisible: true, createErr: ErrPinNotFound}, nil)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = commentRequest(http.MethodPost, `{"body":"hi"}`)

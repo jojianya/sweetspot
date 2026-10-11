@@ -40,8 +40,11 @@ type coverPhoto struct {
 
 // seedCoverPin creates a pin with the given photos in position order and
 // returns its id. Photos insert positionally, so callers control ORDER BY
-// position deterministically.
-func seedCoverPin(t *testing.T, ctx context.Context, repo pins.Repository, userID string, categoryID int, lat, lng float64, caption string, photos []coverPhoto) string {
+// position deterministically. The pin is hard-deleted in cleanup so tests
+// never leave orphaned visible pins behind: seedDBUserWithRole deletes the
+// author, and pins.user_id is ON DELETE SET NULL, so any leftover pin would
+// later fail world-bbox scans (ListPins/ListTrending) with a NULL user_id.
+func seedCoverPin(t *testing.T, ctx context.Context, repo pins.Repository, pool *pgxpool.Pool, userID string, categoryID int, lat, lng float64, caption string, photos []coverPhoto) string {
 	t.Helper()
 	full := make([]string, len(photos))
 	thumb := make([]string, len(photos))
@@ -62,7 +65,10 @@ func seedCoverPin(t *testing.T, ctx context.Context, repo pins.Repository, userI
 	if err != nil {
 		t.Fatalf("seed pin: %v", err)
 	}
-	return p.ID.String()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM pins WHERE id = $1`, p.ID)
+	})
+	return p.ID
 }
 
 func coverSetup(t *testing.T) (ctx context.Context, pool *pgxpool.Pool, author string, categoryID int) {
@@ -78,13 +84,13 @@ func coverSetup(t *testing.T) (ctx context.Context, pool *pgxpool.Pool, author s
 
 // seedCoverTrio creates the shared fixture: pin A with two photos (first wins),
 // pin B with one backfilled photo (thumb == full), pin C with no photos.
-func seedCoverTrio(t *testing.T, ctx context.Context, repo pins.Repository, author string, categoryID int) (a, b, c string) {
+func seedCoverTrio(t *testing.T, ctx context.Context, repo pins.Repository, pool *pgxpool.Pool, author string, categoryID int) (a, b, c string) {
 	t.Helper()
-	a = seedCoverPin(t, ctx, repo, author, categoryID, 10, 10, "two photos",
+	a = seedCoverPin(t, ctx, repo, pool, author, categoryID, 10, 10, "two photos",
 		[]coverPhoto{{coverFullA, coverThumbA}, {coverFullB, coverThumbB}})
-	b = seedCoverPin(t, ctx, repo, author, categoryID, 11, 11, "backfilled",
+	b = seedCoverPin(t, ctx, repo, pool, author, categoryID, 11, 11, "backfilled",
 		[]coverPhoto{{coverFullB, coverFullB}})
-	c = seedCoverPin(t, ctx, repo, author, categoryID, 12, 12, "no photos", nil)
+	c = seedCoverPin(t, ctx, repo, pool, author, categoryID, 12, 12, "no photos", nil)
 	return a, b, c
 }
 
@@ -102,40 +108,60 @@ func TestDBListEntriesIncludeViews(t *testing.T) {
 	favRepo := favorites.NewRepository(pool)
 	socialRepo := social.NewRepository(pool)
 	colRepo := collections.NewRepository(pool)
-	pinID := seedCoverPin(t, ctx, pinsRepo, author, categoryID, 10.5, 10.5, "viewed", nil)
+	pinID := seedCoverPin(t, ctx, pinsRepo, pool, author, categoryID, 10.5, 10.5, "viewed", nil)
 	if _, err := pool.Exec(ctx, `UPDATE pins SET views = 7 WHERE id = $1`, pinID); err != nil {
 		t.Fatalf("set views: %v", err)
 	}
-	if err := favRepo.Save(ctx, author, pinID); err != nil { t.Fatalf("save favorite: %v", err) }
+	if err := favRepo.Save(ctx, author, pinID); err != nil {
+		t.Fatalf("save favorite: %v", err)
+	}
 	follower := seedDBUserWithRole(t, ctx, pool, fmt.Sprintf("views-%d@example.com", time.Now().UnixNano()), "user")
-	if err := socialRepo.Follow(ctx, follower, author); err != nil { t.Fatalf("follow: %v", err) }
+	if err := socialRepo.Follow(ctx, follower, author); err != nil {
+		t.Fatalf("follow: %v", err)
+	}
 	col, err := colRepo.Create(ctx, author, "viewed", nil, false)
-	if err != nil { t.Fatalf("create collection: %v", err) }
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID.String(), author, true) })
-	if err := colRepo.AddPin(ctx, col.ID.String(), pinID); err != nil { t.Fatalf("add pin: %v", err) }
+	if err != nil {
+		t.Fatalf("create collection: %v", err)
+	}
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID, author, true) })
+	if err := colRepo.AddPin(ctx, col.ID, pinID); err != nil {
+		t.Fatalf("add pin: %v", err)
+	}
 
 	favs, _, err := favRepo.List(ctx, author, 50, 0)
-	if err != nil { t.Fatalf("favorites list: %v", err) }
-	if len(favs) != 1 || favs[0].Pin.Views != 7 { t.Fatalf("favorites views = %+v, want 7", favs) }
+	if err != nil {
+		t.Fatalf("favorites list: %v", err)
+	}
+	if len(favs) != 1 || favs[0].Pin.Views != 7 {
+		t.Fatalf("favorites views = %+v, want 7", favs)
+	}
 	feed, err := socialRepo.Feed(ctx, follower, 50)
-	if err != nil { t.Fatalf("feed: %v", err) }
-	byID := coverByID(feed, func(e pins.PinListEntry) string { return e.ID.String() })
-	if byID[pinID].Pin.Views != 7 { t.Fatalf("feed views = %d, want 7", byID[pinID].Pin.Views) }
-	cps, _, err := colRepo.ListPins(ctx, col.ID.String(), 50, 0)
-	if err != nil { t.Fatalf("collection pins: %v", err) }
-	if len(cps) != 1 || cps[0].Pin.Views != 7 { t.Fatalf("collection pins views = %+v, want 7", cps) }
+	if err != nil {
+		t.Fatalf("feed: %v", err)
+	}
+	byID := coverByID(feed, func(e pins.PinListEntry) string { return e.ID })
+	if byID[pinID].Pin.Views != 7 {
+		t.Fatalf("feed views = %d, want 7", byID[pinID].Pin.Views)
+	}
+	cps, _, err := colRepo.ListPins(ctx, col.ID, 50, 0)
+	if err != nil {
+		t.Fatalf("collection pins: %v", err)
+	}
+	if len(cps) != 1 || cps[0].Pin.Views != 7 {
+		t.Fatalf("collection pins views = %+v, want 7", cps)
+	}
 }
 
 func TestDBCoverPinsList(t *testing.T) {
 	ctx, pool, author, categoryID := coverSetup(t)
 	repo := pins.NewRepository(pool)
-	a, b, c := seedCoverTrio(t, ctx, repo, author, categoryID)
+	a, b, c := seedCoverTrio(t, ctx, repo, pool, author, categoryID)
 
 	got, err := repo.ListPins(ctx, coverWorld, nil, 50)
 	if err != nil {
 		t.Fatalf("ListPins: %v", err)
 	}
-	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID.String() })
+	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID })
 	if len(byID) < 3 {
 		t.Fatalf("ListPins returned %d pins, want at least our 3", len(byID))
 	}
@@ -154,13 +180,13 @@ func TestDBCoverPinsList(t *testing.T) {
 func TestDBCoverTrending(t *testing.T) {
 	ctx, pool, author, categoryID := coverSetup(t)
 	repo := pins.NewRepository(pool)
-	a, b, c := seedCoverTrio(t, ctx, repo, author, categoryID)
+	a, b, c := seedCoverTrio(t, ctx, repo, pool, author, categoryID)
 
 	got, err := repo.ListTrending(ctx, coverWorld, 50)
 	if err != nil {
 		t.Fatalf("ListTrending: %v", err)
 	}
-	byID := coverByID(got, func(e pins.TrendingPin) string { return e.ID.String() })
+	byID := coverByID(got, func(e pins.TrendingPin) string { return e.ID })
 	for id, want := range map[string]string{a: coverThumbA, b: coverFullB, c: ""} {
 		entry, ok := byID[id]
 		if !ok {
@@ -177,27 +203,27 @@ func TestDBCoverCollectionPins(t *testing.T) {
 	ctx, pool, author, categoryID := coverSetup(t)
 	pinsRepo := pins.NewRepository(pool)
 	colRepo := collections.NewRepository(pool)
-	a, b, c := seedCoverTrio(t, ctx, pinsRepo, author, categoryID)
+	a, b, c := seedCoverTrio(t, ctx, pinsRepo, pool, author, categoryID)
 
 	col, err := colRepo.Create(ctx, author, "covers", nil, false)
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID.String(), author, true) })
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), col.ID, author, true) })
 	for _, pid := range []string{a, b, c} {
-		if err := colRepo.AddPin(ctx, col.ID.String(), pid); err != nil {
+		if err := colRepo.AddPin(ctx, col.ID, pid); err != nil {
 			t.Fatalf("add pin: %v", err)
 		}
 	}
 
-	got, total, err := colRepo.ListPins(ctx, col.ID.String(), 50, 0)
+	got, total, err := colRepo.ListPins(ctx, col.ID, 50, 0)
 	if err != nil {
 		t.Fatalf("ListPins: %v", err)
 	}
 	if total != 3 {
 		t.Errorf("ListPins total = %d, want 3", total)
 	}
-	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID.String() })
+	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID })
 	for id, want := range map[string]string{a: coverThumbA, b: coverFullB, c: ""} {
 		entry, ok := byID[id]
 		if !ok {
@@ -214,32 +240,32 @@ func TestDBCoverCollectionList(t *testing.T) {
 	ctx, pool, author, categoryID := coverSetup(t)
 	pinsRepo := pins.NewRepository(pool)
 	colRepo := collections.NewRepository(pool)
-	a, _, _ := seedCoverTrio(t, ctx, pinsRepo, author, categoryID)
+	a, _, _ := seedCoverTrio(t, ctx, pinsRepo, pool, author, categoryID)
 
 	full, err := colRepo.Create(ctx, author, "with pins", nil, false)
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), full.ID.String(), author, true) })
-	if err := colRepo.AddPin(ctx, full.ID.String(), a); err != nil {
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), full.ID, author, true) })
+	if err := colRepo.AddPin(ctx, full.ID, a); err != nil {
 		t.Fatalf("add pin: %v", err)
 	}
 	empty, err := colRepo.Create(ctx, author, "empty", nil, false)
 	if err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
-	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), empty.ID.String(), author, true) })
+	t.Cleanup(func() { _ = colRepo.Delete(context.Background(), empty.ID, author, true) })
 
 	got, err := colRepo.ListByUser(ctx, author)
 	if err != nil {
 		t.Fatalf("ListByUser: %v", err)
 	}
-	byID := coverByID(got, func(e collections.Collection) string { return e.ID.String() })
-	if byID[full.ID.String()].CoverURL != coverThumbA {
-		t.Errorf("scalar cover = %q, want first thumbnail %q", byID[full.ID.String()].CoverURL, coverThumbA)
+	byID := coverByID(got, func(e collections.Collection) string { return e.ID })
+	if byID[full.ID].CoverURL != coverThumbA {
+		t.Errorf("scalar cover = %q, want first thumbnail %q", byID[full.ID].CoverURL, coverThumbA)
 	}
-	if byID[empty.ID.String()].CoverURL != "" {
-		t.Errorf("empty collection cover = %q, want empty", byID[empty.ID.String()].CoverURL)
+	if byID[empty.ID].CoverURL != "" {
+		t.Errorf("empty collection cover = %q, want empty", byID[empty.ID].CoverURL)
 	}
 }
 
@@ -247,7 +273,7 @@ func TestDBCoverFavorites(t *testing.T) {
 	ctx, pool, author, categoryID := coverSetup(t)
 	pinsRepo := pins.NewRepository(pool)
 	favRepo := favorites.NewRepository(pool)
-	a, _, _ := seedCoverTrio(t, ctx, pinsRepo, author, categoryID)
+	a, _, _ := seedCoverTrio(t, ctx, pinsRepo, pool, author, categoryID)
 
 	if err := favRepo.Save(ctx, author, a); err != nil {
 		t.Fatalf("save favorite: %v", err)
@@ -272,7 +298,7 @@ func TestDBCoverFeed(t *testing.T) {
 	ctx, pool, author, categoryID := coverSetup(t)
 	pinsRepo := pins.NewRepository(pool)
 	socialRepo := social.NewRepository(pool)
-	a, _, _ := seedCoverTrio(t, ctx, pinsRepo, author, categoryID)
+	a, _, _ := seedCoverTrio(t, ctx, pinsRepo, pool, author, categoryID)
 
 	follower := seedDBUserWithRole(t, ctx, pool, fmt.Sprintf("covf-%d@example.com", time.Now().UnixNano()), "user")
 	if err := socialRepo.Follow(ctx, follower, author); err != nil {
@@ -283,7 +309,7 @@ func TestDBCoverFeed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Feed: %v", err)
 	}
-	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID.String() })
+	byID := coverByID(got, func(e pins.PinListEntry) string { return e.ID })
 	entry, ok := byID[a]
 	if !ok {
 		t.Fatalf("feed missing pin %s", a)

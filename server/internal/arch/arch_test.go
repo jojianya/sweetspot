@@ -27,25 +27,17 @@ import (
 	"testing"
 )
 
-// allowModelPgtype documents the current pgtype leak in models. New model
-// files importing pgtype, or any model importing gin/platform/pgconn, fail.
-var allowModelPgtype = map[string]bool{
-	"pins":        true, // server/internal/modules/pins/model.go:6
-	"collections": true, // server/internal/modules/collections/model.go:6
-	"comments":    true, // server/internal/modules/comments/model.go:6
-	"reports":     true, // server/internal/modules/reports/model.go:7
-}
+// allowModelPgtype documents pgtype leaks in models. Empty: models use
+// plain Go types and repositories convert to/from driver types.
+var allowModelPgtype = map[string]bool{}
 
-// allowServicePgconn documents the 23505 Code checks in business logic.
-var allowServicePgconn = map[string]bool{
-	"auth":    true, // server/internal/modules/auth/service.go:9,47
-	"reports": true, // server/internal/modules/reports/service.go:7,32
-}
+// allowServicePgconn documents pgconn references in business logic.
+// Empty: repositories translate driver errors into domain errors.
+var allowServicePgconn = map[string]bool{}
 
-// allowServiceMiddleware documents user/service.go importing the HTTP layer.
-var allowServiceMiddleware = map[string]bool{
-	"user": true, // server/internal/modules/user/service.go:6 (SessionState)
-}
+// allowServiceMiddleware documents services importing the HTTP layer.
+// Empty: no service may import internal/http/middleware.
+var allowServiceMiddleware = map[string]bool{}
 
 func moduleDirs(t *testing.T) []string {
 	t.Helper()
@@ -105,7 +97,7 @@ func TestModelHasNoInfraImports(t *testing.T) {
 			switch {
 			case imp == "github.com/jackc/pgx/v5/pgtype":
 				if !allowModelPgtype[mod] {
-					t.Errorf("%s: new pgtype import in model (allowlisted: pins, collections, comments, reports)", path)
+					t.Errorf("%s: model must not import pgtype; the repository converts driver types", path)
 				}
 			case strings.Contains(imp, "gin-gonic/gin"):
 				t.Errorf("%s: model must not import gin (%s)", path, imp)
@@ -134,11 +126,11 @@ func TestServiceHasNoInfraImports(t *testing.T) {
 			switch {
 			case imp == "github.com/jackc/pgx/v5/pgconn":
 				if !allowServicePgconn[mod] {
-					t.Errorf("%s: new pgconn import in service (allowlisted: auth, reports)", path)
+					t.Errorf("%s: service must not import pgconn; repositories translate driver errors into domain errors", path)
 				}
 			case strings.Contains(imp, "internal/http/middleware"):
 				if !allowServiceMiddleware[mod] {
-					t.Errorf("%s: new http/middleware import in service (allowlisted: user)", path)
+					t.Errorf("%s: service must not import http/middleware (%s)", path, imp)
 				}
 			case strings.Contains(imp, "gin-gonic/gin"):
 				t.Errorf("%s: service must not import gin (%s)", path, imp)

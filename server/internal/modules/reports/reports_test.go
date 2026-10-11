@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type mockReportRepository struct {
@@ -36,7 +34,9 @@ func (m *mockReportRepository) ListReports(context.Context, *string, int, int) (
 }
 
 func TestCreateReportDuplicate(t *testing.T) {
-	svc := NewService(&mockReportRepository{createErr: &pgconn.PgError{Code: "23505"}})
+	// The repository translates the driver unique-violation into
+	// ErrAlreadyReported; the service must pass it through untouched.
+	svc := NewService(&mockReportRepository{createErr: ErrAlreadyReported})
 	_, err := svc.CreateReport(context.Background(), "pin1", "u1", "spam")
 	if !errors.Is(err, ErrAlreadyReported) {
 		t.Fatalf("expected ErrAlreadyReported, got %v", err)

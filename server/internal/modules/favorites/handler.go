@@ -1,6 +1,8 @@
 package favorites
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
@@ -14,27 +16,32 @@ const (
 
 type Handler struct {
 	repo Repository
+	svc  *Service
 }
 
 func NewHandler(repo Repository) *Handler {
-	return &Handler{repo: repo}
+	return &Handler{repo: repo, svc: NewService(repo)}
+}
+
+// service returns the service, building it from the handler's repository when
+// the handler was constructed as a struct literal (as some tests do) instead
+// of via NewHandler.
+func (h *Handler) service() *Service {
+	if h.svc != nil {
+		return h.svc
+	}
+	return NewService(h.repo)
 }
 
 func (h *Handler) Save(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	pinID := c.Param("id")
 
-	exists, err := h.repo.PinExists(c.Request.Context(), pinID)
-	if err != nil {
-		response.Internal(c, "favorite: pin exists", err, "pin_id", pinID)
-		return
-	}
-	if !exists {
-		response.NotFound(c, "pin not found")
-		return
-	}
-
-	if err := h.repo.Save(c.Request.Context(), userID, pinID); err != nil {
+	if err := h.service().Save(c.Request.Context(), userID, pinID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.NotFound(c, "pin not found")
+			return
+		}
 		response.Internal(c, "favorite: save", err, "user_id", userID, "pin_id", pinID)
 		return
 	}
@@ -46,17 +53,11 @@ func (h *Handler) Unsave(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	pinID := c.Param("id")
 
-	saved, err := h.repo.IsSaved(c.Request.Context(), userID, pinID)
-	if err != nil {
-		response.Internal(c, "favorite: is saved", err, "user_id", userID, "pin_id", pinID)
-		return
-	}
-	if !saved {
-		response.NotFound(c, "favorite not found")
-		return
-	}
-
-	if err := h.repo.Unsave(c.Request.Context(), userID, pinID); err != nil {
+	if err := h.service().Unsave(c.Request.Context(), userID, pinID); err != nil {
+		if errors.Is(err, ErrFavoriteNotFound) {
+			response.NotFound(c, "favorite not found")
+			return
+		}
 		response.Internal(c, "favorite: unsave", err, "user_id", userID, "pin_id", pinID)
 		return
 	}
@@ -76,7 +77,7 @@ func (h *Handler) GetSaved(c *gin.Context) {
 		return
 	}
 
-	entries, total, err := h.repo.List(c.Request.Context(), userID, limit, offset)
+	entries, total, err := h.service().List(c.Request.Context(), userID, limit, offset)
 	if err != nil {
 		response.Internal(c, "favorite: list", err, "user_id", userID)
 		return
@@ -88,7 +89,7 @@ func (h *Handler) GetSaved(c *gin.Context) {
 func (h *Handler) GetSavedIDs(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	ids, err := h.repo.ListIDs(c.Request.Context(), userID)
+	ids, err := h.service().ListIDs(c.Request.Context(), userID)
 	if err != nil {
 		response.Internal(c, "favorite: list ids", err, "user_id", userID)
 		return

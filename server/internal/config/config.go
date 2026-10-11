@@ -59,18 +59,27 @@ type Config struct {
 	QuarantineDir string
 	// QuarantineDryRun makes the startup sweep report hidden-pin files that
 	// would move without moving anything.
-	QuarantineDryRun   bool
-	RedisAddr          string
-	RedisPassword      string
-	CORSAllowedOrigins []string
-	SentryDSN          string
-	SentryEnv          string
-	MaxSSEConnections  int
-	CookieSameSite     string // "strict" or "lax"
-	// TrustedProxies is the gin trusted-proxy list. Empty (default) keeps
-	// today's behavior: ClientIP() returns the direct TCP peer and
-	// X-Forwarded-For is ignored, so per-IP rate limits are shared per proxy
-	// behind the Next rewrite (which does not forward X-Forwarded-For).
+	QuarantineDryRun bool
+	// QuarantineSweepInterval spaces the periodic quarantine resweep that
+	// heals moves the immediate path missed. Zero disables the loop (the
+	// boot sweep still runs).
+	QuarantineSweepInterval time.Duration
+	// ResetCleanupInterval spaces the periodic deletion of dead password
+	// reset rows (used, or expired for over a day). Zero disables it.
+	ResetCleanupInterval time.Duration
+	RedisAddr            string
+	RedisPassword        string
+	CORSAllowedOrigins   []string
+	SentryDSN            string
+	SentryEnv            string
+	MaxSSEConnections    int
+	CookieSameSite       string // "strict" or "lax"
+	// TrustedProxies is the gin trusted-proxy list. nginx proxies /api/*,
+	// /events and /uploads/* straight to Go and overwrites X-Forwarded-For
+	// with the real peer, so ClientIP() sees the real client for proxied
+	// traffic. Empty (default outside compose) keeps the spoof-safe
+	// behavior: ClientIP() returns the direct TCP peer and X-Forwarded-For
+	// is ignored.
 	TrustedProxies []string
 	// PublicBaseURL is the public site origin. Password reset links are built
 	// only from this value, never from request headers (which an attacker
@@ -109,36 +118,43 @@ func Load() *Config {
 
 	port := getEnv("PORT", "8080")
 	cfg := &Config{
-		Port:               port,
-		AppEnv:             strings.ToLower(getEnv("APP_ENV", "development")),
-		DBHost:             getEnv("DB_HOST", "localhost"),
-		DBPort:             getEnv("DB_PORT", "5432"),
-		DBUser:             getEnv("DB_USER", "postgres"),
-		DBPass:             getEnv("DB_PASSWORD", ""),
-		DBName:             getEnv("DB_NAME", "goodspotdb"),
-		DBSSLMode:          strings.ToLower(strings.TrimSpace(getEnv("DATABASE_SSLMODE", "disable"))),
-		DBPoolMaxConns:     getEnvInt("DB_POOL_MAX_CONNS", 10),
-		DBPoolMaxLifetime:  getEnvDuration("DB_POOL_MAX_LIFETIME", 30*time.Minute),
-		DBPoolMaxIdle:      getEnvDuration("DB_POOL_MAX_IDLE", 5*time.Minute),
-		DBPoolHealthCheck:  getEnvDuration("DB_POOL_HEALTH_CHECK", time.Minute),
-		LogLevel:           getEnv("LOG_LEVEL", "info"),
-		LogFormat:          getEnv("LOG_FORMAT", "text"),
-		JWTSecret:          getEnv("JWT_SECRET", ""),
-		StorageBackend:     getEnv("STORAGE_BACKEND", "local"),
-		StorageBase:        getEnv("STORAGE_BASE_URL", defaultStorageBaseURL(port)),
-		QuarantineDir:      getEnv("QUARANTINE_DIR", "./quarantine"),
-		QuarantineDryRun:   getEnvBool("QUARANTINE_SWEEP_DRY_RUN", false),
-		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
-		CORSAllowedOrigins: getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
-		SentryDSN:          getEnv("SENTRY_DSN", ""),
-		SentryEnv:          getEnv("SENTRY_ENV", "development"),
-		MaxSSEConnections:  getEnvInt("MAX_SSE_CONNECTIONS", 1000),
-		CookieSameSite:     strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", defaultCookieSameSite))),
-		TrustedProxies:     mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
-		PublicBaseURL:      strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "http://localhost:3000")), "/"),
-		MailerWebhookURL:   strings.TrimSpace(getEnv("MAILER_WEBHOOK_URL", "")),
-		MailerWebhookKey:   os.Getenv("MAILER_WEBHOOK_KEY"),
+		Port:              port,
+		AppEnv:            strings.ToLower(getEnv("APP_ENV", "development")),
+		DBHost:            getEnv("DB_HOST", "localhost"),
+		DBPort:            getEnv("DB_PORT", "5432"),
+		DBUser:            getEnv("DB_USER", "postgres"),
+		DBPass:            getEnv("DB_PASSWORD", ""),
+		DBName:            getEnv("DB_NAME", "goodspotdb"),
+		DBSSLMode:         strings.ToLower(strings.TrimSpace(getEnv("DATABASE_SSLMODE", "disable"))),
+		DBPoolMaxConns:    getEnvInt("DB_POOL_MAX_CONNS", 10),
+		DBPoolMaxLifetime: getEnvDuration("DB_POOL_MAX_LIFETIME", 30*time.Minute),
+		DBPoolMaxIdle:     getEnvDuration("DB_POOL_MAX_IDLE", 5*time.Minute),
+		DBPoolHealthCheck: getEnvDuration("DB_POOL_HEALTH_CHECK", time.Minute),
+		LogLevel:          getEnv("LOG_LEVEL", "info"),
+		LogFormat:         getEnv("LOG_FORMAT", "text"),
+		JWTSecret:         getEnv("JWT_SECRET", ""),
+		StorageBackend:    getEnv("STORAGE_BACKEND", "local"),
+		StorageBase:       getEnv("STORAGE_BASE_URL", defaultStorageBaseURL(port)),
+		QuarantineDir:     getEnv("QUARANTINE_DIR", "./quarantine"),
+		QuarantineDryRun:  getEnvBool("QUARANTINE_SWEEP_DRY_RUN", true),
+		// The resweep loop starts in app.Run; an invalid interval is fatal
+		// like every other malformed setting, so a typo cannot silently
+		// disable healing.
+		QuarantineSweepInterval: mustParseSweepInterval(getEnv("QUARANTINE_SWEEP_INTERVAL", "1h")),
+		// Dead reset rows are inert, so the janitor runs daily; like the
+		// sweep loop, "0" disables it.
+		ResetCleanupInterval: mustParseResetCleanupInterval(getEnv("PASSWORD_RESET_CLEANUP_INTERVAL", "24h")),
+		RedisAddr:            getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:        getEnv("REDIS_PASSWORD", ""),
+		CORSAllowedOrigins:   getOrigins(getEnv("CORS_ALLOWED_ORIGINS", defaultCORSAllowedOrigins)),
+		SentryDSN:            getEnv("SENTRY_DSN", ""),
+		SentryEnv:            getEnv("SENTRY_ENV", "development"),
+		MaxSSEConnections:    getEnvInt("MAX_SSE_CONNECTIONS", 1000),
+		CookieSameSite:       strings.ToLower(strings.TrimSpace(getEnv("COOKIE_SAMESITE", defaultCookieSameSite))),
+		TrustedProxies:       mustParseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
+		PublicBaseURL:        strings.TrimRight(strings.TrimSpace(getEnv("PUBLIC_BASE_URL", "http://localhost:3000")), "/"),
+		MailerWebhookURL:     strings.TrimSpace(getEnv("MAILER_WEBHOOK_URL", "")),
+		MailerWebhookKey:     os.Getenv("MAILER_WEBHOOK_KEY"),
 	}
 
 	if err := validateJWTSecret(cfg.JWTSecret); err != nil {
@@ -301,8 +317,10 @@ func validatePoolOptions(maxConns int, maxLifetime, maxIdle, healthCheck time.Du
 	return nil
 }
 
-// validateJWTSecret checks that the JWT secret is non-empty and at least 32
-// characters (256 bits) for sufficient entropy against brute force.
+// validateJWTSecret checks that the JWT secret is non-empty, at least 32
+// characters (256 bits), and not a known placeholder. Placeholders like the
+// leaked example value pass a length check while providing zero entropy, so
+// length alone is not sufficient.
 func validateJWTSecret(secret string) error {
 	if secret == "" {
 		return fmt.Errorf("JWT_SECRET is required: set it in .env or the environment (generate with: openssl rand -hex 32)")
@@ -310,7 +328,24 @@ func validateJWTSecret(secret string) error {
 	if len(secret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters (256 bits)")
 	}
+	if isPlaceholderSecret(secret) {
+		return fmt.Errorf("JWT_SECRET must not be a placeholder value (generate with: openssl rand -hex 32)")
+	}
 	return nil
+}
+
+// isPlaceholderSecret reports well-known non-secrets, case-insensitively:
+// the leaked example value, anything starting with change_me/changeme, and
+// the bare values "secret" and "password".
+func isPlaceholderSecret(secret string) bool {
+	lowered := strings.ToLower(secret)
+	if lowered == "change_me_to_a_long_random_secret" {
+		return true
+	}
+	if strings.HasPrefix(lowered, "change_me") || strings.HasPrefix(lowered, "changeme") {
+		return true
+	}
+	return lowered == "secret" || lowered == "password"
 }
 
 func isLoopbackHost(host string) bool {
@@ -359,7 +394,66 @@ func getOrigins(raw string) []string {
 	return origins
 }
 
-// parseTrustedProxies parses TRUSTED_PROXIES as comma-separated IPs or CIDRs
+// sweepIntervalBounds bound the periodic maintenance loops: "0" disables a
+// loop while keeping any boot-time pass, and intervals never run more often
+// than once a minute (a sweep is cheap but pointless to spin).
+const minSweepInterval = time.Minute
+
+// parseInterval parses a loop-interval env var. Empty means def; "0"
+// disables the loop; anything else must be a valid duration at or above the
+// minimum. Errors name the variable and the offending value.
+func parseInterval(name, raw string, def time.Duration) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return def, nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s %q is not a valid duration (e.g. \"1h\", \"15m\")", name, raw)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("%s %q must not be negative", name, raw)
+	}
+	if d == 0 {
+		return 0, nil
+	}
+	if d < minSweepInterval {
+		return 0, fmt.Errorf("%s %q is below the 1m minimum", name, raw)
+	}
+	return d, nil
+}
+
+// parseSweepInterval parses QUARANTINE_SWEEP_INTERVAL. Empty means hourly;
+// "0" disables the periodic loop; anything else must be a valid duration
+// at or above the minimum.
+func parseSweepInterval(raw string) (time.Duration, error) {
+	return parseInterval("QUARANTINE_SWEEP_INTERVAL", raw, time.Hour)
+}
+
+// mustParseSweepInterval fails fast at startup on an invalid interval.
+func mustParseSweepInterval(raw string) time.Duration {
+	d, err := parseSweepInterval(raw)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return d
+}
+
+// parseResetCleanupInterval parses PASSWORD_RESET_CLEANUP_INTERVAL with the
+// same empty/zero/minimum semantics as the sweep loop.
+func parseResetCleanupInterval(raw string) (time.Duration, error) {
+	return parseInterval("PASSWORD_RESET_CLEANUP_INTERVAL", raw, 24*time.Hour)
+}
+
+// mustParseResetCleanupInterval fails fast at startup on an invalid interval.
+func mustParseResetCleanupInterval(raw string) time.Duration {
+	d, err := parseResetCleanupInterval(raw)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return d
+}
+
 // for gin's SetTrustedProxies. Empty input returns nil, which preserves
 // today's behavior (ClientIP returns the direct peer, X-Forwarded-For
 // ignored). Open ranges 0.0.0.0/0 and ::/0 are rejected because trusting every

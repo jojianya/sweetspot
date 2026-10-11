@@ -24,12 +24,13 @@ func ReportErrors(rep ErrorReporter) gin.HandlerFunc {
 		} else {
 			err = fmt.Errorf("request failed with status %d", c.Writer.Status())
 		}
+		// No client IP here on purpose: the request logger already records it
+		// for operators, and error reports must not ship PII to Sentry.
 		rep.Report(c.Request.Context(), err,
 			"request_id", c.GetHeader("X-Request-ID"),
 			"method", c.Request.Method,
 			"path", c.Request.URL.Path,
 			"status", c.Writer.Status(),
-			"ip", c.ClientIP(),
 		)
 	}
 }

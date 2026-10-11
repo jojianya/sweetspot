@@ -1011,10 +1011,10 @@ not guarantees, and would need revisiting if a pin-update event were ever added.
   Sentry.~~ Fixed: the dev server service now passes `CORS_ALLOWED_ORIGINS`, `SENTRY_DSN`, `SENTRY_ENV`
   (and `LOG_FORMAT`, `PUBLIC_BASE_URL`, `MAILER_WEBHOOK_*`, `QUARANTINE_SWEEP_DRY_RUN`, `TRUSTED_PROXIES`,
   `DB_POOL_*`) through from the root `.env`.
-- `docs/TECH_STACK.md`, `docs/project_documents/{Architecture,API}.md` and `docs/DEVELOPMENT.md` are behind the
-  code (`docs/roadmap.md` item **J** tracks this).
+- `docs/architecture/tech-stack.md`, `docs/architecture/system-architecture.md`, `docs/api/rest-api.md` and `docs/development/local-development.md` are behind the
+  code (`docs/product/roadmap.md` item **J** tracks this).
 - `docs/SECURITY.md` still states "there is no cookie-based session, so CSRF does not apply". There **is** now.
-- `docs/DEVELOPMENT.md` tells you to run `make docker-up` / `make backup`, but **there is no root
+- `docs/development/local-development.md` tells you to run `make docker-up` / `make backup`, but **there is no root
   `Makefile`** — those targets live in `server/Makefile`, and running `docker compose` from `server/` finds no
   compose file. Run compose from the repo root.
 
@@ -1133,7 +1133,7 @@ Stated plainly rather than guessed:
 - Whether any GitHub issues from `scripts/review-issues/` are still open.
 - Whether production is deployed at all. There is a production `client/Dockerfile` and
   `server/deployments/docker/server.Dockerfile`, and `config.validateStorageBase` has explicit production
-  rules, but `docs/DEVELOPMENT.md` describes a single-host local-disk deployment and there are no k8s
+  rules, but `docs/development/local-development.md` describes a single-host local-disk deployment and there are no k8s
   manifests (`server/deployments/k8s/` is an empty tracked directory).
 
 ---
@@ -1169,7 +1169,7 @@ Air (`server/deployments/docker/server.Dockerfile.dev`, config `server/.air.toml
 Both databases publish on loopback only. Migrations run automatically on every server start and are
 idempotent (`schema_migrations`).
 
-**The `make` targets in `docs/DEVELOPMENT.md` don't work from the repo root** (there is no root `Makefile`).
+**The `make` targets in `docs/development/local-development.md` don't work from the repo root** (there is no root `Makefile`).
 `make build/run/test/vet/lint/fmt` do work from `server/`. For the compose lifecycle and backups, use plain
 `docker compose` from the repo root, or run `make docker-up` from `server/` with `COMPOSE_FILE=../docker-compose.yml`
 — but I'd just use the plain command.

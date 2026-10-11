@@ -56,9 +56,9 @@ Progress: **5 of 11 done** (1 in progress, 5 todo).
   - **Files:** the diff already on disk.
 
 - [ ] **J. Sync the stale docs** — todo · Small
-  - **What:** Update `Architecture.md`, `API.md`, and `TECH_STACK.md` to match the code.
+  - **What:** Update `docs/architecture/system-architecture.md`, `docs/api/rest-api.md`, and `docs/architecture/tech-stack.md` to match the code.
   - **Why:** They still describe favorites/comments/collections/social/feed/SSE/pin-edit as unbuilt, describe realtime as WebSocket (it's SSE), and list migrations only up to `0006` (there are 12).
-  - **Files:** `project_documents/*`, `TECH_STACK.md`.
+  - **Files:** `docs/architecture/system-architecture.md`, `docs/api/rest-api.md`, `docs/architecture/tech-stack.md`.
 
 - [ ] **K. Trivial cleanups** — todo · Trivial
   - **What:** Remove the stray "testtt" comment in `client/src/components/layout/Navbar.tsx` line 11; delete the dead `CreatePinRequest` JSON DTO in `server/internal/modules/pins/dto.go`; check whether `client/tsconfig.tsbuildinfo` / `next-env.d.ts` are tracked and gitignore them if so.

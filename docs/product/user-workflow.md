@@ -46,7 +46,7 @@ This is the only mandatory gate for regular use of the app — everything before
 17. **Reviewed by an admin, in-app** — a user with `role = admin` or `role = owner` reviews pending reports and actions them via `PATCH /reports/:id`:
     - **Approve** → the reported pin is hidden (`pins.is_hidden = true`), the report is marked `actioned`, and `resolved_by`/`resolved_at` are recorded.
     - **Dismiss** → the report is marked `reviewed`, `resolved_by`/`resolved_at` recorded, the pin is untouched.
-    - This replaces the original MVP plan of reviewing every report by hand via `psql`/DBeaver — that path still exists as a fallback, but is no longer the primary flow now that roles exist. See Detailed-Checklist.md §2.5.3 and System-Design.md for the fuller rationale.
+    - This replaces the original MVP plan of reviewing every report by hand via `psql`/DBeaver — that path still exists as a fallback, but is no longer the primary flow now that roles exist. See `../archive/detailed-checklist.md` §2.5.3 and `../architecture/system-architecture.md` §7 for the fuller rationale.
 
 ---
 

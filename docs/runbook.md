@@ -216,6 +216,12 @@ Monitor: `[PROVIDER, FILL IN, or documentation only]`.
 
 ## 6. Branch and deploy policy
 
+> TODO: policy conflict — this section says releases are tags cut from `main`, but
+> `docs/development/branching-and-release.md` and `docs/good-and-bad-practices.md` Part 6
+> say `development → main → release` with tags cut from `release` (and
+> `docs/operations/first-deploy.md` checks out `release`). Both texts kept as-is;
+> resolve on a follow-up docs branch.
+
 `main` is protected; releases are tags cut from `main`. Required checks per
 tag: `go build`, `go vet`, `go test -race` (including the DB-backed endpoint
 tests), `pnpm lint`, `tsc`, `pnpm test`, `pnpm build`, `pnpm audit` (no new

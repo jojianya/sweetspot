@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useClearOnChange } from "@/hooks/useClearOnChange";
 import { fetchFavorites, fetchIsSaved, type FavoriteEntry } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 
@@ -102,12 +103,7 @@ export function useSavedStatus(pinId: string, enabled: boolean) {
   // the new pin, and disabling the hook must not keep the last answer. Done in
   // render (not an effect) so the very first paint for a new pin is already
   // correct, with no one-frame flash of the old value.
-  const [prevKey, setPrevKey] = useState(`${pinId}:${enabled}`);
-  const key = `${pinId}:${enabled}`;
-  if (prevKey !== key) {
-    setPrevKey(key);
-    setSaved(false);
-  }
+  useClearOnChange(`${pinId}:${enabled}`, () => setSaved(false));
 
   useEffect(() => {
     if (!enabled) return;

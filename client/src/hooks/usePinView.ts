@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { registerPinView } from "@/lib/api";
+import { useClearOnChange } from "@/hooks/useClearOnChange";
 import { useAuth } from "@/store/auth";
 
 /**
@@ -29,11 +30,7 @@ export function usePinView(
 
   // Drop the previous pin's count during render when pinId changes, so it is
   // never shown against the new pin while its registration is in flight.
-  const [prevPinId, setPrevPinId] = useState(pinId);
-  if (prevPinId !== pinId) {
-    setPrevPinId(pinId);
-    setResult(null);
-  }
+  useClearOnChange(pinId, () => setResult(null));
 
   useEffect(() => {
     if (!pinId || !user) return;

@@ -45,7 +45,6 @@ export interface MapLocation {
 }
 
 const PIN_FIT_MAX_ZOOM = 15;
-const PIN_FIT_MIN_SPAN_DEGREES = 0.01;
 const PIN_FIT_DURATION_MS = 650;
 const PIN_FIT_PADDING = {
   top: 96,
@@ -96,7 +95,7 @@ function fitPinNeighborhood(
   clickedId: string
 ): void {
   const points: PinCoordinate[] = selectNearbyPins(clickedId, pins);
-  const frame = neighborhoodBounds(points, PIN_FIT_MIN_SPAN_DEGREES);
+  const frame = neighborhoodBounds(points);
   if (!frame) return;
 
   const bounds = new LngLatBounds(

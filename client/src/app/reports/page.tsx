@@ -166,15 +166,15 @@ function ReportsShell() {
               <li key={`skeleton-${i}`}>
                 <Skeleton className="rounded-xl border border-zinc-200/70 p-4 dark:border-zinc-800" aria-hidden="true">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    <Skeleton className="h-3 w-20 shrink-0" style={{ height: "12px" }} />
-                    <Skeleton className="h-3 w-16 shrink-0" style={{ height: "12px" }} />
-                    <Skeleton className="h-3 w-24 shrink-0" style={{ height: "12px" }} />
-                    <Skeleton className="h-3 w-16 shrink-0" style={{ height: "12px" }} />
-                    <Skeleton className="h-3 w-16 shrink-0" style={{ height: "12px" }} />
-                    <Skeleton className="h-3 w-10 shrink-0 rounded-full" style={{ height: "12px" }} />
+                    <Skeleton className="h-3 w-20 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                    <Skeleton className="h-3 w-24 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                    <Skeleton className="h-3 w-10 shrink-0 rounded-full" />
                   </div>
-                  <Skeleton className="mt-2 h-4 w-full" style={{ height: "16px" }} />
-                  <Skeleton className="mt-1 h-3 w-3/4" style={{ height: "12px" }} />
+                  <Skeleton className="mt-2 h-4 w-full" />
+                  <Skeleton className="mt-1 h-3 w-3/4" />
                 </Skeleton>
               </li>
             ))}

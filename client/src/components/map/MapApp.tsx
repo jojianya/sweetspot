@@ -265,7 +265,7 @@ export default function MapApp({
         <div role="status" aria-busy="true" aria-label="Loading pins…">
           <span className="sr-only">Loading pins…</span>
           <div className="absolute left-3 top-36 z-10 rounded bg-zinc-100/90 px-3 py-2 text-xs font-medium text-zinc-500 shadow dark:bg-zinc-800/90 dark:text-zinc-400" aria-hidden="true">
-            <Skeleton className="h-3 w-32" style={{ height: "12px" }} />
+            <Skeleton className="h-3 w-32" />
           </div>
         </div>
       );

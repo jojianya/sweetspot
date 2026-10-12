@@ -72,8 +72,8 @@ export default function FeedPage() {
                   >
                     <Skeleton className="h-16 w-16 shrink-0 rounded-lg" />
                     <span className="min-w-0 flex-1">
-                      <Skeleton className="h-4 w-5/6" style={{ height: "16px" }} />
-                      <Skeleton className="h-3 w-1/3" style={{ height: "12px" }} />
+                      <Skeleton className="h-4 w-5/6" />
+                      <Skeleton className="h-3 w-1/3" />
                     </span>
                     <Skeleton className="h-4 w-4 shrink-0" />
                   </Link>

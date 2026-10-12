@@ -72,11 +72,11 @@ export default function TrendingList({
           <ul className="max-h-80 space-y-0.5 overflow-y-auto p-2" role="list" aria-busy="true">
             {Array.from({ length: 5 }).map((_, i) => (
               <li key={`skeleton-${i}`} className="flex items-center gap-3 rounded-xl px-2 py-2">
-                <Skeleton className="w-5 shrink-0" style={{ width: "20px", height: "20px" }} />
+                <Skeleton className="h-5 w-5 shrink-0" />
                 <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
                 <div className="min-w-0 flex-1 space-y-1">
-                  <Skeleton className="h-4 w-3/4" style={{ height: "16px" }} />
-                  <Skeleton className="h-3 w-1/2" style={{ height: "12px" }} />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
                 </div>
               </li>
             ))}

@@ -20,6 +20,25 @@ interface SavedPinsPanelProps {
 
 type Tab = "saved" | "collections";
 
+/** Loading rows for either tab: thumbnail box plus two text lines. */
+function ListSkeleton({ label }: { label: string }) {
+  return (
+    <SkeletonRegion label={label}>
+      <ul className="space-y-1" role="list" aria-busy="true">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <li key={`skeleton-${i}`} className="flex items-center gap-3 rounded-xl px-2.5 py-2.5">
+            <Skeleton className="h-14 w-14 shrink-0 rounded-xl" />
+            <div className="min-w-0 flex-1 space-y-1">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </SkeletonRegion>
+  );
+}
+
 export default function SavedPinsPanel({
   onClose,
   onOpenPin,
@@ -256,21 +275,7 @@ export default function SavedPinsPanel({
           </div>
         ) : tab === "saved" ? (
           <>
-            {loading && (
-              <SkeletonRegion label="Loading saved pins…">
-                <ul className="space-y-1" role="list" aria-busy="true">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <li key={`skeleton-${i}`} className="flex items-center gap-3 rounded-xl px-2.5 py-2.5">
-                      <Skeleton className="h-14 w-14 shrink-0 rounded-xl" />
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <Skeleton className="h-4 w-3/4" style={{ height: "16px" }} />
-                        <Skeleton className="h-3 w-1/2" style={{ height: "12px" }} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </SkeletonRegion>
-            )}
+            {loading && <ListSkeleton label="Loading saved pins…" />}
 
             {!loading && error && (
               <div className="px-3 py-8 text-center">
@@ -382,21 +387,7 @@ export default function SavedPinsPanel({
               </p>
             )}
 
-            {collectionsLoading && (
-              <SkeletonRegion label="Loading collections…">
-                <ul className="space-y-1" role="list" aria-busy="true">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <li key={`skeleton-${i}`} className="flex items-center gap-3 rounded-xl px-2.5 py-2.5">
-                      <Skeleton className="h-14 w-14 shrink-0 rounded-xl" />
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <Skeleton className="h-4 w-3/4" style={{ height: "16px" }} />
-                        <Skeleton className="h-3 w-1/2" style={{ height: "12px" }} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </SkeletonRegion>
-            )}
+            {collectionsLoading && <ListSkeleton label="Loading collections…" />}
 
             {!collectionsLoading && collectionsError && (
               <div className="px-3 py-8 text-center">

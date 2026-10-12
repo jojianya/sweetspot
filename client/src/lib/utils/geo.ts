@@ -102,9 +102,9 @@ export type GeoCoords = {
 };
 
 /** Geographic floor (degrees) for the camera fit-box. Mirrors the map view. */
-export const NEIGHBORHOOD_MIN_SPAN_DEGREES = 0.01;
+const NEIGHBORHOOD_MIN_SPAN_DEGREES = 0.01;
 
-export interface NeighborhoodBounds {
+interface NeighborhoodBounds {
   west: number;
   south: number;
   east: number;

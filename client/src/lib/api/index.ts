@@ -12,7 +12,7 @@ export {
 } from "./favorites";
 export { createComment, deleteComment, fetchComments } from "./comments";
 export { fetchFeed, fetchUserStats, followUser, unfollowUser } from "./social";
-export { fetchMe, fetchUser, fetchUserPins, fetchUsers, searchUsers, updateMyProfile, updateUserRole, type ProfileEdit, type UserListResult } from "./users";
+export { fetchMe, fetchUser, fetchUserPins, fetchUsers, searchUsers, updateMyProfile, updateUserRole, type ProfileEdit } from "./users";
 export { createPinReport, fetchReports, reviewReport } from "./reports";
 export {
   addPinToCollection,

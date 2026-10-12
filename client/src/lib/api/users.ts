@@ -25,7 +25,7 @@ export async function fetchUserPins(userId: string, limit = 50): Promise<PinList
 }
 
 /** A page of users plus the total number of registered users. */
-export interface UserListResult {
+interface UserListResult {
   users: PublicProfile[];
   total: number;
 }

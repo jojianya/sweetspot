@@ -65,7 +65,7 @@ export function slugForCategoryId(
   return categories.find((category) => category.id === id)?.slug ?? null;
 }
 
-export type CanonicalCategoryAction =
+type CanonicalCategoryAction =
   | { type: "clear-requested" }
   | { type: "replace"; slug: string | null }
   | { type: "noop" };

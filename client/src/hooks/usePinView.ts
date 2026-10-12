@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { registerPinView } from "@/lib/api";
 import { useAuth } from "@/store/auth";
 
-export interface PinViewResult {
+/**
+ * One registered view: the pin it belongs to and the server's resulting count.
+ */
+interface PinViewResult {
   pinId: string;
   views: number;
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const pinBaseSchema = z.object({
+const pinBaseSchema = z.object({
   id: z.string(),
   user_id: z.string().nullable(),
   location: z.string(),

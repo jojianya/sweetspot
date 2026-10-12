@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import { fetchReports, reviewReport } from "@/lib/api";
 import { errorMessage, relativeTime } from "@/lib/utils";
 import { useAdminSession } from "@/hooks/useAdminSession";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { useAuth } from "@/store/auth";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageEmpty, PageError, PageLoading } from "@/components/ui/PageState";
@@ -101,55 +102,47 @@ export default function ReportsPage() {
 function ReportsShell() {
   const { user } = useAuth();
   const [status, setStatus] = useState<ReportStatus | "all">("pending");
-  const [reports, setReports] = useState<ReportEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  // Review failures surface in the same page-level error as fetch failures,
+  // but live in their own slot so a refetch never has to clear them first.
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchReports(status === "all" ? {} : { status })
-      .then((data) => {
-        if (!cancelled) setReports(data);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(errorMessage(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [status, attempt]);
-
-  const selectStatus = (value: ReportStatus | "all") => {
-    setStatus(value);
-    setLoading(true);
-    setError(null);
-  };
+  const {
+    data,
+    loading,
+    error: fetchError,
+    retry: refetch,
+    setData,
+  } = useAsyncData<ReportEntry[]>(() => fetchReports(status === "all" ? {} : { status }), [
+    status,
+  ]);
+  const reports = data ?? [];
+  const error = fetchError ?? reviewError;
 
   const retry = useCallback(() => {
-    setError(null);
-    setLoading(true);
-    setAttempt((n) => n + 1);
-  }, []);
+    setReviewError(null);
+    refetch();
+  }, [refetch]);
+
+  const selectStatus = (value: ReportStatus | "all") => {
+    setReviewError(null);
+    setStatus(value);
+  };
 
   const handleReview = async (report: ReportEntry, action: "approve" | "dismiss") => {
     if (busyId) return;
     setBusyId(report.id);
-    setError(null);
+    setReviewError(null);
     try {
       await reviewReport(report.id, action);
       // Refilter: resolved reports leave the pending tab, others refresh.
-      setReports((prev) => prev.filter((r) => r.id !== report.id));
+      setData((prev) => (prev ?? []).filter((r) => r.id !== report.id));
     } catch (e) {
       const msg = errorMessage(e);
       if (/already resolved/i.test(msg)) {
         retry();
       } else {
-        setError(msg);
+        setReviewError(msg);
       }
     } finally {
       setBusyId(null);

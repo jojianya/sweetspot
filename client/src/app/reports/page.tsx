@@ -5,7 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import { fetchReports, reviewReport } from "@/lib/api";
 import { errorMessage, relativeTime } from "@/lib/utils";
-import { useAdminSession } from "@/hooks/useAdminSession";
+import { AdminGate } from "@/components/admin/AdminGate";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { useAuth } from "@/store/auth";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -42,57 +42,16 @@ export function reportEmptyCopy(status: ReportStatus | "all"): {
 }
 
 export default function ReportsPage() {
-  const { user } = useAuth();
-  // The cached role is not a credential, so /me decides whether this screen
-  // renders at all. Until it answers, authorized is false and the reports tree
-  // below is never mounted, so no moderation request goes out for a signed-out
-  // or unprivileged caller.
-  const { authorized, checked } = useAdminSession("moderator");
-
-  if (!user) {
-    return (
-      <>
-        <Navbar backHref="/" backLabel="Back to map" />
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Sign in to moderate
-          </h1>
-          <Link
-            href="/login"
-            className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
-          >
-            Log in
-          </Link>
-        </div>
-      </>
-    );
-  }
-
-  if (!authorized) {
-    return (
-      <>
-        <Navbar backHref="/" backLabel="Back to map" />
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Admins only
-          </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {checked
-              ? "You don't have permission to review reports."
-              : "Checking your access…"}
-          </p>
-          <Link
-            href="/"
-            className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
-          >
-            Back to map
-          </Link>
-        </div>
-      </>
-    );
-  }
-
-  return <ReportsShell />;
+  return (
+    <AdminGate
+      required="moderator"
+      signedOutTitle="Sign in to moderate"
+      deniedTitle="Admins only"
+      deniedCopy="You don't have permission to review reports."
+    >
+      <ReportsShell />
+    </AdminGate>
+  );
 }
 
 /**

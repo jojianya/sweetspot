@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Avatar from "@/components/Avatar";
-import { useAdminSession } from "@/hooks/useAdminSession";
+import { AdminGate } from "@/components/admin/AdminGate";
 import { useUsersAdmin } from "@/hooks/useUsersAdmin";
 import { useAuth } from "@/store/auth";
 
@@ -16,59 +16,16 @@ const ROLE_STYLES: Record<string, string> = {
 };
 
 export default function RolesPage() {
-  const { user } = useAuth();
-  // The cached role in localStorage is not a credential, so /me decides
-  // whether the admin shell renders at all. Until it answers, authorized is
-  // false and the admin tree below is never mounted, so no admin request is
-  // made on the strength of a cache the caller could have edited.
-  const { authorized, checked } = useAdminSession("owner");
-
-  if (!user) {
-    return (
-      <>
-        <Navbar backHref="/" backLabel="Back to map" />
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Sign in to manage roles
-          </h1>
-          <Link
-            href="/login"
-            className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
-          >
-            Log in
-          </Link>
-        </div>
-      </>
-    );
-  }
-
-  if (!authorized) {
-    // While the check is in flight there is nothing to conclude yet, so show
-    // the same gate rather than flashing the admin shell.
-    return (
-      <>
-        <Navbar backHref="/" backLabel="Back to map" />
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Owners only
-          </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {checked
-              ? "Only the account owner can change roles."
-              : "Checking your access…"}
-          </p>
-          <Link
-            href="/"
-            className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
-          >
-            Back to map
-          </Link>
-        </div>
-      </>
-    );
-  }
-
-  return <RolesAdminShell />;
+  return (
+    <AdminGate
+      required="owner"
+      signedOutTitle="Sign in to manage roles"
+      deniedTitle="Owners only"
+      deniedCopy="Only the account owner can change roles."
+    >
+      <RolesAdminShell />
+    </AdminGate>
+  );
 }
 
 /**

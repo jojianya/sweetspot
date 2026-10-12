@@ -78,10 +78,6 @@ func RequestLogger(base *slog.Logger, skipPaths ...string) gin.HandlerFunc {
 	}
 }
 
-// Middleware is kept as an alias for RequestLogger to ease the transition for
-// existing callers.
-var Middleware = RequestLogger
-
 // statusAttr renders the HTTP status code, wrapped in ANSI color when color
 // output is enabled and as a plain int in JSON mode.
 func statusAttr(code int) slog.Attr {

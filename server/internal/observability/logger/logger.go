@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"strings"
@@ -21,7 +20,6 @@ const (
 )
 
 const (
-	FormatText = "text"
 	FormatJSON = "json"
 )
 
@@ -107,9 +105,4 @@ func FromContext(c *gin.Context) *slog.Logger {
 		}
 	}
 	return defaultLogger
-}
-
-// WithLogger returns a context carrying the given logger.
-func WithLogger(ctx context.Context, l *slog.Logger) context.Context {
-	return context.WithValue(ctx, loggerKey, l)
 }

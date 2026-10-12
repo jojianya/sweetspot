@@ -39,17 +39,6 @@ func (h *Handler) service() *Service {
 	return NewService(h.repo)
 }
 
-// isModerator reports whether the caller holds a moderation role.
-// Without a wired RoleReader nobody is a moderator, matching pins and
-// collections: users.CurrentRole falls back to a live lookup when the
-// middleware cached no role, and that lookup would dereference a nil reader.
-func (h *Handler) isModerator(c *gin.Context) bool {
-	if h.roles == nil {
-		return false
-	}
-	return users.IsModerator(h.roles, c)
-}
-
 func (h *Handler) List(c *gin.Context) {
 	limit, ok := httpx.ParseLimit(c, commentListDefaultLimit, commentListMaxLimit)
 	if !ok {
@@ -98,7 +87,7 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	if err := h.service().Delete(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c)); err != nil {
+	if err := h.service().Delete(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), users.IsModeratorHandler(h.roles, c)); err != nil {
 		switch {
 		case errors.Is(err, ErrNotFound):
 			response.NotFound(c, "comment not found")

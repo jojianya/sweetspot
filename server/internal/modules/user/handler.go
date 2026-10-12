@@ -251,6 +251,17 @@ func IsModerator(svc RoleReader, c *gin.Context) bool {
 	return role == RoleAdmin || role == RoleOwner
 }
 
+// IsModeratorHandler is the handler-layer entry point for IsModerator. A nil
+// RoleReader means the handler was built as a struct literal without roles
+// (as some tests do); nothing is authorized, so it reports false instead of
+// dereferencing nil.
+func IsModeratorHandler(svc RoleReader, c *gin.Context) bool {
+	if svc == nil {
+		return false
+	}
+	return IsModerator(svc, c)
+}
+
 func RequireAdmin(svc RoleReader) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if role := CurrentRole(svc, c); role != RoleAdmin && role != RoleOwner {

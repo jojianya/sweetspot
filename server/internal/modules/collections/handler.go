@@ -48,15 +48,6 @@ func (h *Handler) service() *Service {
 	return NewService(h.repo)
 }
 
-// isModerator resolves moderation rights for the caller. Without a wired
-// RoleReader nobody is a moderator.
-func (h *Handler) isModerator(c *gin.Context) bool {
-	if h.roles == nil {
-		return false
-	}
-	return users.IsModerator(h.roles, c)
-}
-
 func (h *Handler) ListMine(c *gin.Context) {
 	collections, err := h.service().ListMine(c.Request.Context(), middleware.GetUserID(c))
 	if err != nil {
@@ -153,7 +144,7 @@ func (h *Handler) Get(c *gin.Context) {
 // requireOwner aborts unless the caller owns the collection (or moderates),
 // returning the collection so callers can reuse the read.
 func (h *Handler) requireOwner(c *gin.Context) (Collection, bool) {
-	collection, err := h.service().RequireOwner(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c))
+	collection, err := h.service().RequireOwner(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), users.IsModeratorHandler(h.roles, c))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
@@ -181,7 +172,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	if err := h.service().Update(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c), name, description, req.IsPrivate); err != nil {
+	if err := h.service().Update(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), users.IsModeratorHandler(h.roles, c), name, description, req.IsPrivate); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return
@@ -198,7 +189,7 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	if err := h.service().Delete(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c)); err != nil {
+	if err := h.service().Delete(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), users.IsModeratorHandler(h.roles, c)); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return

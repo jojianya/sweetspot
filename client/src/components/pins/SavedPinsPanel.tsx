@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
-import { BookmarkIcon, CloseIcon } from "@/components/icons";
+import { BookmarkIcon, BackIcon, CloseIcon } from "@/components/icons";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useCollections } from "@/hooks/useCollections";
 import { useCollectionDetail } from "@/hooks/useCollectionDetail";
@@ -164,19 +164,7 @@ export default function SavedPinsPanel({
                 className="rounded-full p-1 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
                 aria-label="Back to collections"
               >
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <path d="M19 12H5" />
-                  <path d="m12 19-7-7 7-7" />
-                </svg>
+                <BackIcon />
               </button>
               {openCollection.description && (
                 <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">

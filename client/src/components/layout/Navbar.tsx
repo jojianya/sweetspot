@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import Avatar from "@/components/Avatar";
+import { BackIcon } from "@/components/icons";
 import { useLogout } from "@/hooks/useLogout";
 import { useSessionRefresh } from "@/hooks/useSessionRefresh";
 import { useAuth } from "@/store/auth";
@@ -39,19 +40,7 @@ export default function Navbar({
             href={backHref}
             className="pointer-events-auto flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-300 bg-white/90 px-3.5 py-1.5 text-sm font-medium text-zinc-700 shadow-sm backdrop-blur transition-colors hover:bg-white dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-900"
           >
-            <svg
-              className="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M19 12H5" />
-              <path d="m12 19-7-7 7-7" />
-            </svg>
+            <BackIcon />
             {backLabel}
           </Link>
         )}

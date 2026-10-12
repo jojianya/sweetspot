@@ -6,6 +6,7 @@ import SearchBar from "./SearchBar";
 import ThemeToggle from "./ThemeToggle";
 import { ChipIcon } from "./CategoryIcons";
 import Avatar from "@/components/Avatar";
+import { BookmarkIcon, PersonIcon } from "@/components/icons";
 import { useLogout } from "@/hooks/useLogout";
 import { useSessionRefresh } from "@/hooks/useSessionRefresh";
 import { useAuth } from "@/store/auth";
@@ -135,9 +136,7 @@ export default function MapNavBar({
                   role="menuitem"
                   className={menuButtonClass}
                 >
-                  <svg className="h-4 w-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" />
-                  </svg>
+                  <BookmarkIcon className="h-4 w-4 text-zinc-400" />
                   Saved
                 </button>
                 <button
@@ -149,10 +148,7 @@ export default function MapNavBar({
                   role="menuitem"
                   className={menuButtonClass}
                 >
-                  <svg className="h-4 w-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <circle cx="12" cy="8" r="4" />
-                    <path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" />
-                  </svg>
+                  <PersonIcon className="h-4 w-4 text-zinc-400" />
                   My profile
                 </button>
                 <button

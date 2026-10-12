@@ -2,6 +2,19 @@ type IconProps = {
   className?: string;
 };
 
+/**
+ * Shared stroke props for one-off inline SVGs that are not worth a named
+ * icon component. Spread onto the <svg>: {...iconStroke}.
+ */
+export const iconStroke = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  viewBox: "0 0 24 24",
+};
+
 export function CloseIcon({ className = "h-5 w-5" }: IconProps) {
   return (
     <svg

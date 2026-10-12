@@ -12,6 +12,7 @@ import { useProfileEditor } from "@/hooks/useProfileEditor";
 import { useAuth } from "@/store/auth";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageError, PageLoading } from "@/components/ui/PageState";
+import { iconStroke } from "@/components/icons";
 import type { PinListEntry } from "@/lib/types";
 import { resolveMediaUrl } from "@/lib/media";
 
@@ -19,21 +20,12 @@ interface ProfilePageProps {
   params: Promise<{ id: string }>;
 }
 
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  viewBox: "0 0 24 24",
-};
-
 const INPUT_CLASS =
   "w-full rounded-xl border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100";
 
 function CollectionGlyph() {
   return (
-    <svg className="h-4 w-4" {...stroke} aria-hidden>
+    <svg className="h-4 w-4" {...iconStroke} aria-hidden>
       <path d="M8 6h12M8 12h12M8 18h12" />
       <path d="M3 6h.01M3 12h.01M3 18h.01" />
     </svg>
@@ -66,7 +58,7 @@ function PinGrid({ pins }: { pins: PinListEntry[] }) {
             />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-zinc-300 dark:text-zinc-600">
-              <svg className="h-6 w-6" {...stroke} aria-hidden>
+              <svg className="h-6 w-6" {...iconStroke} aria-hidden>
                 <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
                 <circle cx="12" cy="10" r="3" />
               </svg>

@@ -1,23 +1,14 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { CloseIcon } from "@/components/icons";
+import { CloseIcon, iconStroke } from "@/components/icons";
 import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
 import type { TrendingPin } from "@/lib/types";
 import { resolveMediaUrl } from "@/lib/media";
 
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  viewBox: "0 0 24 24",
-};
-
 export function TrendingIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
-    <svg className={className} {...stroke} aria-hidden>
+    <svg className={className} {...iconStroke} aria-hidden>
       <path d="M3 17l6-6 4 4 8-8" />
       <path d="M14 7h7v7" />
     </svg>

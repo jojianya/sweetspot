@@ -26,6 +26,9 @@ const (
 	maxSocialKeyLen  = 64
 	maxSocialValLen  = 500
 	maxMultipartMem  = 32 << 20
+	// Username bounds. The literals are repeated in auth.RegisterRequest's
+	// binding tag (struct tags cannot reference constants); change both
+	// together.
 	usernameMinRunes = 3
 	usernameMaxRunes = 30
 )

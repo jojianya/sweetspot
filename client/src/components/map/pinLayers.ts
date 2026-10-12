@@ -21,16 +21,16 @@ type GeoJSONLike = {
   features: GeoFeature[];
 };
 
-export const EMPTY_GEOJSON: GeoJSONLike = {
+const EMPTY_GEOJSON: GeoJSONLike = {
   type: "FeatureCollection",
   features: [],
 };
 
-  // Pins stop clustering once the map zooms past this level.
-  export const CLUSTER_MAX_ZOOM = 8;
+// Pins stop clustering once the map zooms past this level.
+const CLUSTER_MAX_ZOOM = 8;
 
 // Set to false to disable clustering without changing the source or layer setup.
-export const CLUSTERING_ENABLED = true;
+const CLUSTERING_ENABLED = true;
 
 // Pin post artwork, from the agreed spec:
 //
@@ -89,7 +89,7 @@ const PIN_FILL_SELECTED = "#C5221F";
  * shapes meet: the flat red plus the shadow is what separates the pin from the
  * basemap, which is also how the Google Maps marker reads at this size.
  */
-export function pinSvg(fill: string): string {
+function pinSvg(fill: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 40" width="${PIN_IMAGE_WIDTH}" height="${PIN_IMAGE_HEIGHT}"><defs><radialGradient id="pin-shadow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#000" stop-opacity="0.34"/><stop offset="0.62" stop-color="#000" stop-opacity="0.24"/><stop offset="0.85" stop-color="#000" stop-opacity="0.09"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="14" cy="27" rx="13.4" ry="11.5" fill="url(#pin-shadow)"/><circle cx="14" cy="14" r="14" fill="${fill}"/><path d="M4 8L24 8L26.65 20C24.68 24.15 15.8 35.5 14 40C12.2 35.5 3.32 24.15 1.35 20Z" fill="${fill}"/><circle cx="14" cy="13" r="4" fill="#fff"/></svg>`;
 }
 

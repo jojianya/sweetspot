@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
@@ -114,17 +113,5 @@ func (r *postgresRepository) Feed(ctx context.Context, userID string, limit int)
 	}
 	defer rows.Close()
 
-	entries := []pins.PinListEntry{}
-	for rows.Next() {
-		var e pins.PinListEntry
-		if err := rows.Scan(&e.Pin.ID, &e.Pin.UserID, &e.Pin.Location, &e.Pin.Geohash, &e.Pin.Caption,
-			&e.Pin.CategoryID, &e.Pin.IsHidden, &e.Pin.Views, &e.Pin.GoodSpotCount, &e.Pin.CreatedAt, &e.CoverURL, &e.Username); err != nil {
-			return nil, err
-		}
-		entries = append(entries, e)
-	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
-		return nil, err
-	}
-	return entries, nil
+	return pins.ScanPinListEntries(rows)
 }

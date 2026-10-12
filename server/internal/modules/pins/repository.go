@@ -267,7 +267,7 @@ func (r *postgresRepository) ListPins(ctx context.Context, bbox [4]float64, cate
 	}
 	defer rows.Close()
 
-	return scanPinListEntries(rows)
+	return ScanPinListEntries(rows)
 }
 
 // trendingPinSelect is trending's SELECT: the shared list-entry shape plus the
@@ -350,7 +350,7 @@ func (r *postgresRepository) SearchPins(ctx context.Context, query string, limit
 	}
 	defer rows.Close()
 
-	return scanPinListEntries(rows)
+	return ScanPinListEntries(rows)
 }
 
 func (r *postgresRepository) ListByUser(ctx context.Context, userID string, limit int) ([]PinListEntry, error) {
@@ -365,7 +365,7 @@ func (r *postgresRepository) ListByUser(ctx context.Context, userID string, limi
 	}
 	defer rows.Close()
 
-	return scanPinListEntries(rows)
+	return ScanPinListEntries(rows)
 }
 
 // UpdatePin applies a patch: caption (nil keeps, empty clears), category_id
@@ -447,8 +447,11 @@ func classifyPinMiss(ctx context.Context, tx pgx.Tx, id string) error {
 	return ErrForbidden
 }
 
-// scanPinListEntries maps the shared list/search result rows into entries.
-func scanPinListEntries(rows pgx.Rows) ([]PinListEntry, error) {
+// ScanPinListEntries maps the shared list/search result rows into entries.
+// The row must carry the pinListEntrySelect columns in order; collections,
+// favorites and social reuse this so the scan shape lives in exactly one
+// place.
+func ScanPinListEntries(rows pgx.Rows) ([]PinListEntry, error) {
 	entries := []PinListEntry{}
 	for rows.Next() {
 		var e PinListEntry

@@ -10,7 +10,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageEmpty, PageError, PageLoading } from "@/components/ui/PageState";
 import type { PinListEntry } from "@/lib/types";
-import { resolveMediaUrl } from "@/lib/media";
+import { PinCoverImage } from "@/components/pins/PinCoverImage";
 
 export default function FeedPage() {
   const { user } = useAuth();
@@ -104,22 +104,11 @@ export default function FeedPage() {
                 href={`/pin/${pin.id}`}
                 className="flex items-center gap-3 rounded-xl border border-zinc-200/70 p-2.5 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/60"
               >
-                {(() => {
-                  const cover = resolveMediaUrl(pin.cover_url);
-                  return cover ? (
-                    <img
-                      src={cover}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="h-16 w-16 shrink-0 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-300 dark:bg-zinc-800 dark:text-zinc-600">
-                      <PinIcon className="h-5 w-5" />
-                    </span>
-                  );
-                })()}
+                <PinCoverImage
+                  url={pin.cover_url}
+                  boxClass="h-16 w-16 rounded-lg"
+                  glyph={<PinIcon className="h-5 w-5" />}
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                     {pin.caption?.trim() || "Untitled spot"}

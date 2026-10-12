@@ -10,7 +10,7 @@ import { errorMessage } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
 import type { PinListEntry } from "@/lib/types";
-import { resolveMediaUrl } from "@/lib/media";
+import { PinCoverImage } from "@/components/pins/PinCoverImage";
 
 interface SavedPinsPanelProps {
   onClose: () => void;
@@ -216,22 +216,11 @@ export default function SavedPinsPanel({
                       onClick={() => onOpenPin(entry)}
                       className="flex min-w-0 flex-1 items-center gap-3 text-left"
                     >
-                      {(() => {
-                        const cover = resolveMediaUrl(entry.cover_url);
-                        return cover ? (
-                          <img
-                            src={cover}
-                            alt=""
-                            loading="lazy"
-                            decoding="async"
-                            className="h-14 w-14 shrink-0 rounded-xl object-cover"
-                          />
-                        ) : (
-                          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-300 dark:bg-zinc-800 dark:text-zinc-600">
-                            <BookmarkIcon className="h-4 w-4" />
-                          </span>
-                        );
-                      })()}
+                      <PinCoverImage
+                        url={entry.cover_url}
+                        boxClass="h-14 w-14 rounded-xl"
+                        glyph={<BookmarkIcon className="h-4 w-4" />}
+                      />
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                           {title(entry)}
@@ -318,22 +307,11 @@ export default function SavedPinsPanel({
                         : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
                     }`}
                   >
-                    {(() => {
-                      const cover = resolveMediaUrl(entry.cover_url);
-                      return cover ? (
-                        <img
-                          src={cover}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-14 w-14 shrink-0 rounded-xl object-cover"
-                        />
-                      ) : (
-                        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-300 dark:bg-zinc-800 dark:text-zinc-600">
-                          <BookmarkIcon className="h-4 w-4" />
-                        </span>
-                      );
-                    })()}
+                    <PinCoverImage
+                      url={entry.cover_url}
+                      boxClass="h-14 w-14 rounded-xl"
+                      glyph={<BookmarkIcon className="h-4 w-4" />}
+                    />
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {title(entry)}
@@ -448,22 +426,11 @@ export default function SavedPinsPanel({
                     disabled={openingId === c.id}
                     className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-zinc-50 disabled:opacity-60 dark:hover:bg-zinc-800"
                   >
-                    {(() => {
-                      const cover = resolveMediaUrl(c.cover_url);
-                      return cover ? (
-                        <img
-                          src={cover}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-14 w-14 shrink-0 rounded-xl object-cover"
-                        />
-                      ) : (
-                        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-300 dark:bg-zinc-800 dark:text-zinc-600">
-                          <BookmarkIcon className="h-4 w-4" />
-                        </span>
-                      );
-                    })()}
+                    <PinCoverImage
+                      url={c.cover_url}
+                      boxClass="h-14 w-14 rounded-xl"
+                      glyph={<BookmarkIcon className="h-4 w-4" />}
+                    />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {c.name}

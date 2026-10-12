@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { CloseIcon, iconStroke } from "@/components/icons";
 import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
 import type { TrendingPin } from "@/lib/types";
-import { resolveMediaUrl } from "@/lib/media";
+import { PinCoverImage } from "@/components/pins/PinCoverImage";
 
 export function TrendingIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -102,18 +102,7 @@ export default function TrendingList({
                 <span className="w-5 shrink-0 text-center text-xs font-bold text-zinc-400 dark:text-zinc-500">
                   {i + 1}
                 </span>
-                {(() => {
-                  const cover = resolveMediaUrl(pin.cover_url);
-                  return cover ? (
-                    <img
-                      src={cover}
-                      alt=""
-                      className="h-10 w-10 shrink-0 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="h-10 w-10 shrink-0 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
-                  );
-                })()}
+                <PinCoverImage url={pin.cover_url} boxClass="h-10 w-10 rounded-lg" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
                     {pin.caption?.trim() || "Untitled pin"}

@@ -11,7 +11,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useProfileEditor } from "@/hooks/useProfileEditor";
 import { useAuth } from "@/store/auth";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { PageLoading } from "@/components/ui/PageState";
+import { PageError, PageLoading } from "@/components/ui/PageState";
 import type { PinListEntry } from "@/lib/types";
 import { resolveMediaUrl } from "@/lib/media";
 
@@ -215,14 +215,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
       <>
         <Navbar backHref="/" />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-          <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{error}</p>
-          <button
-            type="button"
-            onClick={retry}
-            className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            Retry
-          </button>
+          <PageError error={error} onRetry={retry} />
         </div>
       </>
     );

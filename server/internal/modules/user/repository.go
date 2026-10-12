@@ -217,7 +217,7 @@ func (r *postgresRepository) ListUsers(ctx context.Context, limit, offset int) (
 		}
 		users = append(users, u)
 	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
 
@@ -353,7 +353,7 @@ func (r *postgresRepository) SearchUsers(ctx context.Context, query string, limi
 		}
 		users = append(users, u)
 	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
 

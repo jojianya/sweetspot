@@ -140,7 +140,7 @@ func (r *postgresRepository) ListReports(ctx context.Context, status *string, li
 		}
 		entries = append(entries, e)
 	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return entries, nil

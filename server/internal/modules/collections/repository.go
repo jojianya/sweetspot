@@ -134,7 +134,7 @@ func (r *postgresRepository) listByUser(ctx context.Context, userID string, publ
 		}
 		collections = append(collections, c)
 	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return collections, nil
@@ -204,7 +204,7 @@ func (r *postgresRepository) ListPins(ctx context.Context, id string, limit, off
 		}
 		entries = append(entries, e)
 	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
 	// Empty page: the window function has no row to read, so count separately.

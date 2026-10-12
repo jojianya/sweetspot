@@ -75,7 +75,7 @@ func (r *postgresRepository) ListByPin(ctx context.Context, pinID string, limit,
 		}
 		comments = append(comments, c)
 	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
 	// Empty page: the window function has no row to read, so count separately.

@@ -160,7 +160,7 @@ func (r *postgresRepository) ListCategories(ctx context.Context) ([]Category, er
 		}
 		categories = append(categories, c)
 	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return categories, nil
@@ -228,7 +228,7 @@ func scanPinPhotos(ctx context.Context, q rowQuerier, pinID string) ([]PinPhoto,
 		}
 		photos = append(photos, ph)
 	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return photos, nil
@@ -330,7 +330,7 @@ func scanTrendingPins(rows pgx.Rows) ([]TrendingPin, error) {
 		}
 		entries = append(entries, e)
 	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return entries, nil
@@ -461,7 +461,7 @@ func ScanPinListEntries(rows pgx.Rows) ([]PinListEntry, error) {
 		}
 		entries = append(entries, e)
 	}
-	if err := rows.Err(); err != nil && err != pgx.ErrNoRows {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return entries, nil

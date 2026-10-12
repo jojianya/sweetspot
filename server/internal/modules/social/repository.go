@@ -2,14 +2,17 @@ package social
 
 import (
 	"context"
-	"errors"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 )
 
-var ErrNotFound = errors.New("user not found")
+// ErrNotFound is users.ErrNotFound: a missing user answers the same 404
+// everywhere, so both share one sentinel value instead of two errors.New
+// with identical text.
+var ErrNotFound = users.ErrNotFound
 
 type Repository interface {
 	UserExists(ctx context.Context, id string) (bool, error)

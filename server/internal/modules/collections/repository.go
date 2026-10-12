@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
+	"github.com/jojianya/sweetspot247-backend/internal/modules/user"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 )
 
@@ -14,7 +15,7 @@ var (
 	ErrNotFound     = errors.New("collection not found")
 	ErrForbidden    = errors.New("forbidden")
 	ErrPinNotFound  = pins.ErrNotFound
-	ErrUserNotFound = errors.New("user not found")
+	ErrUserNotFound = users.ErrNotFound
 )
 
 type Repository interface {

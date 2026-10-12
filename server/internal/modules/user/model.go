@@ -16,7 +16,6 @@ type User struct {
 	AvatarURL          *string        `json:"avatar_url"`
 	Socials            map[string]any `json:"socials"`
 	Role               string         `json:"role"`
-	SessionsValidAfter *time.Time     `json:"-"`
 	CreatedAt          time.Time      `json:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"`
 }

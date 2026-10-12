@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/jojianya/sweetspot247-backend/internal/session"
 )
@@ -65,11 +64,7 @@ func (m *mockRepository) GetSessionState(_ context.Context, id string) (session.
 	if !ok {
 		return session.State{}, ErrNotFound
 	}
-	var floor time.Time
-	if u.SessionsValidAfter != nil {
-		floor = *u.SessionsValidAfter
-	}
-	return session.State{ValidAfter: floor, Role: u.Role}, nil
+	return session.State{Role: u.Role}, nil
 }
 
 func (m *mockRepository) CountOwners(_ context.Context) (int, error) {

@@ -194,3 +194,22 @@ func (l *Limiter) MiddlewareKeyed(keyFn func(*gin.Context) string) gin.HandlerFu
 		c.Next()
 	}
 }
+
+// MiddlewareUserKeyed rate-limits authenticated callers by account
+// (keyPrefix + user ID), skipping anonymous callers. Anonymous requests never
+// reach it behind AuthRequired — the skip is defensive — but behind
+// OptionalAuth they must not share one budget key, so they pass through.
+func (l *Limiter) MiddlewareUserKeyed(keyPrefix string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uid := GetUserID(c)
+		if uid == "" {
+			c.Next()
+			return
+		}
+		if !l.AllowKey(keyPrefix + uid) {
+			response.AbortError(c, http.StatusTooManyRequests, "too many requests, try again later")
+			return
+		}
+		c.Next()
+	}
+}

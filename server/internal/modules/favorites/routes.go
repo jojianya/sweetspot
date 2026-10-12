@@ -1,12 +1,10 @@
 package favorites
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
-	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/http/validid"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 )
@@ -59,18 +57,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 
 	// userCapped keys on the account, skipping anonymous callers (there are
 	// none: AuthRequired runs first, so this is defensive).
-	userCapped := func(c *gin.Context) {
-		uid := middleware.GetUserID(c)
-		if uid == "" {
-			c.Next()
-			return
-		}
-		if !perUser.AllowKey("favorite:user:" + uid) {
-			response.AbortError(c, http.StatusTooManyRequests, "too many requests, try again later")
-			return
-		}
-		c.Next()
-	}
+	userCapped := perUser.MiddlewareUserKeyed("favorite:user:")
 
 	// GET routes are deliberately unthrottled: they are reads, bounded by the
 	// caller's own account, and adding a limiter here would throttle scrolling

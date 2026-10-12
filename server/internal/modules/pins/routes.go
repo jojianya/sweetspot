@@ -1,12 +1,10 @@
 package pins
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
-	"github.com/jojianya/sweetspot247-backend/internal/http/response"
 	"github.com/jojianya/sweetspot247-backend/internal/http/validid"
 	"github.com/jojianya/sweetspot247-backend/internal/platform/cache"
 )
@@ -42,18 +40,9 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 	// Anonymous opens never write, so only the backstop applies to them.
 	viewBackstop := middleware.New(600, time.Minute)
 	viewPerUser := middleware.New(60, time.Minute)
-	userCapped := func(c *gin.Context) {
-		uid := middleware.GetUserID(c)
-		if uid == "" {
-			c.Next()
-			return
-		}
-		if !viewPerUser.AllowKey("pin-view:user:" + uid) {
-			response.AbortError(c, http.StatusTooManyRequests, "too many requests, try again later")
-			return
-		}
-		c.Next()
-	}
+	// Per-account budget for view registration; anonymous opens never write,
+	// so only the backstop applies to them.
+	userCapped := viewPerUser.MiddlewareUserKeyed("pin-view:user:")
 	rg.POST("/pins/:id/view", validid.Middleware(), middleware.OptionalAuth(opts.JWTSecret, opts.Blacklist, opts.Sessions), viewBackstop.Middleware(), userCapped, h.RegisterView)
 
 	authRequired := middleware.AuthRequired(opts.JWTSecret, opts.Blacklist, opts.Sessions)

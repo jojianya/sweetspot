@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
 import { SheetHeader } from "@/components/pins/SheetChrome";
 import { deletePin, updatePin } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 import type { Category, PinDetail } from "@/lib/types";
 import { resolveMediaUrl } from "@/lib/media";
-import { MAX_PIN_PHOTOS, MAX_PIN_PHOTO_SIZE } from "@/lib/utils/photoValidation";
+import { usePhotoPreviews } from "@/hooks/usePhotoPreviews";
+import { PhotoThumbGrid } from "@/components/pins/PhotoThumbGrid";
+import { MAX_PIN_PHOTOS, PHOTO_ACCEPT, validatePhotoFiles } from "@/lib/utils/photoValidation";
 
 interface PinEditSheetProps {
   pin: PinDetail;
@@ -35,11 +37,7 @@ export default function PinEditSheet({
   const inputRef = useRef<HTMLInputElement>(null);
   const confirmDeleteRef = useRef<HTMLButtonElement>(null);
 
-  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
-
-  useEffect(() => {
-    return () => previews.forEach((u) => URL.revokeObjectURL(u));
-  }, [previews]);
+  const previews = usePhotoPreviews(files);
 
   // Move focus to the destructive confirm action when it appears, so
   // keyboard and screen-reader users land on the decision point.
@@ -50,21 +48,13 @@ export default function PinEditSheet({
   const handleFiles = (list: FileList | null) => {
     if (!list) return;
     const picked = Array.from(list);
-    const valid = picked.filter((f) => /^image\/(jpeg|png)$/.test(f.type));
-    if (valid.length !== picked.length) {
-      setError("Only JPG and PNG images are allowed");
-      return;
-    }
-    if (valid.length > MAX_PIN_PHOTOS) {
-      setError(`You can upload at most ${MAX_PIN_PHOTOS} photos`);
-      return;
-    }
-    if (valid.some((f) => f.size > MAX_PIN_PHOTO_SIZE)) {
-      setError("Each photo must be 10MB or smaller");
+    const validationError = validatePhotoFiles(picked);
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setError(null);
-    setFiles(valid);
+    setFiles(picked);
   };
 
   const submit = async () => {
@@ -173,7 +163,7 @@ export default function PinEditSheet({
             <input
               ref={inputRef}
               type="file"
-              accept="image/jpeg,image/png"
+              accept={PHOTO_ACCEPT}
               multiple
               className="hidden"
               aria-label="Replace photos"
@@ -182,24 +172,11 @@ export default function PinEditSheet({
           </div>
 
           {files.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {files.map((f, i) => (
-                <div
-                  key={`${f.name}-${i}`}
-                  className="group relative h-20 w-20 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
-                >
-                  <img src={previews[i]} alt={f.name} className="h-full w-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
-                    className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                    aria-label={`Remove ${f.name}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
+            <PhotoThumbGrid
+              files={files}
+              previews={previews}
+              onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))}
+            />
           )}
 
           {error && (

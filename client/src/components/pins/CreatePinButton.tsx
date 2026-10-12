@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CloseIcon } from "@/components/icons";
 import { createPin } from "@/lib/api";
@@ -8,7 +8,9 @@ import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
 import type { MapLocation } from "@/components/map/MapView";
 import { errorMessage, getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
-import { buildCreatePinPayload, validatePhotoFiles } from "@/lib/utils/photoValidation";
+import { PhotoThumbGrid } from "@/components/pins/PhotoThumbGrid";
+import { usePhotoPreviews } from "@/hooks/usePhotoPreviews";
+import { buildCreatePinPayload, PHOTO_ACCEPT, validatePhotoFiles } from "@/lib/utils/photoValidation";
 
 interface CreatePinButtonProps {
   lat: number;
@@ -44,16 +46,7 @@ export default function CreatePinButton({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const previews = useMemo(
-    () => files.map((f) => URL.createObjectURL(f)),
-    [files]
-  );
-
-  useEffect(() => {
-    return () => {
-      previews.forEach((u) => URL.revokeObjectURL(u));
-    };
-  }, [previews]);
+  const previews = usePhotoPreviews(files);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -211,7 +204,7 @@ export default function CreatePinButton({
               <input
                 ref={inputRef}
                 type="file"
-                accept="image/jpeg,image/png"
+                accept={PHOTO_ACCEPT}
                 multiple
                 className="hidden"
                 aria-label="Add photos"
@@ -219,28 +212,7 @@ export default function CreatePinButton({
               />
 
               {files.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {files.map((f, i) => (
-                    <div
-                      key={`${f.name}-${i}`}
-                      className="group relative h-20 w-20 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
-                    >
-                      <img
-                        src={previews[i]}
-                        alt={f.name}
-                        className="h-full w-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeFile(i)}
-                        className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                        aria-label={`Remove ${f.name}`}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <PhotoThumbGrid files={files} previews={previews} onRemove={removeFile} />
               )}
 
               <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700">

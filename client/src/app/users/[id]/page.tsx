@@ -6,6 +6,7 @@ import Navbar from "@/components/layout/Navbar";
 import Avatar from "@/components/Avatar";
 import { formatTime } from "@/lib/utils";
 import { socialLinks } from "@/lib/utils/profile";
+import { PHOTO_ACCEPT } from "@/lib/utils/photoValidation";
 import { useFollow } from "@/hooks/useFollow";
 import { useProfile } from "@/hooks/useProfile";
 import { useProfileEditor } from "@/hooks/useProfileEditor";
@@ -331,7 +332,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                   Change avatar
                   <input
                     type="file"
-                    accept="image/jpeg,image/png"
+                    accept={PHOTO_ACCEPT}
                     className="sr-only"
                     onChange={(e) => setEditAvatar(e.target.files?.[0] ?? null)}
                   />

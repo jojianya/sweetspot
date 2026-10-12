@@ -5,11 +5,6 @@ export interface FavoriteEntry extends PinListEntry {
   saved_at: string;
 }
 
-export async function fetchFavoriteIDs(): Promise<string[]> {
-  const { data } = await api.get<{ ids: string[] }>("/favorites/ids");
-  return data.ids;
-}
-
 /**
  * Whether one pin is saved by the current user, from GET /favorites/:id/saved.
  *

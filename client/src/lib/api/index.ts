@@ -4,7 +4,6 @@ export { fetchCategories } from "./categories";
 export { createPin, deletePin, fetchPin, fetchPins, fetchTrendingPins, registerPinView, searchPins, updatePin } from "./pins";
 export { searchPlaces, type PlaceResult } from "./geocoding";
 export {
-  fetchFavoriteIDs,
   fetchFavorites,
   fetchIsSaved,
   removeFavorite,
@@ -18,7 +17,6 @@ export { createPinReport, fetchReports, reviewReport } from "./reports";
 export {
   addPinToCollection,
   createCollection,
-  deleteCollection,
   fetchCollection,
   fetchMyCollections,
   fetchUserCollections,

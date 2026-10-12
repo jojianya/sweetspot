@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -104,14 +103,9 @@ func (h *Handler) GetPins(c *gin.Context) {
 		return
 	}
 
-	var categoryID *int
-	if catStr := c.Query("category"); catStr != "" {
-		id, err := strconv.Atoi(catStr)
-		if err != nil {
-			response.BadRequest(c, "category must be an integer")
-			return
-		}
-		categoryID = &id
+	categoryID, ok := httpx.ParseCategoryID(c)
+	if !ok {
+		return
 	}
 
 	limit, ok := httpx.ParseLimit(c, pinListDefaultLimit, pinListDefaultLimit)

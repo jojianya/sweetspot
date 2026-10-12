@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -168,14 +167,9 @@ func (h *Handler) Stream(c *gin.Context) {
 		bbox = &b
 	}
 
-	var category *int
-	if raw := strings.TrimSpace(c.Query("category")); raw != "" {
-		id, err := strconv.Atoi(raw)
-		if err != nil {
-			response.BadRequest(c, "category must be an integer")
-			return
-		}
-		category = &id
+	category, ok := httpx.ParseCategoryID(c)
+	if !ok {
+		return
 	}
 
 	sub, err := h.broker.Subscribe(ctx)

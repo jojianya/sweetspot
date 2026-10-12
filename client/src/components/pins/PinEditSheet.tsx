@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
-import { CloseIcon } from "@/components/icons";
+import { SheetHeader } from "@/components/pins/SheetChrome";
 import { deletePin, updatePin } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 import type { Category, PinDetail } from "@/lib/types";
@@ -105,19 +105,7 @@ export default function PinEditSheet({
 
   return (
     <PanelSheet role="dialog" aria-modal="true" aria-label="Edit pin" onClose={onClose}>
-      <header className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Edit pin
-        </h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-          aria-label="Close"
-        >
-          <CloseIcon />
-        </button>
-      </header>
+      <SheetHeader title="Edit pin" onClose={onClose} />
 
       <div className="flex-1 overflow-y-auto p-5">
         <div className="space-y-4">

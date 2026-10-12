@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import PanelSheet from "@/components/PanelSheet";
 import { CloseIcon } from "@/components/icons";
+import { SheetHeader, SheetSignIn } from "@/components/pins/SheetChrome";
 import { useCollections } from "@/hooks/useCollections";
 import { errorMessage } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
@@ -29,23 +29,8 @@ export default function AddToCollectionSheet({ pinId, onClose }: AddToCollection
   if (!user) {
     return (
       <PanelSheet role="dialog" aria-modal="true" aria-label="Add to collection" onClose={onClose}>
-        <header className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Add to collection
-          </h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800">
-            <CloseIcon />
-          </button>
-        </header>
-        <div className="flex-1 overflow-y-auto p-5 text-sm text-zinc-600 dark:text-zinc-400">
-          <p className="mb-3">Sign in to save pins into collections.</p>
-          <Link
-            href="/login"
-            className="inline-block rounded-lg bg-rose-600 px-4 py-2 font-medium text-white hover:bg-rose-700"
-          >
-            Log in
-          </Link>
-        </div>
+        <SheetHeader title="Add to collection" onClose={onClose} />
+        <SheetSignIn action="save pins into collections" />
       </PanelSheet>
     );
   }
@@ -87,14 +72,7 @@ export default function AddToCollectionSheet({ pinId, onClose }: AddToCollection
 
   return (
     <PanelSheet role="dialog" aria-modal="true" aria-label="Add to collection" onClose={onClose}>
-      <header className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Add to collection
-        </h2>
-        <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800">
-          <CloseIcon />
-        </button>
-      </header>
+      <SheetHeader title="Add to collection" onClose={onClose} />
 
       <div className="flex-1 overflow-y-auto p-5">
         <div className="flex gap-2">

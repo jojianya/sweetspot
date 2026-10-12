@@ -12,10 +12,11 @@ import (
 
 var ErrNotFound = errors.New("comment not found")
 
-// ErrPinNotFound reports that the pin a comment targets does not exist or is
-// hidden. The repository translates the comments_pin_id_fkey violation, so
-// callers match with errors.Is instead of reading driver error codes.
-var ErrPinNotFound = errors.New("pin not found")
+// ErrPinNotFound is pins.ErrNotFound: the repository translates the
+// comments_pin_id_fkey violation, so callers match with errors.Is instead of
+// reading driver error codes. A hidden pin answers the same 404 as a missing
+// one, so both share one sentinel value.
+var ErrPinNotFound = pins.ErrNotFound
 
 // pgCodeForeignKeyViolation is the PostgreSQL SQLSTATE for
 // foreign_key_violation. A named constant because pgerrcode is not a

@@ -60,6 +60,38 @@ func New(limit int, window time.Duration) *Limiter {
 	}
 }
 
+// Limits holds the per-account and per-IP budgets for one mutating action.
+// Window is shared: splitting it would let a caller produce a per-user and
+// per-IP window that disagree, which is a configuration nobody wants.
+type Limits struct {
+	PerUser int
+	PerIP   int
+	Window  time.Duration
+}
+
+// Production budgets for human-paced toggles (saves, good-spots): reacting to
+// a screen of pins one per second is well inside 30/min, which leaves plenty
+// of headroom for a human while still stopping a hammering script.
+const (
+	DefaultPerUserActions = 30
+	DefaultPerIPActions   = 120
+)
+
+// WithDefaults fills zero budgets with the production defaults, so the zero
+// value keeps production behavior and callers only set what they override.
+func (l Limits) WithDefaults() Limits {
+	if l.PerUser <= 0 {
+		l.PerUser = DefaultPerUserActions
+	}
+	if l.PerIP <= 0 {
+		l.PerIP = DefaultPerIPActions
+	}
+	if l.Window <= 0 {
+		l.Window = time.Minute
+	}
+	return l
+}
+
 func (l *Limiter) AllowKey(key string) bool {
 	now := time.Now()
 

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 )
 
@@ -58,7 +59,7 @@ func setupFavoritesLimiterRouter(t *testing.T, perUser, perIP int) *gin.Engine {
 	r := gin.New()
 	RegisterRoutes(r.Group(""), h, RouteOptions{
 		JWTSecret: favoritesLimiterTestSecret,
-		Limits:    Limits{PerUser: perUser, PerIP: perIP, Window: time.Minute},
+		Limits:    middleware.Limits{PerUser: perUser, PerIP: perIP, Window: time.Minute},
 	})
 	return r
 }

@@ -7,9 +7,7 @@ import { deletePin, updatePin } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 import type { Category, PinDetail } from "@/lib/types";
 import { resolveMediaUrl } from "@/lib/media";
-
-const MAX_PHOTOS = 5;
-const MAX_PHOTO_SIZE = 10 * 1024 * 1024;
+import { MAX_PIN_PHOTOS, MAX_PIN_PHOTO_SIZE } from "@/lib/utils/photoValidation";
 
 interface PinEditSheetProps {
   pin: PinDetail;
@@ -57,11 +55,11 @@ export default function PinEditSheet({
       setError("Only JPG and PNG images are allowed");
       return;
     }
-    if (valid.length > MAX_PHOTOS) {
-      setError(`You can upload at most ${MAX_PHOTOS} photos`);
+    if (valid.length > MAX_PIN_PHOTOS) {
+      setError(`You can upload at most ${MAX_PIN_PHOTOS} photos`);
       return;
     }
-    if (valid.some((f) => f.size > MAX_PHOTO_SIZE)) {
+    if (valid.some((f) => f.size > MAX_PIN_PHOTO_SIZE)) {
       setError("Each photo must be 10MB or smaller");
       return;
     }
@@ -181,7 +179,7 @@ export default function PinEditSheet({
                   : "Replace photos"}
               </span>
               <span className="text-xs">
-                picking photos replaces the current set (JPG/PNG, {MAX_PHOTOS} max)
+                picking photos replaces the current set (JPG/PNG, {MAX_PIN_PHOTOS} max)
               </span>
             </button>
             <input

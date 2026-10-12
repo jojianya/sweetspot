@@ -3,7 +3,6 @@ package pins
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -338,7 +337,7 @@ func scanTrendingPins(rows pgx.Rows) ([]TrendingPin, error) {
 }
 
 func (r *postgresRepository) SearchPins(ctx context.Context, query string, limit int) ([]PinListEntry, error) {
-	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+	escaped := database.EscapeLike(query)
 
 	querySQL := pinListEntrySelect + `
 		  AND (p.caption ILIKE '%' || $1 || '%' OR u.username ILIKE '%' || $1 || '%')

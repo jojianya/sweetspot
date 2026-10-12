@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jojianya/sweetspot247-backend/internal/platform/database"
 	"github.com/jojianya/sweetspot247-backend/internal/session"
 )
 
@@ -329,7 +330,7 @@ func (r *postgresRepository) UpdateProfile(ctx context.Context, id string, patch
 // literally; the caller has already bounded the query length, limit
 // and offset.
 func (r *postgresRepository) SearchUsers(ctx context.Context, query string, limit, offset int) ([]User, int, error) {
-	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+	escaped := database.EscapeLike(query)
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, email, username, avatar_url, socials, role, created_at, updated_at,
 		       COUNT(*) OVER () AS total

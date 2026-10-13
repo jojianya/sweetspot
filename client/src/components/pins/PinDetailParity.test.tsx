@@ -340,12 +340,13 @@ describe.each(surfaces)("pin detail parity on %s", (_label, renderBody) => {
     expect(container.textContent).toContain("Finding address…");
   });
 
-  it("view merge replaces the initial count", async () => {
+  it("view merge is monotonic: does not decrease from initial count", async () => {
+    // Initial pin has 42 views; mock returns 7 (stale/lower) — should not decrease
     mockUsePinView.mockReturnValue({ pinId: "pin-1", views: 7 });
     setViewer(null, null);
     await render(makePin());
-    expect(container.textContent).toContain("7 views");
-    expect(container.textContent).not.toContain("42 views");
+    expect(container.textContent).toContain("42 views");
+    expect(container.textContent).not.toContain("7 views");
   });
 
   it("null caption renders Untitled", async () => {

@@ -392,3 +392,20 @@ func TestParseEnvDuration(t *testing.T) {
 		})
 	}
 }
+
+// TestConfigDefaultSweepIntervalsParse asserts the exact default strings used
+// in config.Load() for the sweep intervals parse without error. This prevents
+// a typo in the source from causing a startup log.Fatal.
+func TestConfigDefaultSweepIntervalsParse(t *testing.T) {
+	// QUARANTINE_SWEEP_INTERVAL default is "1h"
+	d := mustParseSweepInterval("1h")
+	if d != time.Hour {
+		t.Errorf("mustParseSweepInterval(\"1h\") = %v, want 1h", d)
+	}
+
+	// PASSWORD_RESET_CLEANUP_INTERVAL default is "24h"
+	d = mustParseResetCleanupInterval("24h")
+	if d != 24*time.Hour {
+		t.Errorf("mustParseResetCleanupInterval(\"24h\") = %v, want 24h", d)
+	}
+}

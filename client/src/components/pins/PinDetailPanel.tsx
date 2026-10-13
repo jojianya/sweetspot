@@ -13,16 +13,12 @@ import {
   PinIcon,
   ShareIcon,
 } from "@/components/icons";
-import PhotoLightbox from "./PhotoLightbox";
 import { PhotoThumbStrip } from "./PhotoThumbStrip";
+import { PinActionSheets } from "./PinActionSheets";
 import CommentsSection from "./CommentsSection";
-import PinEditSheet from "./PinEditSheet";
-import AddToCollectionSheet from "./AddToCollectionSheet";
-import ReportSheet from "./ReportSheet";
 import type { PinDetail } from "@/lib/types";
 import { resolveMediaUrl } from "@/lib/media";
 import { parsePoint } from "@/lib/utils";
-import { categorySlug } from "@/lib/utils/category";
 import { useCategories } from "@/hooks/useCategories";
 import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/hooks/useOptimisticSave";
@@ -289,47 +285,28 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
         </div>
       </PanelSheet>
 
-      {lightbox && lightboxSrc ? (
-        <PhotoLightbox
-          src={lightboxSrc}
-          alt={name ?? "Pin photo"}
-          count={count}
-          index={index}
-          onNavigate={setIndex}
-          onClose={() => setLightbox(false)}
-        />
-      ) : null}
-
-      {editOpen && (
-        <PinEditSheet
-          pin={pin}
-          categories={
-            categories.length > 0
-              ? categories
-              : [
-                  {
-                    id: pin.category_id,
-                    name: pin.category ?? "Other",
-                    slug: categorySlug(pin.category ?? "Other"),
-                  },
-                ]
-          }
-          onClose={() => setEditOpen(false)}
-          onUpdated={handleUpdated}
-          onDeleted={(id) => {
-            setEditOpen(false);
-            onDeleted(id);
-          }}
-        />
-      )}
-
-      {collectionOpen && (
-        <AddToCollectionSheet pinId={pin.id} onClose={() => setCollectionOpen(false)} />
-      )}
-
-      {reportOpen && (
-        <ReportSheet pinId={pin.id} onClose={() => setReportOpen(false)} />
-      )}
+      <PinActionSheets
+        pin={pin}
+        categories={categories}
+        lightbox={lightbox}
+        lightboxSrc={lightboxSrc}
+        name={name}
+        count={count}
+        index={index}
+        editOpen={editOpen}
+        collectionOpen={collectionOpen}
+        reportOpen={reportOpen}
+        onNavigate={setIndex}
+        onCloseLightbox={() => setLightbox(false)}
+        onCloseEdit={() => setEditOpen(false)}
+        onUpdated={handleUpdated}
+        onDeleted={(id) => {
+          setEditOpen(false);
+          onDeleted(id);
+        }}
+        onCloseCollection={() => setCollectionOpen(false)}
+        onCloseReport={() => setReportOpen(false)}
+      />
     </>
   );
 }

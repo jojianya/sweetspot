@@ -4,12 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
-import PhotoLightbox from "@/components/pins/PhotoLightbox";
 import { PhotoThumbStrip } from "@/components/pins/PhotoThumbStrip";
+import { PinActionSheets } from "@/components/pins/PinActionSheets";
 import CommentsSection from "@/components/pins/CommentsSection";
-import PinEditSheet from "@/components/pins/PinEditSheet";
-import AddToCollectionSheet from "@/components/pins/AddToCollectionSheet";
-import ReportSheet from "@/components/pins/ReportSheet";
 import PinViews from "./PinViews";
 import { BookmarkIcon, PersonIcon, PinIcon } from "@/components/icons";
 import { useCategories } from "@/hooks/useCategories";
@@ -19,7 +16,6 @@ import { usePinView } from "@/hooks/usePinView";
 import { usePinShare } from "@/hooks/usePinShare";
 import { formatTime, parsePoint } from "@/lib/utils";
 import { resolveMediaUrl } from "@/lib/media";
-import { categorySlug } from "@/lib/utils/category";
 import { useAuth } from "@/store/auth";
 import type { PinDetail } from "@/lib/types";
 
@@ -227,44 +223,25 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
         </div>
       </div>
 
-      {lightbox && lightboxSrc ? (
-        <PhotoLightbox
-          src={lightboxSrc}
-          alt={name ?? "Pin photo"}
-          count={count}
-          index={index}
-          onNavigate={setIndex}
-          onClose={() => setLightbox(false)}
-        />
-      ) : null}
-
-      {editOpen && (
-        <PinEditSheet
-          pin={pin}
-          categories={
-            categories.length > 0
-              ? categories
-              : [
-                  {
-                    id: pin.category_id,
-                    name: pin.category ?? "Other",
-                    slug: categorySlug(pin.category ?? "Other"),
-                  },
-                ]
-          }
-          onClose={() => setEditOpen(false)}
-          onUpdated={handleUpdated}
-          onDeleted={() => router.push("/")}
-        />
-      )}
-
-      {collectionOpen && (
-        <AddToCollectionSheet pinId={pin.id} onClose={() => setCollectionOpen(false)} />
-      )}
-
-      {reportOpen && (
-        <ReportSheet pinId={pin.id} onClose={() => setReportOpen(false)} />
-      )}
+      <PinActionSheets
+        pin={pin}
+        categories={categories}
+        lightbox={lightbox}
+        lightboxSrc={lightboxSrc}
+        name={name}
+        count={count}
+        index={index}
+        editOpen={editOpen}
+        collectionOpen={collectionOpen}
+        reportOpen={reportOpen}
+        onNavigate={setIndex}
+        onCloseLightbox={() => setLightbox(false)}
+        onCloseEdit={() => setEditOpen(false)}
+        onUpdated={handleUpdated}
+        onDeleted={() => router.push("/")}
+        onCloseCollection={() => setCollectionOpen(false)}
+        onCloseReport={() => setReportOpen(false)}
+      />
     </>
   );
 }

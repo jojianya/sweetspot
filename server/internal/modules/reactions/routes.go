@@ -37,9 +37,9 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 	perUser := middleware.New(limits.PerUser, limits.Window)
 	perIP := middleware.New(limits.PerIP, limits.Window)
 
-	// userCapped keys on the account, skipping anonymous callers (there are
-	// none: AuthRequired runs first, so this is defensive).
-	userCapped := perUser.MiddlewareUserKeyed("good-spot:user:")
+	// userCapped keys on the account. AuthRequired runs first, so anonymous
+	// callers never reach this middleware; requireAuth=true makes that explicit.
+	userCapped := perUser.MiddlewareUserKeyed("good-spot:user:", true)
 
 	// validid first so a malformed id answers 400 without spending budget, then
 	// auth so unauthenticated callers are told to log in, then the limiters so a

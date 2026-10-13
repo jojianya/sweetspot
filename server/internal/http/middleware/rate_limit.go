@@ -228,13 +228,19 @@ func (l *Limiter) MiddlewareKeyed(keyFn func(*gin.Context) string) gin.HandlerFu
 }
 
 // MiddlewareUserKeyed rate-limits authenticated callers by account
-// (keyPrefix + user ID), skipping anonymous callers. Anonymous requests never
-// reach it behind AuthRequired — the skip is defensive — but behind
-// OptionalAuth they must not share one budget key, so they pass through.
-func (l *Limiter) MiddlewareUserKeyed(keyPrefix string) gin.HandlerFunc {
+// (keyPrefix + user ID).
+//
+// If requireAuth is true, anonymous callers receive 401 Unauthorized.
+// If requireAuth is false, anonymous callers pass through without consuming
+// the per-user budget (use with a per-IP limiter for flood protection).
+func (l *Limiter) MiddlewareUserKeyed(keyPrefix string, requireAuth bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uid := GetUserID(c)
 		if uid == "" {
+			if requireAuth {
+				response.AbortError(c, http.StatusUnauthorized, "auth required")
+				return
+			}
 			c.Next()
 			return
 		}

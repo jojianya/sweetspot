@@ -22,9 +22,9 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, opts RouteOptions) {
 	perUser := middleware.New(limits.PerUser, limits.Window)
 	perIP := middleware.New(limits.PerIP, limits.Window)
 
-	// userCapped keys on the account, skipping anonymous callers (there are
-	// none: AuthRequired runs first, so this is defensive).
-	userCapped := perUser.MiddlewareUserKeyed("favorite:user:")
+	// userCapped keys on the account. AuthRequired runs first, so anonymous
+	// callers never reach this middleware; requireAuth=true makes that explicit.
+	userCapped := perUser.MiddlewareUserKeyed("favorite:user:", true)
 
 	// GET routes are deliberately unthrottled: they are reads, bounded by the
 	// caller's own account, and adding a limiter here would throttle scrolling

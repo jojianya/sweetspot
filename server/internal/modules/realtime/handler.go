@@ -2,57 +2,15 @@ package realtime
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	httpx "github.com/jojianya/sweetspot247-backend/internal/http/params"
 	"github.com/jojianya/sweetspot247-backend/internal/http/response"
-	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
-	"github.com/redis/go-redis/v9"
 )
-
-// sseTracker tracks active SSE connections so graceful shutdown can notify
-// them to close rather than waiting for the full shutdown timeout.
-type sseTracker struct {
-	mu    sync.Mutex
-	conns map[context.Context]context.CancelFunc
-}
-
-var tracker = &sseTracker{conns: make(map[context.Context]context.CancelFunc)}
-
-// track registers an SSE connection for graceful shutdown notification.
-func track(ctx context.Context, cancel context.CancelFunc) {
-	tracker.mu.Lock()
-	defer tracker.mu.Unlock()
-	tracker.conns[ctx] = cancel
-}
-
-// untrack removes an SSE connection from tracking.
-func untrack(ctx context.Context) {
-	tracker.mu.Lock()
-	defer tracker.mu.Unlock()
-	delete(tracker.conns, ctx)
-}
-
-// CloseAllSSE signals all active SSE connections to close. Returns the
-// number of connections that were closed.
-func CloseAllSSE() int {
-	tracker.mu.Lock()
-	defer tracker.mu.Unlock()
-	count := len(tracker.conns)
-	for _, cancel := range tracker.conns {
-		cancel()
-	}
-	clear(tracker.conns)
-	return count
-}
 
 // sseWriteTimeout bounds a single write to a stream client.
 //
@@ -64,48 +22,6 @@ const sseWriteTimeout = 10 * time.Second
 
 // sseHeartbeatInterval is the interval between SSE heartbeat comments.
 const sseHeartbeatInterval = 20 * time.Second
-
-// ConnectionLimiter limits concurrent SSE connections with a global cap.
-// A nil limiter allows unlimited connections.
-type ConnectionLimiter struct {
-	mu     sync.Mutex
-	max    int
-	active int
-}
-
-func NewConnectionLimiter(max int) *ConnectionLimiter {
-	if max <= 0 {
-		return nil
-	}
-	return &ConnectionLimiter{max: max}
-}
-
-// TryAcquire attempts to acquire a connection slot. Returns true if acquired,
-// false if at capacity. Must be followed by Release() on success.
-func (l *ConnectionLimiter) TryAcquire() bool {
-	if l == nil {
-		return true
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.active >= l.max {
-		return false
-	}
-	l.active++
-	return true
-}
-
-// Release releases a previously acquired connection slot.
-func (l *ConnectionLimiter) Release() {
-	if l == nil {
-		return
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.active > 0 {
-		l.active--
-	}
-}
 
 type Handler struct {
 	broker            *Broker
@@ -211,135 +127,4 @@ func (h *Handler) Stream(c *gin.Context) {
 	removedCh := removedSub.Channel()
 
 	runStreamLoop(ctx, c.Writer, ch, h.heartbeatInterval, bbox, category, removedCh)
-}
-
-// runStreamLoop runs the SSE event/heartbeat loop. Extracted for testing.
-func runStreamLoop(ctx context.Context, w http.ResponseWriter, ch <-chan *redis.Message, interval time.Duration, bbox *[4]float64, category *int, removedCh <-chan *redis.Message) {
-	heartbeat := time.NewTicker(interval)
-	defer heartbeat.Stop()
-
-	for {
-		select {
-		case msg, ok := <-ch:
-			if !ok {
-				return
-			}
-			var ev pins.Event
-			if err := json.Unmarshal([]byte(msg.Payload), &ev); err != nil {
-				continue
-			}
-			if !matches(ev, bbox, category) {
-				continue
-			}
-			setWriteDeadline(w, sseWriteTimeout)
-			if _, err := fmt.Fprintf(w, "event: pin\ndata: %s\n\n", msg.Payload); err != nil {
-				return
-			}
-			if flusher, ok := w.(http.Flusher); ok {
-				flusher.Flush()
-			}
-		case msg, ok := <-removedCh:
-			if !ok {
-				return
-			}
-			// Forward pin_removed events directly (they contain pin_id and location for filtering)
-			var ev pins.PinRemoved
-			if err := json.Unmarshal([]byte(msg.Payload), &ev); err != nil {
-				continue
-			}
-			if !matchesRemoved(ev, bbox) {
-				continue
-			}
-			setWriteDeadline(w, sseWriteTimeout)
-			if _, err := fmt.Fprintf(w, "event: pin_removed\ndata: %s\n\n", msg.Payload); err != nil {
-				return
-			}
-			if flusher, ok := w.(http.Flusher); ok {
-				flusher.Flush()
-			}
-		case <-heartbeat.C:
-			setWriteDeadline(w, sseWriteTimeout)
-			if _, err := fmt.Fprint(w, ": heartbeat\n\n"); err != nil {
-				return
-			}
-			if flusher, ok := w.(http.Flusher); ok {
-				flusher.Flush()
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-// matches applies the optional bbox/category filters to an event.
-func matches(ev pins.Event, bbox *[4]float64, category *int) bool {
-	if category != nil && ev.CategoryID != *category {
-		return false
-	}
-	if bbox == nil {
-		return true
-	}
-
-	var lng, lat float64
-	if _, err := fmt.Sscanf(ev.Location, "POINT(%f %f)", &lng, &lat); err != nil {
-		// Malformed location: only pass through when no bbox filter is set.
-		noteMalformedLocation("pin_created", ev)
-		return false
-	}
-	return lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]
-}
-
-// matchesRemoved applies the optional bbox filter to a pin_removed event.
-func matchesRemoved(ev pins.PinRemoved, bbox *[4]float64) bool {
-	if bbox == nil {
-		return true
-	}
-
-	var lng, lat float64
-	if _, err := fmt.Sscanf(ev.Location, "POINT(%f %f)", &lng, &lat); err != nil {
-		// Malformed location: only pass through when no bbox filter is set.
-		noteMalformedLocation("pin_removed", ev)
-		return false
-	}
-	return lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]
-}
-
-// malformedLocationDrops counts events dropped for an unparsable
-// location, and malformedLocationLastLog gates how often that is written out.
-// There is no metrics registry in this service, so the count rides along on a
-// rate-limited structured log line: one warning per interval, each carrying the
-// running total, so a recurrence is visible without a bad publisher being able
-// to flood the logs.
-var (
-	malformedLocationDrops   atomic.Int64
-	malformedLocationLastLog atomic.Int64
-)
-
-// malformedLocationLogIntervalSecs is the minimum gap, in seconds, between
-// warnings. Kept in seconds because that is the unit both timestamps use.
-const malformedLocationLogIntervalSecs = 60
-
-// noteMalformedLocation records and (rate-limited) reports a drop.
-func noteMalformedLocation(kind string, ev interface {
-	GetID() string
-	GetLocation() string
-}) {
-	total := malformedLocationDrops.Add(1)
-
-	now := time.Now().Unix()
-	last := malformedLocationLastLog.Load()
-	if now-last < malformedLocationLogIntervalSecs {
-		return
-	}
-	// Only the goroutine that wins the swap writes, so a burst of drops in the
-	// same interval still produces exactly one line.
-	if !malformedLocationLastLog.CompareAndSwap(last, now) {
-		return
-	}
-	slog.Warn("realtime: dropped event with unparsable location",
-		"kind", kind,
-		"pin_id", ev.GetID(),
-		"location", ev.GetLocation(),
-		"drops_since_last_log", total,
-	)
 }

@@ -20,15 +20,10 @@ export function useEditablePin(initialPin: PinDetail) {
   const view = usePinView(pin.id, pin.user_id);
 
   // Applies the counted total to local pin state once per fetch.
-  // Only increases the view count (monotonic) so a stale/lower response
-  // never overwrites a higher local value.
   useEffect(() => {
     if (!view) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- merge the freshly counted total into local pin state once per fetch
-    setPin((prev) => {
-      if (view.views <= prev.views) return prev;
-      return { ...prev, views: view.views };
-    });
+    setPin((prev) => ({ ...prev, views: view.views }));
   }, [view]);
 
   // The edit sheet hands back the updated pin (its response carries the

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { fetchPin } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { useClearOnChange } from "@/hooks/useClearOnChange";
 import type { PinDetail } from "@/lib/types";
 
 interface UsePinDetailOptions {
@@ -18,11 +18,7 @@ export function usePinDetail(id: string | null, options?: UsePinDetailOptions) {
 
   // Clear the previous pin's detail as soon as the selection changes so the
   // panel never flashes stale content while the new pin loads.
-  const [prevId, setPrevId] = useState(id);
-  if (id !== prevId) {
-    setPrevId(id);
-    setData(null);
-  }
+  useClearOnChange(id, () => setData(null));
 
   return { detail: data };
 }

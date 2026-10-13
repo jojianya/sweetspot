@@ -82,15 +82,6 @@ func (h *Handler) service() *Service {
 	return NewService(h.repo, h.store, h.events, h.roles)
 }
 
-// isModerator resolves moderation rights for the caller. Without a wired
-// RoleReader nobody is a moderator.
-func (h *Handler) isModerator(c *gin.Context) bool {
-	if h.roles == nil {
-		return false
-	}
-	return users.IsModerator(h.roles, c)
-}
-
 // nopEvents is the zero-value event publisher used when realtime is disabled.
 type nopEvents struct{}
 
@@ -224,7 +215,7 @@ func (h *Handler) DeletePin(c *gin.Context) {
 		return
 	}
 
-	if err := h.service().DeletePin(c.Request.Context(), c.Param("id"), userID, h.isModerator(c)); err != nil {
+	if err := h.service().DeletePin(c.Request.Context(), c.Param("id"), userID, users.IsModeratorHandler(h.roles, c)); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "pin not found")
 			return
@@ -382,7 +373,7 @@ func (h *Handler) UpdatePin(c *gin.Context) {
 	res, err := h.service().UpdatePin(c.Request.Context(), UpdatePinInput{
 		ID:          id,
 		UserID:      userID,
-		IsModerator: h.isModerator(c),
+		IsModerator: users.IsModeratorHandler(h.roles, c),
 		Caption:     captionPtr,
 		CategoryID:  fields.categoryID,
 		Files:       form.File["photos"],

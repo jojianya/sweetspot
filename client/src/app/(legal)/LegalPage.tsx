@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Navbar from "@/components/layout/Navbar";
 import LegalFooter from "@/components/LegalFooter";
 
-export function DraftBanner() {
+function DraftBanner() {
   return (
     <p role="note" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
       DRAFT, pending legal review. This text is a starting point, not legal

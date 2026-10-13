@@ -2,8 +2,6 @@ package collections
 
 import (
 	"errors"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
@@ -48,15 +46,6 @@ func (h *Handler) service() *Service {
 	return NewService(h.repo)
 }
 
-// isModerator resolves moderation rights for the caller. Without a wired
-// RoleReader nobody is a moderator.
-func (h *Handler) isModerator(c *gin.Context) bool {
-	if h.roles == nil {
-		return false
-	}
-	return users.IsModerator(h.roles, c)
-}
-
 func (h *Handler) ListMine(c *gin.Context) {
 	collections, err := h.service().ListMine(c.Request.Context(), middleware.GetUserID(c))
 	if err != nil {
@@ -79,28 +68,6 @@ func (h *Handler) ListByUser(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"collections": collections})
-}
-
-// normalize validates and trims the name/description fields.
-func normalize(c *gin.Context, name string, description *string) (string, *string, bool) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		response.BadRequest(c, "name is required")
-		return "", nil, false
-	}
-	if utf8.RuneCountInString(name) > maxCollectionNameLength {
-		response.BadRequest(c, "name must be at most 60 characters")
-		return "", nil, false
-	}
-	if description != nil {
-		trimmed := strings.TrimSpace(*description)
-		if utf8.RuneCountInString(trimmed) > maxCollectionDescLength {
-			response.BadRequest(c, "description must be at most 200 characters")
-			return "", nil, false
-		}
-		description = &trimmed
-	}
-	return name, description, true
 }
 
 func (h *Handler) Create(c *gin.Context) {
@@ -150,25 +117,6 @@ func (h *Handler) Get(c *gin.Context) {
 	response.OK(c, gin.H{"collection": detail})
 }
 
-// requireOwner aborts unless the caller owns the collection (or moderates),
-// returning the collection so callers can reuse the read.
-func (h *Handler) requireOwner(c *gin.Context) (Collection, bool) {
-	collection, err := h.service().RequireOwner(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c))
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.NotFound(c, "collection not found")
-			return Collection{}, false
-		}
-		if errors.Is(err, ErrForbidden) {
-			response.Forbidden(c, "you can only modify your own collections")
-			return Collection{}, false
-		}
-		response.Internal(c, "collections: get", err, "collection_id", c.Param("id"))
-		return Collection{}, false
-	}
-	return collection, true
-}
-
 func (h *Handler) Update(c *gin.Context) {
 	var req CollectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -181,7 +129,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	if err := h.service().Update(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c), name, description, req.IsPrivate); err != nil {
+	if err := h.service().Update(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), users.IsModeratorHandler(h.roles, c), name, description, req.IsPrivate); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return
@@ -198,7 +146,7 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	if err := h.service().Delete(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), h.isModerator(c)); err != nil {
+	if err := h.service().Delete(c.Request.Context(), c.Param("id"), middleware.GetUserID(c), users.IsModeratorHandler(h.roles, c)); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "collection not found")
 			return

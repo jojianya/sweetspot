@@ -2,6 +2,9 @@
 export const MAX_PIN_PHOTOS = 5;
 export const MAX_PIN_PHOTO_SIZE = 10 * 1024 * 1024;
 
+/** accept attribute for photo file inputs; matches ALLOWED_PHOTO_TYPES. */
+export const PHOTO_ACCEPT = "image/jpeg,image/png";
+
 const ALLOWED_PHOTO_TYPES = /^image\/(jpeg|png)$/;
 
 /**

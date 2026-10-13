@@ -1,31 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
 import MapView, { type MapLocation } from "./MapView";
 import LocateButton from "./LocateButton";
 import MapNavBar from "./MapNavBar";
+import { PinsNotification } from "./PinsNotification";
+import { PostingCrosshair } from "./PostingCrosshair";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
 import SavedPinsPanel from "@/components/pins/SavedPinsPanel";
 import TrendingList, { TrendingIcon } from "@/components/pins/TrendingList";
 import { usePins } from "@/hooks/usePins";
 import { usePinDetail } from "@/hooks/usePinDetail";
-import { useCategories } from "@/hooks/useCategories";
+import { useMapCategoryFilter } from "@/hooks/useMapCategoryFilter";
+import { useDebouncedBbox } from "@/hooks/useDebouncedBbox";
+import { useStreamToast } from "@/hooks/useStreamToast";
 import { usePinStream } from "@/hooks/usePinStream";
 import { useTrending } from "@/hooks/useTrending";
 import { parsePoint } from "@/lib/utils";
 import { toPinListEntry } from "@/lib/utils/pinEntry";
-import {
-  canonicalCategoryAction,
-  categoryHref,
-  pickCategoryParam,
-  resolveCategoryParam,
-  slugForCategoryId,
-} from "@/lib/utils/category";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
-import { Skeleton } from "@/components/ui/Skeleton";
 import type { CreatedPin, NewPinPhoto, PinListEntry, TrendingPin } from "@/lib/types";
 
 export default function MapApp({
@@ -34,25 +29,13 @@ export default function MapApp({
   initialCategory?: string | null;
 }) {
   const { theme } = useTheme();
-  const { categories, error: categoriesError, retry: retryCategories } = useCategories();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const requestedCategoryRef = useRef<{ slug: string | null } | null>(null);
-  const currentQuery = searchParams.toString();
-  const currentCategoryParam = searchParams.get("category");
-  const categoryParam = pickCategoryParam(currentQuery, currentCategoryParam, initialCategory);
-  const resolvedCategory =
-    categories.length > 0 ? resolveCategoryParam(categoryParam, categories) : null;
-
-  // Category slugs are the public URL contract; numeric IDs remain internal
-  // to the pin and realtime API requests.
-  const effectiveCategory = resolvedCategory?.id ?? null;
+  const { categories, categoriesError, retryCategories, effectiveCategory, handleSelectCategory } =
+    useMapCategoryFilter(initialCategory);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [savedOpen, setSavedOpen] = useState(false);
   const [trendingOpen, setTrendingOpen] = useState(false);
-  const [bbox, setBbox] = useState<string | null>(null);
+  const { bbox, updateBbox } = useDebouncedBbox();
   const [center, setCenter] = useState({ lat: 17.385, lng: 78.4867 });
   const [flyTo, setFlyTo] = useState<{ lng: number; lat: number } | null>(null);
   const [postingMode, setPostingMode] = useState(false);
@@ -68,18 +51,15 @@ export default function MapApp({
 
   // Realtime: new pins in the current view stream in and merge into the list.
   // A short-lived toast keeps the counter visible without stealing focus.
-  const [streamToast, setStreamToast] = useState(0);
-  const toastTimerRef = useRef<number | null>(null);
-  const boundsTimerRef = useRef<number | null>(null);
+  const { count: streamToast, bump: bumpStreamToast, dismiss: dismissStreamToast } =
+    useStreamToast();
 
   const handleStreamedPin = useCallback(
     (pin: PinListEntry) => {
       addPin(pin);
-      setStreamToast((n) => n + 1);
-      if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
-      toastTimerRef.current = window.setTimeout(() => setStreamToast(0), 4000);
+      bumpStreamToast();
     },
-    [addPin]
+    [addPin, bumpStreamToast]
   );
 
   // Realtime removals: drop the pin from the map list and close the detail
@@ -99,49 +79,6 @@ export default function MapApp({
 
   usePinStream(bbox, effectiveCategory, handleStreamedPin, handleStreamedRemoval, handleStreamReconnect);
 
-  useEffect(() => {
-    return () => {
-      if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
-      if (boundsTimerRef.current !== null) window.clearTimeout(boundsTimerRef.current);
-    };
-  }, []);
-
-  const replaceCategoryParam = useCallback(
-    (slug: string | null) => {
-      router.replace(categoryHref(pathname, currentQuery, slug), {
-        scroll: false,
-      });
-    },
-    [currentQuery, pathname, router]
-  );
-
-  const handleSelectCategory = useCallback(
-    (id: number | null) => {
-      const slug = slugForCategoryId(id, categories);
-      requestedCategoryRef.current = { slug };
-      replaceCategoryParam(slug);
-    },
-    [categories, replaceCategoryParam]
-  );
-
-  // Legacy numeric links resolve to their category and are canonicalized to
-  // the slug. Unknown values remain "All" and are removed from the query.
-  useEffect(() => {
-    const requested = requestedCategoryRef.current;
-    const action = canonicalCategoryAction(
-      requested ? requested.slug : undefined,
-      currentCategoryParam,
-      categories
-    );
-    if (action.type === "clear-requested") {
-      requestedCategoryRef.current = null;
-      return;
-    }
-    if (action.type === "replace") {
-      replaceCategoryParam(action.slug);
-    }
-  }, [categories, currentCategoryParam, replaceCategoryParam]);
-
   // The overlays (posting crosshair, create dialog, saved panel) are mutually
   // exclusive with pin selection: every "navigate somewhere" action closes the
   // others through this one reset.
@@ -153,22 +90,13 @@ export default function MapApp({
     setDetailError(null);
   }, []);
 
-  // Debounced bbox updates so a burst of moveend events doesn't close and
-  // reopen the SSE connection on every pan/zoom. The bbox is quantized to
-  // ~11 m so a string-identical bbox doesn't re-run the effect either way.
   const handleBoundsChange = useCallback(
     (bboxValue: string, c: { lat: number; lng: number }) => {
       setCenter(c);
       setFlyTo(null);
-      if (boundsTimerRef.current !== null) {
-        window.clearTimeout(boundsTimerRef.current);
-      }
-      boundsTimerRef.current = window.setTimeout(() => {
-        setBbox(bboxValue);
-        boundsTimerRef.current = null;
-      }, 250);
+      updateBbox(bboxValue);
     },
-    []
+    [updateBbox]
   );
 
   const handleMapClick = useCallback(() => {
@@ -258,40 +186,6 @@ export default function MapApp({
   const bannerError = categoriesError ?? pinsError ?? detailError;
   const activeCategory = categories.find((c) => c.id === effectiveCategory) ?? null;
 
-  // Render loading/error state for the pins notification
-  const renderPinsNotification = (): React.ReactNode => {
-    if (loading) {
-      return (
-        <div role="status" aria-busy="true" aria-label="Loading pins…">
-          <span className="sr-only">Loading pins…</span>
-          <div className="absolute left-3 top-36 z-10 rounded bg-zinc-100/90 px-3 py-2 text-xs font-medium text-zinc-500 shadow dark:bg-zinc-800/90 dark:text-zinc-400" aria-hidden="true">
-            <Skeleton className="h-3 w-32" style={{ height: "12px" }} />
-          </div>
-        </div>
-      );
-    }
-    if (bannerError) {
-      return (
-        <div
-          role="alert"
-          className="absolute left-3 top-40 z-10 rounded bg-rose-50 px-2 py-1 text-xs text-rose-600 shadow dark:bg-rose-950/60 dark:text-rose-300"
-        >
-          {bannerError}
-          {categoriesError && (
-            <button
-              type="button"
-              onClick={retryCategories}
-              className="ml-2 font-semibold underline"
-            >
-              Retry
-            </button>
-          )}
-        </div>
-      );
-    }
-    return null;
-  };
-
   return (
     <div className="absolute inset-0">
       <MapView
@@ -304,15 +198,7 @@ export default function MapApp({
         onMapClick={handleMapClick}
       />
 
-      {postingMode && (
-        <div
-          className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
-          aria-hidden
-        >
-          <div className="absolute h-0.5 w-16 bg-rose-600 shadow-[0_0_4px_rgba(255,255,255,0.9)]" />
-          <div className="absolute h-16 w-0.5 bg-rose-600 shadow-[0_0_4px_rgba(255,255,255,0.9)]" />
-        </div>
-      )}
+      {postingMode && <PostingCrosshair />}
 
       <MapNavBar
         center={center}
@@ -324,7 +210,12 @@ export default function MapApp({
         onOpenSaved={handleOpenSaved}
       />
 
-      {renderPinsNotification()}
+      <PinsNotification
+        loading={loading}
+        error={bannerError}
+        showRetry={categoriesError !== null}
+        onRetry={retryCategories}
+      />
 
       <div className="absolute bottom-20 right-4 z-10">
         <LocateButton onLocate={handleLocate} />
@@ -359,7 +250,7 @@ export default function MapApp({
       {streamToast > 0 && (
         <button
           type="button"
-          onClick={() => setStreamToast(0)}
+          onClick={dismissStreamToast}
           className="absolute bottom-16 left-1/2 z-20 -translate-x-1/2 rounded-full bg-zinc-900/90 px-4 py-2 text-xs font-medium text-white shadow-lg backdrop-blur transition-opacity hover:opacity-90 dark:bg-zinc-100/90 dark:text-zinc-900"
         >
           {streamToast} new pin{streamToast > 1 ? "s" : ""} in view

@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -73,18 +72,17 @@ func quote(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
 }
 
-// TestClientErrorIngestCapsExtraKeys proves extra is bounded to the first
-// 20 keys by sorted order (deterministic), with long string values cut.
-func TestClientErrorIngestCapsExtraKeys(t *testing.T) {
+// TestClientErrorIngestAllowlistsExtraKeys proves extra is filtered to the
+// keys the real client sends. An allowlist, not a size cap: the cap kept the
+// first N keys, which still forwarded N attacker-chosen keys with
+// attacker-chosen names into logs and Sentry.
+func TestClientErrorIngestAllowlistsExtraKeys(t *testing.T) {
 	rep := &recordingReporter{}
 	var sb strings.Builder
 	sb.WriteString(`{"message":"boom","extra":{`)
-	for i := 0; i < 25; i++ {
-		if i > 0 {
-			sb.WriteString(",")
-		}
-		sb.WriteString(`"k` + fmt.Sprintf("%02d", i) + `":"v` + strings.Repeat("x", clientErrorMaxExtraValueRunes+50) + `"`)
-	}
+	// Two allowlisted keys, then two that no real client sends.
+	sb.WriteString(`"kind":"api","method":"GET",`)
+	sb.WriteString(`"password":"hunter2","note":"arbitrary attacker text"`)
 	sb.WriteString(`}}`)
 	if w := ingestJSON(t, rep, sb.String()); w.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", w.Code)
@@ -93,26 +91,87 @@ func TestClientErrorIngestCapsExtraKeys(t *testing.T) {
 	if !ok {
 		t.Fatalf("extra has type %T, want map[string]any", rep.attrs["extra"])
 	}
-	if len(extra) != clientErrorMaxExtraKeys {
-		t.Fatalf("extra keys = %d, want %d", len(extra), clientErrorMaxExtraKeys)
+	if len(extra) != 2 {
+		t.Fatalf("extra = %v, want only the allowlisted kind and method", extra)
 	}
-	for k, v := range extra {
-		s, ok := v.(string)
-		if !ok {
-			t.Fatalf("extra[%q] has type %T, want string", k, v)
-		}
-		if n := len([]rune(s)); n != clientErrorMaxExtraValueRunes {
-			t.Fatalf("extra[%q] runes = %d, want %d", k, n, clientErrorMaxExtraValueRunes)
-		}
-		if !strings.HasPrefix(s, "v") {
-			t.Fatalf("extra[%q] lost its value prefix", k)
+	if extra["kind"] != "api" || extra["method"] != "GET" {
+		t.Fatalf("extra = %v, want kind=api and method=GET preserved", extra)
+	}
+	for _, dropped := range []string{"password", "note"} {
+		if _, ok := extra[dropped]; ok {
+			t.Errorf("extra[%q] survived the allowlist", dropped)
 		}
 	}
-	if _, ok := extra["k00"]; !ok {
-		t.Fatal("expected lowest sorted key k00 to survive the cap")
+}
+
+// TestClientErrorIngestTruncatesExtraValues proves a long value is still cut,
+// so one surviving key cannot carry an unbounded payload.
+func TestClientErrorIngestTruncatesExtraValues(t *testing.T) {
+	rep := &recordingReporter{}
+	long := strings.Repeat("y", clientErrorMaxExtraValueRunes+50)
+	body := `{"message":"boom","extra":{"kind":"` + long + `"}}`
+	if w := ingestJSON(t, rep, body); w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", w.Code)
 	}
-	if _, ok := extra["k24"]; ok {
-		t.Fatal("key k24 should have been cut by the cap")
+	extra, _ := rep.attrs["extra"].(map[string]any)
+	got, _ := extra["kind"].(string)
+	if n := len([]rune(got)); n != clientErrorMaxExtraValueRunes {
+		t.Fatalf("extra[kind] runes = %d, want %d", n, clientErrorMaxExtraValueRunes)
+	}
+}
+
+// TestClientErrorIngestScrubsPII proves a client-supplied string loses its
+// emails and credentials before it reaches the reporter. The endpoint is
+// public, so its payload is untrusted: a browser error message carries
+// whatever the user typed, and logs and Sentry are read widely (9.2).
+func TestClientErrorIngestScrubsPII(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		mustNot string
+	}{
+		{"email in message", "TypeError for alice@example.com", "alice@example.com"},
+		{"bearer header in stack", "authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig", "eyJhbGciOiJIUzI1NiJ9"},
+		{"token query param in url", "https://app.example/reset?token=abc123def456&x=1", "abc123def456"},
+		{"api key in extra", "api_key=sk_live_abc123", "sk_live_abc123"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rep := &recordingReporter{}
+			body := `{"message":` + quote(tc.in) + `,"url":` + quote(tc.in) + `,"stack":` + quote(tc.in) + `,"extra":{"kind":` + quote(tc.in) + `}}`
+			if w := ingestJSON(t, rep, body); w.Code != http.StatusNoContent {
+				t.Fatalf("expected 204, got %d", w.Code)
+			}
+			for _, field := range []string{"stack", "url"} {
+				got, _ := rep.attrs[field].(string)
+				if got == "" {
+					continue
+				}
+				if tc.mustNot != "" && strings.Contains(got, tc.mustNot) {
+					t.Errorf("%s still contains %q: %q", field, tc.mustNot, got)
+				}
+			}
+			if tc.mustNot != "" && strings.Contains(rep.reported.Error(), tc.mustNot) {
+				t.Errorf("message still contains %q: %q", tc.mustNot, rep.reported.Error())
+			}
+			extra, _ := rep.attrs["extra"].(map[string]any)
+			if got, _ := extra["kind"].(string); tc.mustNot != "" && strings.Contains(got, tc.mustNot) {
+				t.Errorf("extra[kind] still contains %q: %q", tc.mustNot, got)
+			}
+		})
+	}
+}
+
+// TestScrubPIIKeepsTheMessageReadable is the other half: scrubbing must not
+// destroy the diagnostic value of the report.
+func TestScrubPIIKeepsTheMessageReadable(t *testing.T) {
+	got := scrubPII("TypeError: cannot read 'id' of undefined at foo (bar.js:1:2)")
+	if got != "TypeError: cannot read 'id' of undefined at foo (bar.js:1:2)" {
+		t.Fatalf("scrubPII changed a clean message: %q", got)
+	}
+	got = scrubPII("failed for alice@example.com with Bearer abc.def")
+	if !strings.Contains(got, "failed for") || !strings.Contains(got, "[EMAIL]") || !strings.Contains(got, "[TOKEN]") {
+		t.Fatalf("scrubPII lost the surrounding text: %q", got)
 	}
 }
 

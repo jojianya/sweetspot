@@ -3,15 +3,20 @@ export { confirmPasswordReset, login, logout, register, requestPasswordReset } f
 export { fetchCategories } from "./categories";
 export { createPin, deletePin, fetchPin, fetchPins, fetchTrendingPins, registerPinView, searchPins, updatePin } from "./pins";
 export { searchPlaces, type PlaceResult } from "./geocoding";
-export { fetchFavoriteIDs, fetchFavorites, removeFavorite, saveFavorite, type FavoriteEntry } from "./favorites";
+export {
+  fetchFavorites,
+  fetchIsSaved,
+  removeFavorite,
+  saveFavorite,
+  type FavoriteEntry,
+} from "./favorites";
 export { createComment, deleteComment, fetchComments } from "./comments";
 export { fetchFeed, fetchUserStats, followUser, unfollowUser } from "./social";
-export { fetchMe, fetchUser, fetchUserPins, fetchUsers, searchUsers, updateMyProfile, updateUserRole, type ProfileEdit, type UserListResult } from "./users";
+export { fetchMe, fetchUser, fetchUserPins, fetchUsers, searchUsers, updateMyProfile, updateUserRole, type ProfileEdit } from "./users";
 export { createPinReport, fetchReports, reviewReport } from "./reports";
 export {
   addPinToCollection,
   createCollection,
-  deleteCollection,
   fetchCollection,
   fetchMyCollections,
   fetchUserCollections,

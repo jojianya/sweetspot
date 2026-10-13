@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
 	"github.com/jojianya/sweetspot247-backend/pkg/jwt"
 )
 
@@ -40,7 +41,7 @@ func setupLimiterRouter(t *testing.T, perUser, perIP int) *gin.Engine {
 	RegisterRoutes(r.Group(""), h, RouteOptions{
 		JWTSecret: limiterTestSecret,
 		// nil Blacklist and Sessions: no Redis, no session-floor lookup.
-		Limits: Limits{PerUser: perUser, PerIP: perIP, Window: time.Minute},
+		Limits: middleware.Limits{PerUser: perUser, PerIP: perIP, Window: time.Minute},
 	})
 	return r
 }

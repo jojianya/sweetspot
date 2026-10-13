@@ -1,27 +1,98 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchFavoriteIDs, fetchFavorites, type FavoriteEntry } from "@/lib/api";
-import { useAsyncData } from "@/hooks/useAsyncData";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useClearOnChange } from "@/hooks/useClearOnChange";
+import { fetchFavorites, fetchIsSaved, type FavoriteEntry } from "@/lib/api";
+import { errorMessage } from "@/lib/utils";
 
 /** Matches the server's maximum page size for the saved-pins list. */
 const FAVORITES_PAGE_SIZE = 200;
 
-/** Server state for the saved-pins list: entries, loading, error, retry. */
+/**
+ * Server state for the saved-pins list: one page of entries, the account's
+ * whole saved count, and a load-more that appends the next page.
+ *
+ * The endpoint is paginated and the server reports `total`. Discarding it and
+ * showing `entries.length` instead made any account with more than one page
+ * look like it had exactly 200 saved pins, with no way to reach the rest.
+ */
 export function useFavorites() {
-  const { data, loading, error, retry } = useAsyncData<FavoriteEntry[]>(
-    // The endpoint is paginated now, so ask for a page large enough to cover
-    // the list and unwrap the {entries, total} envelope.
-    async () => (await fetchFavorites({ limit: FAVORITES_PAGE_SIZE })).entries,
-    []
-  );
+  const [entries, setEntries] = useState<FavoriteEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Which page to fetch. Offset 0 replaces the list (first page, or a retry);
+  // anything else appends. `attempt` is bumped to re-fetch the same page.
+  const [offset, setOffset] = useState(0);
+  const [attempt, setAttempt] = useState(0);
+  // Tag each run so a superseded page can neither overwrite a newer result set
+  // nor clear a newer request's loading flags. Without this a "load more" still
+  // in flight can land after a retry and replace the fresh first page.
+  const fetchRunRef = useRef(0);
 
-  return { entries: data ?? [], loading, error, retry };
+  // Derived state, the idiom usePins uses: flip the loading flag during render
+  // so no setState runs inside the effect below, which react-hooks forbids.
+  const runKey = `${offset}:${attempt}`;
+  const [appliedKey, setAppliedKey] = useState<string | null>(null);
+  if (appliedKey !== runKey) {
+    setAppliedKey(runKey);
+    if (offset === 0) {
+      setLoading(true);
+      setError(null);
+    } else {
+      setLoadingMore(true);
+    }
+  }
+
+  useEffect(() => {
+    const runID = ++fetchRunRef.current;
+    const stale = () => runID !== fetchRunRef.current;
+
+    fetchFavorites({ limit: FAVORITES_PAGE_SIZE, offset })
+      .then((res) => {
+        if (stale()) return;
+        setEntries((prev) => (offset === 0 ? res.entries : [...prev, ...res.entries]));
+        setTotal(res.total);
+      })
+      .catch((e: unknown) => {
+        if (!stale()) setError(errorMessage(e));
+      })
+      .finally(() => {
+        if (stale()) return;
+        setLoading(false);
+        setLoadingMore(false);
+      });
+  }, [offset, attempt]);
+
+  const loadMore = useCallback(() => {
+    if (loading || loadingMore) return;
+    setOffset(entries.length);
+  }, [loading, loadingMore, entries.length]);
+
+  const retryLoad = useCallback(() => {
+    // Back to the first page: a retry replaces the list rather than appending.
+    setOffset(0);
+    setAttempt((n) => n + 1);
+  }, []);
+
+  return {
+    entries,
+    total,
+    loading,
+    loadingMore,
+    error,
+    retry: retryLoad,
+    loadMore,
+    hasMore: entries.length < total,
+  };
 }
 
 /**
- * Whether the given pin is saved by the current user. Fetches the favorite
- * ID list whenever `enabled` (i.e. the user is logged in) or the pin changes.
+ * Whether the given pin is saved by the current user. Queries the server's
+ * per-pin check (`GET /favorites/:id/saved`, one indexed EXISTS probe) rather
+ * than pulling the whole id list, which is capped at 5000 server-side and is
+ * only meant to be fetched as a membership set.
  * `setSaved` lets the caller apply optimistic updates.
  */
 export function useSavedStatus(pinId: string, enabled: boolean) {
@@ -32,19 +103,14 @@ export function useSavedStatus(pinId: string, enabled: boolean) {
   // the new pin, and disabling the hook must not keep the last answer. Done in
   // render (not an effect) so the very first paint for a new pin is already
   // correct, with no one-frame flash of the old value.
-  const [prevKey, setPrevKey] = useState(`${pinId}:${enabled}`);
-  const key = `${pinId}:${enabled}`;
-  if (prevKey !== key) {
-    setPrevKey(key);
-    setSaved(false);
-  }
+  useClearOnChange(`${pinId}:${enabled}`, () => setSaved(false));
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    fetchFavoriteIDs()
-      .then((ids) => {
-        if (!cancelled) setSaved(ids.includes(pinId));
+    fetchIsSaved(pinId)
+      .then((res) => {
+        if (!cancelled) setSaved(res);
       })
       .catch(() => {
         // saved state stays false if the lookup fails

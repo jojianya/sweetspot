@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-var ErrUnsupportedContentType = errors.New("unsupported content type")
-
 type Local struct {
 	dir  string
 	base string

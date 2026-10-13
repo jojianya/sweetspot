@@ -6,7 +6,6 @@ import (
 )
 
 var (
-	ErrPinNotFound     = errors.New("pin not found")
 	ErrReportNotFound  = errors.New("report not found")
 	ErrAlreadyReported = errors.New("pin already reported by this user")
 	ErrAlreadyResolved = errors.New("report already resolved")

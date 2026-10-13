@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
-import { CloseIcon } from "@/components/icons";
+import { SheetHeader } from "@/components/pins/SheetChrome";
 import { deletePin, updatePin } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 import type { Category, PinDetail } from "@/lib/types";
 import { resolveMediaUrl } from "@/lib/media";
-
-const MAX_PHOTOS = 5;
-const MAX_PHOTO_SIZE = 10 * 1024 * 1024;
+import { usePhotoPreviews } from "@/hooks/usePhotoPreviews";
+import { PhotoThumbGrid } from "@/components/pins/PhotoThumbGrid";
+import { MAX_PIN_PHOTOS, PHOTO_ACCEPT, validatePhotoFiles } from "@/lib/utils/photoValidation";
 
 interface PinEditSheetProps {
   pin: PinDetail;
@@ -37,11 +37,7 @@ export default function PinEditSheet({
   const inputRef = useRef<HTMLInputElement>(null);
   const confirmDeleteRef = useRef<HTMLButtonElement>(null);
 
-  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
-
-  useEffect(() => {
-    return () => previews.forEach((u) => URL.revokeObjectURL(u));
-  }, [previews]);
+  const previews = usePhotoPreviews(files);
 
   // Move focus to the destructive confirm action when it appears, so
   // keyboard and screen-reader users land on the decision point.
@@ -52,21 +48,13 @@ export default function PinEditSheet({
   const handleFiles = (list: FileList | null) => {
     if (!list) return;
     const picked = Array.from(list);
-    const valid = picked.filter((f) => /^image\/(jpeg|png)$/.test(f.type));
-    if (valid.length !== picked.length) {
-      setError("Only JPG and PNG images are allowed");
-      return;
-    }
-    if (valid.length > MAX_PHOTOS) {
-      setError(`You can upload at most ${MAX_PHOTOS} photos`);
-      return;
-    }
-    if (valid.some((f) => f.size > MAX_PHOTO_SIZE)) {
-      setError("Each photo must be 10MB or smaller");
+    const validationError = validatePhotoFiles(picked);
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setError(null);
-    setFiles(valid);
+    setFiles(picked);
   };
 
   const submit = async () => {
@@ -107,19 +95,7 @@ export default function PinEditSheet({
 
   return (
     <PanelSheet role="dialog" aria-modal="true" aria-label="Edit pin" onClose={onClose}>
-      <header className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Edit pin
-        </h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-          aria-label="Close"
-        >
-          <CloseIcon />
-        </button>
-      </header>
+      <SheetHeader title="Edit pin" onClose={onClose} />
 
       <div className="flex-1 overflow-y-auto p-5">
         <div className="space-y-4">
@@ -181,13 +157,13 @@ export default function PinEditSheet({
                   : "Replace photos"}
               </span>
               <span className="text-xs">
-                picking photos replaces the current set (JPG/PNG, {MAX_PHOTOS} max)
+                picking photos replaces the current set (JPG/PNG, {MAX_PIN_PHOTOS} max)
               </span>
             </button>
             <input
               ref={inputRef}
               type="file"
-              accept="image/jpeg,image/png"
+              accept={PHOTO_ACCEPT}
               multiple
               className="hidden"
               aria-label="Replace photos"
@@ -196,24 +172,11 @@ export default function PinEditSheet({
           </div>
 
           {files.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {files.map((f, i) => (
-                <div
-                  key={`${f.name}-${i}`}
-                  className="group relative h-20 w-20 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
-                >
-                  <img src={previews[i]} alt={f.name} className="h-full w-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
-                    className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                    aria-label={`Remove ${f.name}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
+            <PhotoThumbGrid
+              files={files}
+              previews={previews}
+              onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))}
+            />
           )}
 
           {error && (

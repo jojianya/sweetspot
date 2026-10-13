@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import { searchPlaces, type PlaceResult } from "@/lib/api/geocoding";
 import { searchPins } from "@/lib/api/pins";
 import type { PinListEntry } from "@/lib/types";
@@ -18,7 +17,6 @@ interface SearchBarProps {
   onSelectPin: (entry: PinListEntry) => void;
   placeholder?: string;
   className?: string;
-  endSlot?: ReactNode;
 }
 
 export default function SearchBar({
@@ -27,7 +25,6 @@ export default function SearchBar({
   onSelectPin,
   placeholder = "Search places or pins…",
   className,
-  endSlot,
 }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ResultItem[]>([]);
@@ -180,7 +177,6 @@ export default function SearchBar({
             </svg>
           </button>
         )}
-        {endSlot}
       </div>
 
       {isOpen && (

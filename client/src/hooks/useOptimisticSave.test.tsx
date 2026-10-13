@@ -8,7 +8,7 @@ import { useOptimisticSave } from "./useOptimisticSave";
 const apiMocks = vi.hoisted(() => ({
   saveFavorite: vi.fn(),
   removeFavorite: vi.fn(),
-  fetchFavoriteIDs: vi.fn(),
+  fetchIsSaved: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => apiMocks);
@@ -53,7 +53,7 @@ describe("useOptimisticSave", () => {
   beforeEach(() => {
     apiMocks.saveFavorite.mockReset().mockResolvedValue(undefined);
     apiMocks.removeFavorite.mockReset().mockResolvedValue(undefined);
-    apiMocks.fetchFavoriteIDs.mockReset().mockResolvedValue([]);
+    apiMocks.fetchIsSaved.mockReset().mockResolvedValue(false);
     routerMocks.push.mockReset();
     useAuth.setState({ user: null });
     const actEnvironment = globalThis as typeof globalThis & {
@@ -112,7 +112,7 @@ describe("useOptimisticSave", () => {
 
   it("rolls back to saved when the unsave API fails", async () => {
     loggedIn();
-    apiMocks.fetchFavoriteIDs.mockResolvedValue(["pin-1"]);
+    apiMocks.fetchIsSaved.mockResolvedValue(true);
     apiMocks.removeFavorite.mockRejectedValue(new Error("network unavailable"));
     await act(async () => {
       root.render(createElement(SaveProbe, { pinId: "pin-1" }));

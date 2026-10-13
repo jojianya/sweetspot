@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useClearOnChange } from "@/hooks/useClearOnChange";
 import { fetchUser, fetchUserCollections, fetchUserPins } from "@/lib/api";
 import { ApiError } from "@/lib/api/client";
 import { errorMessage } from "@/lib/utils";
@@ -25,16 +26,14 @@ export function useProfile(id: string) {
   // pattern useAsyncData uses: navigating from /users/a to /users/b must not
   // leave a's profile on screen under b, and it must show as loading rather
   // than settled with stale content while b is in flight.
-  const [prevID, setPrevID] = useState(id);
-  if (prevID !== id) {
-    setPrevID(id);
+  useClearOnChange(id, () => {
     setProfile(null);
     setPins([]);
     setCollections([]);
     setNotFound(false);
     setError(null);
     setLoading(true);
-  }
+  });
 
   useEffect(() => {
     let cancelled = false;

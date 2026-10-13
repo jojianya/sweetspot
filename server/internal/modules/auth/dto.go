@@ -8,6 +8,9 @@ type RegisterRequest struct {
 	// a 500. Length is checked in password.Validate, which measures both bounds
 	// in the unit bcrypt actually uses.
 	Password string `json:"password" binding:"required"`
+	// Bounds mirror users.usernameMinRunes/usernameMaxRunes: struct tags must
+	// be literals, so the numbers are repeated here. Change both together;
+	// auth/username_rule_test.go locks the HTTP-layer wording.
 	Username string `json:"username" binding:"required,min=3,max=30"`
 }
 

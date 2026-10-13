@@ -48,7 +48,7 @@ func validatePublicBaseURL(raw, appEnv string) error {
 // tests use the log-only mailer.
 func validateMailer(webhookURL, appEnv string) error {
 	if strings.EqualFold(appEnv, "production") && webhookURL == "" {
-		return fmt.Errorf("MAILER_WEBHOOK_URL is required in production so password reset emails are actually delivered (email provider: [FILL IN])")
+		return fmt.Errorf("MAILER_WEBHOOK_URL is required in production so password reset emails are actually delivered")
 	}
 	return nil
 }

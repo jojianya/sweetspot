@@ -29,6 +29,7 @@ export function ProfileCollections({
               <PinCoverImage
                 url={c.cover_url}
                 boxClass="h-9 w-9 rounded-lg"
+                lazy={false}
                 glyph={<ListIcon className="h-4 w-4" />}
               />
               <span className="min-w-0">

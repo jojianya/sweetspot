@@ -140,6 +140,7 @@ export default function AddToCollectionSheet({ pinId, onClose }: AddToCollection
                     <PinCoverImage
                       url={c.cover_url}
                       boxClass="h-11 w-11 rounded-lg"
+                      lazy={false}
                       glyph={<CloseIcon className="h-4 w-4 rotate-45" />}
                     />
                     <span className="min-w-0 flex-1">

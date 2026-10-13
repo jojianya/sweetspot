@@ -102,7 +102,12 @@ export default function TrendingList({
                 <span className="w-5 shrink-0 text-center text-xs font-bold text-zinc-400 dark:text-zinc-500">
                   {i + 1}
                 </span>
-                <PinCoverImage url={pin.cover_url} boxClass="h-10 w-10 rounded-lg" />
+                <PinCoverImage
+                  url={pin.cover_url}
+                  boxClass="h-10 w-10 rounded-lg"
+                  lazy={false}
+                  fallbackClassName="bg-zinc-200 dark:bg-zinc-800"
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
                     {pin.caption?.trim() || "Untitled pin"}

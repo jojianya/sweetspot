@@ -1,13 +1,9 @@
 package users
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"mime/multipart"
-	"net/http"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jojianya/sweetspot247-backend/internal/http/middleware"
@@ -130,39 +126,6 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 	response.OK(c, updated.ToPrivate())
 }
 
-// parseSocials decodes the `socials` form field into a flat JSON object of
-// string, boolean, or number values, with bounded sizes.
-func parseSocials(raw string) (map[string]any, error) {
-	if strings.TrimSpace(raw) == "" {
-		return nil, errors.New("socials must be a JSON object")
-	}
-	var socials map[string]any
-	if err := json.Unmarshal([]byte(raw), &socials); err != nil {
-		return nil, errors.New("socials must be a JSON object")
-	}
-	if len(socials) > maxSocialKeys {
-		return nil, errors.New("too many socials (max 20)")
-	}
-	for k, v := range socials {
-		if utf8.RuneCountInString(k) > maxSocialKeyLen {
-			return nil, errors.New("social name too long")
-		}
-		switch val := v.(type) {
-		case string:
-			if utf8.RuneCountInString(val) > maxSocialValLen {
-				return nil, errors.New("social value too long")
-			}
-			if err := validateSocialLink(k, val); err != nil {
-				return nil, err
-			}
-		case bool, float64:
-		default:
-			return nil, errors.New("socials values must be strings, booleans, or numbers")
-		}
-	}
-	return socials, nil
-}
-
 // List returns users for the owner's role-management console. With `q` it
 // filters to usernames containing the query (case-insensitive); without, it
 // returns every user (newest first). Both modes are paginated via limit/offset,
@@ -209,78 +172,4 @@ func (h *Handler) List(c *gin.Context) {
 		items = append(items, found[i].ToPublic())
 	}
 	response.OK(c, gin.H{"users": items, "total": total})
-}
-
-// RoleReader is the subset of Service needed to resolve a caller's role.
-//
-// Narrower than Service on purpose: every module that needs a role check
-// depends on this single-method interface instead of the full user service,
-// which keeps the dependency obvious and lets tests supply a one-method stub
-// rather than implementing all ten.
-type RoleReader interface {
-	GetByID(ctx context.Context, id string) (User, error)
-}
-
-// CurrentRole resolves the caller role from the request context using the user
-// service.
-//
-// When the auth middleware already resolved the session it caches the live
-// role on the context, and that cached value wins: it came from the same
-// database read that enforced session revocation, so reusing it adds no query
-// and cannot disagree with the middleware. Otherwise this falls back to a
-// live lookup, preserving the stale-JWT-role fix for callers outside
-// middleware (tests, optional-auth paths without a checker).
-func CurrentRole(svc RoleReader, c *gin.Context) string {
-	if role := c.GetString(middleware.CtxRole); role != "" {
-		return role
-	}
-	userID := middleware.GetUserID(c)
-	if userID == "" {
-		return ""
-	}
-	user, err := svc.GetByID(c.Request.Context(), userID)
-	if err != nil {
-		return ""
-	}
-	return user.Role
-}
-
-// IsModerator reports whether the caller currently holds a moderation role.
-//
-// Like CurrentRole this reads through to the database, so a demotion takes
-// effect on the caller's next request.
-func IsModerator(svc RoleReader, c *gin.Context) bool {
-	role := CurrentRole(svc, c)
-	return role == RoleAdmin || role == RoleOwner
-}
-
-// IsModeratorHandler is the handler-layer entry point for IsModerator. A nil
-// RoleReader means the handler was built as a struct literal without roles
-// (as some tests do); nothing is authorized, so it reports false instead of
-// dereferencing nil.
-func IsModeratorHandler(svc RoleReader, c *gin.Context) bool {
-	if svc == nil {
-		return false
-	}
-	return IsModerator(svc, c)
-}
-
-func RequireAdmin(svc RoleReader) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if role := CurrentRole(svc, c); role != RoleAdmin && role != RoleOwner {
-			response.AbortError(c, http.StatusForbidden, "admin access required")
-			return
-		}
-		c.Next()
-	}
-}
-
-func RequireOwner(svc RoleReader) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if role := CurrentRole(svc, c); role != RoleOwner {
-			response.AbortError(c, http.StatusForbidden, "owner access required")
-			return
-		}
-		c.Next()
-	}
 }

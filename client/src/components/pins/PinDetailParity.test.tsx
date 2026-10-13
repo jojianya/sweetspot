@@ -277,6 +277,15 @@ describe.each(surfaces)("pin detail parity on %s", (_label, renderBody) => {
     expect(captured.collection?.pinId).toBe("pin-1");
   });
 
+  it("report opens the sheet with the pin id", async () => {
+    setViewer("user", "stranger-2");
+    await render(makePin());
+    findButton(container, "Report")?.click();
+    await act(async () => {});
+    expect(container.querySelector('[data-testid="report-sheet"]')).not.toBeNull();
+    expect(captured.report?.pinId).toBe("pin-1");
+  });
+
   it("hero click opens the lightbox with the hero src", async () => {
     setViewer(null, null);
     await render(makePin());

@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import PanelSheet from "@/components/PanelSheet";
-import { BookmarkIcon, BackIcon, CloseIcon } from "@/components/icons";
+import { BookmarkIcon, CloseIcon } from "@/components/icons";
+import { CollectionDetail } from "@/components/pins/CollectionDetail";
+import { CollectionsList } from "@/components/pins/CollectionsList";
+import { SavedPinsList } from "@/components/pins/SavedPinsList";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useCollections } from "@/hooks/useCollections";
 import { useCollectionDetail } from "@/hooks/useCollectionDetail";
 import { errorMessage } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
-import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
 import type { PinListEntry } from "@/lib/types";
-import { PinCoverImage } from "@/components/pins/PinCoverImage";
 
 interface SavedPinsPanelProps {
   onClose: () => void;
@@ -19,25 +20,6 @@ interface SavedPinsPanelProps {
 }
 
 type Tab = "saved" | "collections";
-
-/** Loading rows for either tab: thumbnail box plus two text lines. */
-function ListSkeleton({ label }: { label: string }) {
-  return (
-    <SkeletonRegion label={label}>
-      <ul className="space-y-1" role="list" aria-busy="true">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <li key={`skeleton-${i}`} className="flex items-center gap-3 rounded-xl px-2.5 py-2.5">
-            <Skeleton className="h-14 w-14 shrink-0 rounded-xl" />
-            <div className="min-w-0 flex-1 space-y-1">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-3 w-1/2" />
-            </div>
-          </li>
-        ))}
-      </ul>
-    </SkeletonRegion>
-  );
-}
 
 export default function SavedPinsPanel({
   onClose,
@@ -156,279 +138,51 @@ export default function SavedPinsPanel({
       <div className="flex-1 overflow-y-auto px-2 py-2">
         {openCollection ? (
           // Collection detail: pins inside plus a remove action per row.
-          <div className="px-1">
-            <div className="mb-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setOpenCollection(null)}
-                className="rounded-full p-1 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                aria-label="Back to collections"
-              >
-                <BackIcon />
-              </button>
-              {openCollection.description && (
-                <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                  {openCollection.description}
-                </p>
-              )}
-            </div>
-            {ownDetail && (
-              <label className="mb-2 flex cursor-pointer items-center gap-2 px-1 text-xs text-zinc-500 dark:text-zinc-400">
-                <input
-                  type="checkbox"
-                  checked={openCollection.is_private}
-                  disabled={togglingPrivate}
-                  onChange={(e) => void handleTogglePrivate(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded accent-rose-600 disabled:opacity-50"
-                />
-                Private — only you can see this collection
-              </label>
-            )}
-
-            {collectionError && (
-              <p className="mb-2 text-xs text-rose-600 dark:text-rose-400" role="alert">
-                {collectionError}{" "}
-                <button
-                  type="button"
-                  onClick={() => setCollectionError(null)}
-                  className="font-medium underline"
-                  aria-label="Dismiss error"
-                >
-                  Dismiss
-                </button>
-              </p>
-            )}
-
-            {openCollection.pins.length === 0 && (
-              <p className="px-3 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                No pins in this collection yet — open a pin and choose “Add to
-                collection”.
-              </p>
-            )}
-
-            <ul className="space-y-1">
-              {openCollection.pins.map((entry) => {
-                const active = entry.id === activeId;
-                return (
-                  <li
-                    key={entry.id}
-                    className={`flex items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors ${
-                      active
-                        ? "bg-sky-50 ring-1 ring-inset ring-sky-200 dark:bg-sky-950/50 dark:ring-sky-800"
-                        : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onOpenPin(entry)}
-                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                    >
-                      <PinCoverImage
-                        url={entry.cover_url}
-                        boxClass="h-14 w-14 rounded-xl"
-                        glyph={<BookmarkIcon className="h-4 w-4" />}
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                          {title(entry)}
-                        </span>
-                        <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
-                          {subtitle(entry)}
-                        </span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePin(openCollection.id, entry.id)}
-                      className="shrink-0 rounded-full p-1.5 text-zinc-300 transition-colors hover:bg-zinc-100 hover:text-rose-500 dark:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-rose-400"
-                      aria-label={`Remove ${title(entry)} from collection`}
-                    >
-                      <svg
-                        className="h-4 w-4"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden
-                      >
-                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                      </svg>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+          <CollectionDetail
+            collection={openCollection}
+            activeId={activeId}
+            onOpenPin={onOpenPin}
+            onBack={() => setOpenCollection(null)}
+            ownDetail={ownDetail}
+            togglingPrivate={togglingPrivate}
+            onTogglePrivate={handleTogglePrivate}
+            collectionError={collectionError}
+            onDismissError={() => setCollectionError(null)}
+            onRemovePin={(pinId) => handleRemovePin(openCollection.id, pinId)}
+            title={title}
+            subtitle={subtitle}
+          />
         ) : tab === "saved" ? (
-          <>
-            {loading && <ListSkeleton label="Loading saved pins…" />}
-
-            {!loading && error && (
-              <div className="px-3 py-8 text-center">
-                <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{error}</p>
-                <button
-                  type="button"
-                  onClick={retry}
-                  className="mt-3 rounded-full border border-zinc-200 px-4 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {!loading && !error && entries.length === 0 && (
-              <p className="px-3 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                No saved pins yet — tap the bookmark on any pin to save it.
-              </p>
-            )}
-
-            {!loading &&
-              !error &&
-              entries.map((entry) => {
-                const active = entry.id === activeId;
-                return (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    onClick={() => onOpenPin(entry)}
-                    aria-pressed={active}
-                    className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors ${
-                      active
-                        ? "bg-sky-50 ring-1 ring-inset ring-sky-200 dark:bg-sky-950/50 dark:ring-sky-800"
-                        : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    }`}
-                  >
-                    <PinCoverImage
-                      url={entry.cover_url}
-                      boxClass="h-14 w-14 rounded-xl"
-                      glyph={<BookmarkIcon className="h-4 w-4" />}
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {title(entry)}
-                      </span>
-                      <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
-                        {subtitle(entry)}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-              {hasMore && (
-                <div className="mt-2 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={loadMore}
-                    disabled={loadingMore}
-                    className="rounded-full border border-zinc-200 px-4 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                  >
-                    {loadingMore ? "Loading…" : `Load more (${entries.length} of ${savedCount})`}
-                  </button>
-                </div>
-              )}
-          </>
+          <SavedPinsList
+            entries={entries}
+            savedCount={savedCount}
+            loading={loading}
+            error={error}
+            retry={retry}
+            loadMore={loadMore}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            activeId={activeId}
+            onOpenPin={onOpenPin}
+            title={title}
+            subtitle={subtitle}
+          />
         ) : (
-          <>
-            {/* Collections tab */}
-            <div className="mb-2 flex gap-2 px-1">
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                maxLength={60}
-                placeholder="New collection name"
-                className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-                aria-label="New collection name"
-              />
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={!newName.trim() || creating}
-                className="shrink-0 rounded-lg bg-rose-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
-              >
-                {creating ? "…" : "Create"}
-              </button>
-            </div>
-            <label className="mb-3 flex cursor-pointer items-center gap-2 px-1 text-xs text-zinc-500 dark:text-zinc-400">
-              <input
-                type="checkbox"
-                checked={newPrivate}
-                onChange={(e) => setNewPrivate(e.target.checked)}
-                className="h-3.5 w-3.5 rounded accent-rose-600"
-              />
-              Private — only you can see it
-            </label>
-
-            {collectionError && !openCollection && (
-              <p className="mb-2 px-1 text-xs text-rose-600 dark:text-rose-400" role="alert">
-                {collectionError}{" "}
-                <button
-                  type="button"
-                  onClick={() => setCollectionError(null)}
-                  className="font-medium underline"
-                  aria-label="Dismiss error"
-                >
-                  Dismiss
-                </button>
-              </p>
-            )}
-
-            {collectionsLoading && <ListSkeleton label="Loading collections…" />}
-
-            {!collectionsLoading && collectionsError && (
-              <div className="px-3 py-8 text-center">
-                <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{collectionsError}</p>
-                <button
-                  type="button"
-                  onClick={collectionsRetry}
-                  className="mt-3 rounded-full border border-zinc-200 px-4 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {!collectionsLoading && !collectionsError && collectionList.length === 0 && (
-              <p className="px-3 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                No collections yet — create one above.
-              </p>
-            )}
-
-            <ul className="space-y-1">
-              {collectionList.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => openCollectionDetail(c.id)}
-                    disabled={openingId === c.id}
-                    className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-zinc-50 disabled:opacity-60 dark:hover:bg-zinc-800"
-                  >
-                    <PinCoverImage
-                      url={c.cover_url}
-                      boxClass="h-14 w-14 rounded-xl"
-                      glyph={<BookmarkIcon className="h-4 w-4" />}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {c.name}
-                        {c.is_private && (
-                          <span className="ml-1.5 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                            Private
-                          </span>
-                        )}
-                      </span>
-                      <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
-                        {c.pin_count} pin{c.pin_count === 1 ? "" : "s"}
-                        {openingId === c.id ? " · opening…" : ""}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
+          <CollectionsList
+            collectionList={collectionList}
+            collectionsLoading={collectionsLoading}
+            collectionsError={collectionsError}
+            collectionsRetry={collectionsRetry}
+            openingId={openingId}
+            openCollectionDetail={openCollectionDetail}
+            onDismissError={() => setCollectionError(null)}
+            newName={newName}
+            setNewName={setNewName}
+            newPrivate={newPrivate}
+            setNewPrivate={setNewPrivate}
+            creating={creating}
+            handleCreate={handleCreate}
+          />
         )}
       </div>
     </PanelSheet>

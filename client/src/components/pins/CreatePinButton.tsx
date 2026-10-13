@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CloseIcon } from "@/components/icons";
 import { createPin } from "@/lib/api";
@@ -8,6 +8,9 @@ import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
 import type { MapLocation } from "@/components/map/MapView";
 import { errorMessage, getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
+import { CreatePinForm } from "@/components/pins/CreatePinForm";
+import { PhotoPicker } from "@/components/pins/PhotoPicker";
+import { usePhotoPreviews } from "@/hooks/usePhotoPreviews";
 import { buildCreatePinPayload, validatePhotoFiles } from "@/lib/utils/photoValidation";
 
 interface CreatePinButtonProps {
@@ -42,18 +45,8 @@ export default function CreatePinButton({
   const [submitting, setSubmitting] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  const previews = useMemo(
-    () => files.map((f) => URL.createObjectURL(f)),
-    [files]
-  );
-
-  useEffect(() => {
-    return () => {
-      previews.forEach((u) => URL.revokeObjectURL(u));
-    };
-  }, [previews]);
+  const previews = usePhotoPreviews(files);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -196,52 +189,15 @@ export default function CreatePinButton({
             </div>
           ) : (
             <div className="space-y-4">
-              <button
-                type="button"
-                onClick={() => inputRef.current?.click()}
-                className="flex w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-zinc-300 py-8 text-zinc-500 hover:border-rose-400 hover:text-rose-600 dark:border-zinc-700 dark:text-zinc-400"
-              >
-                <span className="text-sm font-medium">
-                  {files.length > 0
-                    ? `${files.length} photo${files.length > 1 ? "s" : ""} selected`
-                    : "Tap to add photos"}
-                </span>
-                <span className="text-xs">JPG/PNG, up to 5 photos, 10MB each</span>
-              </button>
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/jpeg,image/png"
-                multiple
-                className="hidden"
-                aria-label="Add photos"
-                onChange={(e) => handleFiles(e.target.files)}
+              <PhotoPicker
+                files={files}
+                previews={previews}
+                onFiles={handleFiles}
+                onRemove={removeFile}
+                title="Tap to add photos"
+                hint="JPG/PNG, up to 5 photos, 10MB each"
+                inputAriaLabel="Add photos"
               />
-
-              {files.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {files.map((f, i) => (
-                    <div
-                      key={`${f.name}-${i}`}
-                      className="group relative h-20 w-20 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
-                    >
-                      <img
-                        src={previews[i]}
-                        alt={f.name}
-                        className="h-full w-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeFile(i)}
-                        className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                        aria-label={`Remove ${f.name}`}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
 
               <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700">
                 <span className="truncate text-zinc-500 dark:text-zinc-400">
@@ -257,45 +213,16 @@ export default function CreatePinButton({
                 </button>
               </div>
 
-              <select
-                value={selectedCategoryId ?? ""}
-                onChange={(e) => setCategoryId(Number(e.target.value))}
-                disabled={categories.length === 0}
-                aria-label="Category"
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-              >
-                {selectedCategoryId === null && <option value="">Choose a category</option>}
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="text"
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                maxLength={200}
-                placeholder="Add a caption (optional)"
-                aria-label="Add a caption"
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              <CreatePinForm
+                categories={categories}
+                selectedCategoryId={selectedCategoryId}
+                onCategoryChange={setCategoryId}
+                caption={caption}
+                onCaptionChange={setCaption}
+                error={error}
+                submitting={submitting}
+                onSubmit={submit}
               />
-
-              {error && (
-                <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">
-                  {error}
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={submit}
-                disabled={submitting || selectedCategoryId === null}
-                className="w-full rounded-lg bg-rose-600 px-4 py-2.5 font-medium text-white hover:bg-rose-700 disabled:opacity-60"
-              >
-                {submitting ? "Posting…" : "Post to map"}
-              </button>
             </div>
           )}
         </div>

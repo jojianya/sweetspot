@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import { fetchReports, reviewReport } from "@/lib/api";
 import { errorMessage, relativeTime } from "@/lib/utils";
-import { useAdminSession } from "@/hooks/useAdminSession";
+import { AdminGate } from "@/components/admin/AdminGate";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { useAuth } from "@/store/auth";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageEmpty, PageError, PageLoading } from "@/components/ui/PageState";
@@ -41,57 +42,16 @@ export function reportEmptyCopy(status: ReportStatus | "all"): {
 }
 
 export default function ReportsPage() {
-  const { user } = useAuth();
-  // The cached role is not a credential, so /me decides whether this screen
-  // renders at all. Until it answers, authorized is false and the reports tree
-  // below is never mounted, so no moderation request goes out for a signed-out
-  // or unprivileged caller.
-  const { authorized, checked } = useAdminSession("moderator");
-
-  if (!user) {
-    return (
-      <>
-        <Navbar backHref="/" backLabel="Back to map" />
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Sign in to moderate
-          </h1>
-          <Link
-            href="/login"
-            className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
-          >
-            Log in
-          </Link>
-        </div>
-      </>
-    );
-  }
-
-  if (!authorized) {
-    return (
-      <>
-        <Navbar backHref="/" backLabel="Back to map" />
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Admins only
-          </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {checked
-              ? "You don't have permission to review reports."
-              : "Checking your access…"}
-          </p>
-          <Link
-            href="/"
-            className="rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white hover:bg-rose-700"
-          >
-            Back to map
-          </Link>
-        </div>
-      </>
-    );
-  }
-
-  return <ReportsShell />;
+  return (
+    <AdminGate
+      required="moderator"
+      signedOutTitle="Sign in to moderate"
+      deniedTitle="Admins only"
+      deniedCopy="You don't have permission to review reports."
+    >
+      <ReportsShell />
+    </AdminGate>
+  );
 }
 
 /**
@@ -101,55 +61,47 @@ export default function ReportsPage() {
 function ReportsShell() {
   const { user } = useAuth();
   const [status, setStatus] = useState<ReportStatus | "all">("pending");
-  const [reports, setReports] = useState<ReportEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  // Review failures surface in the same page-level error as fetch failures,
+  // but live in their own slot so a refetch never has to clear them first.
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchReports(status === "all" ? {} : { status })
-      .then((data) => {
-        if (!cancelled) setReports(data);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(errorMessage(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [status, attempt]);
-
-  const selectStatus = (value: ReportStatus | "all") => {
-    setStatus(value);
-    setLoading(true);
-    setError(null);
-  };
+  const {
+    data,
+    loading,
+    error: fetchError,
+    retry: refetch,
+    setData,
+  } = useAsyncData<ReportEntry[]>(() => fetchReports(status === "all" ? {} : { status }), [
+    status,
+  ]);
+  const reports = data ?? [];
+  const error = fetchError ?? reviewError;
 
   const retry = useCallback(() => {
-    setError(null);
-    setLoading(true);
-    setAttempt((n) => n + 1);
-  }, []);
+    setReviewError(null);
+    refetch();
+  }, [refetch]);
+
+  const selectStatus = (value: ReportStatus | "all") => {
+    setReviewError(null);
+    setStatus(value);
+  };
 
   const handleReview = async (report: ReportEntry, action: "approve" | "dismiss") => {
     if (busyId) return;
     setBusyId(report.id);
-    setError(null);
+    setReviewError(null);
     try {
       await reviewReport(report.id, action);
       // Refilter: resolved reports leave the pending tab, others refresh.
-      setReports((prev) => prev.filter((r) => r.id !== report.id));
+      setData((prev) => (prev ?? []).filter((r) => r.id !== report.id));
     } catch (e) {
       const msg = errorMessage(e);
       if (/already resolved/i.test(msg)) {
         retry();
       } else {
-        setError(msg);
+        setReviewError(msg);
       }
     } finally {
       setBusyId(null);
@@ -166,15 +118,15 @@ function ReportsShell() {
               <li key={`skeleton-${i}`}>
                 <Skeleton className="rounded-xl border border-zinc-200/70 p-4 dark:border-zinc-800" aria-hidden="true">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    <Skeleton className="h-3 w-20 shrink-0" style={{ height: "12px" }} />
-                    <Skeleton className="h-3 w-16 shrink-0" style={{ height: "12px" }} />
-                    <Skeleton className="h-3 w-24 shrink-0" style={{ height: "12px" }} />
-                    <Skeleton className="h-3 w-16 shrink-0" style={{ height: "12px" }} />
-                    <Skeleton className="h-3 w-16 shrink-0" style={{ height: "12px" }} />
-                    <Skeleton className="h-3 w-10 shrink-0 rounded-full" style={{ height: "12px" }} />
+                    <Skeleton className="h-3 w-20 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                    <Skeleton className="h-3 w-24 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                    <Skeleton className="h-3 w-10 shrink-0 rounded-full" />
                   </div>
-                  <Skeleton className="mt-2 h-4 w-full" style={{ height: "16px" }} />
-                  <Skeleton className="mt-1 h-3 w-3/4" style={{ height: "12px" }} />
+                  <Skeleton className="mt-2 h-4 w-full" />
+                  <Skeleton className="mt-1 h-3 w-3/4" />
                 </Skeleton>
               </li>
             ))}

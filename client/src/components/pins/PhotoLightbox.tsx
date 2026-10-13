@@ -1,17 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { CloseIcon } from "@/components/icons";
+import { CloseIcon, iconStroke } from "@/components/icons";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
-
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  viewBox: "0 0 24 24",
-};
 
 type PhotoLightboxProps = {
   src: string;
@@ -80,7 +71,7 @@ export default function PhotoLightbox({
             className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur hover:bg-white/20"
             aria-label="Previous photo"
           >
-            <svg className="h-6 w-6" {...stroke} aria-hidden>
+            <svg className="h-6 w-6" {...iconStroke} aria-hidden>
               <path d="M15 19l-7-7 7-7" />
             </svg>
           </button>
@@ -93,7 +84,7 @@ export default function PhotoLightbox({
             className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur hover:bg-white/20"
             aria-label="Next photo"
           >
-            <svg className="h-6 w-6" {...stroke} aria-hidden>
+            <svg className="h-6 w-6" {...iconStroke} aria-hidden>
               <path d="M9 5l7 7-7 7" />
             </svg>
           </button>

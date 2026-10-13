@@ -1,24 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
-import PhotoLightbox from "@/components/pins/PhotoLightbox";
+import { PhotoThumbStrip } from "@/components/pins/PhotoThumbStrip";
+import { PinActionSheets } from "@/components/pins/PinActionSheets";
 import CommentsSection from "@/components/pins/CommentsSection";
-import PinEditSheet from "@/components/pins/PinEditSheet";
-import AddToCollectionSheet from "@/components/pins/AddToCollectionSheet";
-import ReportSheet from "@/components/pins/ReportSheet";
 import PinViews from "./PinViews";
 import { BookmarkIcon, PersonIcon, PinIcon } from "@/components/icons";
 import { useCategories } from "@/hooks/useCategories";
+import { useEditablePin } from "@/hooks/useEditablePin";
 import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/hooks/useOptimisticSave";
-import { usePinView } from "@/hooks/usePinView";
 import { usePinShare } from "@/hooks/usePinShare";
-import { formatTime, parsePoint } from "@/lib/utils";
-import { resolveMediaUrl } from "@/lib/media";
-import { categorySlug } from "@/lib/utils/category";
+import { isPinOwner } from "@/lib/utils/pinPermission";
+import { formatTime } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 import type { PinDetail } from "@/lib/types";
 
@@ -30,45 +27,28 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
   const router = useRouter();
   const { user } = useAuth();
   const { categories } = useCategories();
-  const [pin, setPin] = useState<PinDetail>(initialPin);
-  const [index, setIndex] = useState(0);
+  const {
+    pin,
+    index,
+    setIndex,
+    count,
+    heroSrc,
+    lightboxSrc,
+    point,
+    name,
+    handleUpdated,
+  } = useEditablePin(initialPin);
   const [lightbox, setLightbox] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { saved, saving, error: saveError, handleSave } = useOptimisticSave(pin.id);
-  const view = usePinView(pin.id, pin.user_id);
 
-  // Applies the counted total to local pin state once per fetch. The parent
-  // remounts via route change on the permalink page, so no pinId guard is
-  // needed here.
-  useEffect(() => {
-    if (!view) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- merge the freshly counted total into local pin state once per fetch
-    setPin((prev) => ({ ...prev, views: view.views }));
-  }, [view]);
-
-  const photo = pin.photos[index];
-  const count = pin.photos.length;
-  const heroSrc = photo ? resolveMediaUrl(photo.photo_url) : "";
-  const lightboxSrc = photo ? resolveMediaUrl(photo.photo_url) : "";
-  const point = useMemo(() => parsePoint(pin.location), [pin.location]);
-
-  const isOwner =
-    user !== null && (user.id === pin.user_id || user.role === "admin" || user.role === "owner");
+  const isOwner = isPinOwner(user, pin.user_id);
 
   const address = usePinAddress(point);
 
   const { copied, handleShare, goDirections } = usePinShare(pin.caption, pin.id, point);
-
-  // The edit sheet hands back the updated pin (its response carries the
-  // current photos), so there is nothing left to refetch.
-  const handleUpdated = (updated: PinDetail) => {
-    setPin(updated);
-    setIndex((prev) => Math.min(prev, Math.max(0, updated.photos.length - 1)));
-  };
-
-  const name = pin.caption?.trim();
 
   return (
     <>
@@ -98,34 +78,12 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
 
           {count > 1 && (
             <div className="flex gap-2 overflow-x-auto p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {pin.photos.map((p, i) => {
-                const thumbSrc =
-                  resolveMediaUrl(p.thumbnail_url) || resolveMediaUrl(p.photo_url);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setIndex(i)}
-                    aria-label={`Photo ${i + 1} of ${count}`}
-                    aria-pressed={i === index}
-                    className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
-                      i === index
-                        ? "border-sky-500"
-                        : "border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
-                    }`}
-                  >
-                    {thumbSrc ? (
-                      <img
-                        src={thumbSrc}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : null}
-                  </button>
-                );
-              })}
+              <PhotoThumbStrip
+                photos={pin.photos}
+                index={index}
+                onSelect={setIndex}
+                thumbBoxClass="h-14 w-14 rounded-lg"
+              />
             </div>
           )}
         </div>
@@ -248,44 +206,25 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
         </div>
       </div>
 
-      {lightbox && lightboxSrc ? (
-        <PhotoLightbox
-          src={lightboxSrc}
-          alt={name ?? "Pin photo"}
-          count={count}
-          index={index}
-          onNavigate={setIndex}
-          onClose={() => setLightbox(false)}
-        />
-      ) : null}
-
-      {editOpen && (
-        <PinEditSheet
-          pin={pin}
-          categories={
-            categories.length > 0
-              ? categories
-              : [
-                  {
-                    id: pin.category_id,
-                    name: pin.category ?? "Other",
-                    slug: categorySlug(pin.category ?? "Other"),
-                  },
-                ]
-          }
-          onClose={() => setEditOpen(false)}
-          onUpdated={handleUpdated}
-          onDeleted={() => router.push("/")}
-        />
-      )}
-
-      {collectionOpen && (
-        <AddToCollectionSheet pinId={pin.id} onClose={() => setCollectionOpen(false)} />
-      )}
-
-      {reportOpen && (
-        <ReportSheet pinId={pin.id} onClose={() => setReportOpen(false)} />
-      )}
+      <PinActionSheets
+        pin={pin}
+        categories={categories}
+        lightbox={lightbox}
+        lightboxSrc={lightboxSrc}
+        name={name}
+        count={count}
+        index={index}
+        editOpen={editOpen}
+        collectionOpen={collectionOpen}
+        reportOpen={reportOpen}
+        onNavigate={setIndex}
+        onCloseLightbox={() => setLightbox(false)}
+        onCloseEdit={() => setEditOpen(false)}
+        onUpdated={handleUpdated}
+        onDeleted={() => router.push("/")}
+        onCloseCollection={() => setCollectionOpen(false)}
+        onCloseReport={() => setReportOpen(false)}
+      />
     </>
   );
 }

@@ -71,11 +71,29 @@ func (b *Broker) PublishRemoval(ctx context.Context, id string, location string)
 }
 
 // Subscribe opens a subscription to the pin channel. Callers must Close it.
-func (b *Broker) Subscribe(ctx context.Context) *redis.PubSub {
-	return b.client.Subscribe(ctx, pinsChannel)
+//
+// The error must not be dropped. go-redis's Client.Subscribe discards the
+// error from PubSub.Subscribe (redis.go: `_ = pubsub.Subscribe(...)`), so a
+// subscription that could not be established comes back as a *redis.PubSub
+// that looks healthy while its channel will never fire. Subscribing in two
+// steps — an empty Subscribe that cannot fail, then the explicit one that
+// returns its error — keeps it, so Stream can answer 503 instead of handing
+// the client a stream that stays open and delivers nothing.
+func (b *Broker) Subscribe(ctx context.Context) (*redis.PubSub, error) {
+	return subscribeChannel(ctx, b.client, pinsChannel)
 }
 
 // SubscribeRemoved opens a subscription to the pin removed channel.
-func (b *Broker) SubscribeRemoved(ctx context.Context) *redis.PubSub {
-	return b.client.Subscribe(ctx, pinRemovedChannel)
+func (b *Broker) SubscribeRemoved(ctx context.Context) (*redis.PubSub, error) {
+	return subscribeChannel(ctx, b.client, pinRemovedChannel)
+}
+
+// subscribeChannel subscribes to one channel and reports any failure.
+func subscribeChannel(ctx context.Context, client *redis.Client, channel string) (*redis.PubSub, error) {
+	ps := client.Subscribe(ctx) // no channels: nothing to fail here
+	if err := ps.Subscribe(ctx, channel); err != nil {
+		ps.Close()
+		return nil, err
+	}
+	return ps, nil
 }

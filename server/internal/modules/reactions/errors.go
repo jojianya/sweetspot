@@ -1,12 +1,15 @@
 package reactions
 
-import "errors"
+import (
+	"errors"
 
-// ErrNotFound reports a pin that does not exist or is hidden. The message
-// matches pins.ErrNotFound so the handler answers the same "pin not found" the
-// rest of the API uses: a hidden pin must be indistinguishable from a missing
-// one, and telling the two apart would confirm that a moderated pin exists.
-var ErrNotFound = errors.New("pin not found")
+	"github.com/jojianya/sweetspot247-backend/internal/modules/pins"
+)
+
+// ErrNotFound is pins.ErrNotFound. A hidden pin must be indistinguishable
+// from a missing one, and telling the two apart would confirm that a
+// moderated pin exists — so the two cases share one sentinel value.
+var ErrNotFound = pins.ErrNotFound
 
 // ErrOwnPin reports a reaction on the caller's own pin. Authors cannot react
 // to their own pin, so the UI hides the control and this is the server-side

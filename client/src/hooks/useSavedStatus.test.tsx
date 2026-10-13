@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSavedStatus } from "./useFavorites";
 
 const apiMocks = vi.hoisted(() => ({
-  fetchFavoriteIDs: vi.fn(),
+  fetchIsSaved: vi.fn(),
   fetchFavorites: vi.fn(),
 }));
 
@@ -29,7 +29,7 @@ describe("useSavedStatus", () => {
   let root: Root;
 
   beforeEach(() => {
-    apiMocks.fetchFavoriteIDs.mockReset().mockResolvedValue([]);
+    apiMocks.fetchIsSaved.mockReset().mockResolvedValue(false);
     const actEnvironment = globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT: boolean;
     };
@@ -50,34 +50,43 @@ describe("useSavedStatus", () => {
     return container.textContent ?? "";
   }
 
-  it("reports saved for a pin in the id list", async () => {
-    apiMocks.fetchFavoriteIDs.mockResolvedValue(["pin-1"]);
+  it("reports saved for a pin the per-pin check says is saved", async () => {
+    apiMocks.fetchIsSaved.mockResolvedValue(true);
     await act(async () => {
       root.render(createElement(SavedProbe, { pinId: "pin-1", enabled: true }));
     });
     expect(text()).toBe("saved");
+  });
+
+  it("asks the server about one pin, not the whole id list", async () => {
+    apiMocks.fetchIsSaved.mockResolvedValue(true);
+    await act(async () => {
+      root.render(createElement(SavedProbe, { pinId: "pin-1", enabled: true }));
+    });
+    expect(apiMocks.fetchIsSaved).toHaveBeenCalledTimes(1);
+    expect(apiMocks.fetchIsSaved).toHaveBeenCalledWith("pin-1");
   });
 
   it("does not fetch while disabled", async () => {
     await act(async () => {
       root.render(createElement(SavedProbe, { pinId: "pin-1", enabled: false }));
     });
-    expect(apiMocks.fetchFavoriteIDs).not.toHaveBeenCalled();
+    expect(apiMocks.fetchIsSaved).not.toHaveBeenCalled();
     expect(text()).toBe("unsaved");
   });
 
   // The badge belongs to one pin: switching pins must not show the previous
   // pin's answer, and a late lookup for the old pin must not win.
   it("resets when the pin changes", async () => {
-    apiMocks.fetchFavoriteIDs.mockResolvedValue(["pin-1"]);
+    apiMocks.fetchIsSaved.mockResolvedValue(true);
     await act(async () => {
       root.render(createElement(SavedProbe, { pinId: "pin-1", enabled: true }));
     });
     expect(text()).toBe("saved");
 
-    // pin-2 is not in the list, so the pending lookup will answer "unsaved",
-    // but the stale "saved" must already be gone on this render.
-    apiMocks.fetchFavoriteIDs.mockResolvedValue([]);
+    // pin-2 is not saved, so the pending lookup will answer "unsaved", but the
+    // stale "saved" must already be gone on this render.
+    apiMocks.fetchIsSaved.mockResolvedValue(false);
     await act(async () => {
       root.render(createElement(SavedProbe, { pinId: "pin-2", enabled: true }));
     });
@@ -85,7 +94,7 @@ describe("useSavedStatus", () => {
   });
 
   it("resets when disabled after being enabled", async () => {
-    apiMocks.fetchFavoriteIDs.mockResolvedValue(["pin-1"]);
+    apiMocks.fetchIsSaved.mockResolvedValue(true);
     await act(async () => {
       root.render(createElement(SavedProbe, { pinId: "pin-1", enabled: true }));
     });
@@ -98,9 +107,9 @@ describe("useSavedStatus", () => {
   });
 
   it("ignores a superseded lookup that resolves last", async () => {
-    const first = deferred<string[]>();
-    apiMocks.fetchFavoriteIDs.mockImplementationOnce(() => first.promise);
-    apiMocks.fetchFavoriteIDs.mockResolvedValueOnce(["pin-2"]);
+    const first = deferred<boolean>();
+    apiMocks.fetchIsSaved.mockImplementationOnce(() => first.promise);
+    apiMocks.fetchIsSaved.mockResolvedValueOnce(true);
 
     await act(async () => {
       root.render(createElement(SavedProbe, { pinId: "pin-1", enabled: true }));
@@ -109,9 +118,9 @@ describe("useSavedStatus", () => {
       root.render(createElement(SavedProbe, { pinId: "pin-2", enabled: true }));
     });
     await act(async () => {
-      first.resolve(["pin-1"]);
+      first.resolve(true);
       await first.promise;
     });
-    expect(text()).toBe("saved"); // pin-2 is in its own list
+    expect(text()).toBe("saved"); // pin-2's own answer wins
   });
 });

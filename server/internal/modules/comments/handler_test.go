@@ -102,3 +102,29 @@ func TestCreateHiddenPinReturns404(t *testing.T) {
 		t.Fatalf("status = %d, want 404 (body=%q)", w.Code, w.Body.String())
 	}
 }
+
+// TestDeleteWithNoRoleReaderDoesNotPanic covers the latent panic: every test in
+// this package builds the handler with a nil RoleReader, and Delete is the only
+// handler that resolves moderation. users.IsModerator -> CurrentRole falls back
+// to a live role lookup when the middleware cached no role, and that lookup
+// dereferences the reader. With no guard the call panics; with one, the caller
+// is simply not a moderator, which is the correct answer for an unwired handler.
+func TestDeleteWithNoRoleReaderDoesNotPanic(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewHandler(&fakeRepo{}, nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = commentRequest(http.MethodDelete, "")
+	c.Params = gin.Params{{Key: "id", Value: "c1"}}
+	// A signed-in caller with no role cached on the context: exactly the shape
+	// that makes CurrentRole reach for the nil reader.
+	c.Set(middleware.CtxUserID, "u1")
+
+	h.Delete(c)
+
+	// The author path runs (the fake repo returns a comment with a nil UserID,
+	// so the caller does not own it and the result is 403, not a panic).
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (body=%q)", w.Code, w.Body.String())
+	}
+}

@@ -85,11 +85,11 @@ export default function CommentsSection({ pinId, compact = false }: CommentsSect
                 <Skeleton className="h-8 w-8 rounded-full shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
-                    <Skeleton className="h-4 w-24 shrink-0" style={{ height: "16px" }} />
-                    <Skeleton className="h-3 w-16 shrink-0" style={{ height: "12px" }} />
+                    <Skeleton className="h-4 w-24 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
                   </div>
-                  <Skeleton className="mt-1 h-3 w-3/4" style={{ height: "12px" }} />
-                  <Skeleton className="h-3 w-1/2" style={{ height: "12px" }} />
+                  <Skeleton className="mt-1 h-3 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
                 </div>
               </li>
             ))}

@@ -1,6 +1,7 @@
 package users
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -124,4 +125,37 @@ func validateSocialLink(key, value string) error {
 		return fmt.Errorf("socials %s must be a plain handle or an http(s) URL, not a %s link", key, scheme)
 	}
 	return nil
+}
+
+// parseSocials decodes the `socials` form field into a flat JSON object of
+// string, boolean, or number values, with bounded sizes.
+func parseSocials(raw string) (map[string]any, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, errors.New("socials must be a JSON object")
+	}
+	var socials map[string]any
+	if err := json.Unmarshal([]byte(raw), &socials); err != nil {
+		return nil, errors.New("socials must be a JSON object")
+	}
+	if len(socials) > maxSocialKeys {
+		return nil, errors.New("too many socials (max 20)")
+	}
+	for k, v := range socials {
+		if utf8.RuneCountInString(k) > maxSocialKeyLen {
+			return nil, errors.New("social name too long")
+		}
+		switch val := v.(type) {
+		case string:
+			if utf8.RuneCountInString(val) > maxSocialValLen {
+				return nil, errors.New("social value too long")
+			}
+			if err := validateSocialLink(k, val); err != nil {
+				return nil, err
+			}
+		case bool, float64:
+		default:
+			return nil, errors.New("socials values must be strings, booleans, or numbers")
+		}
+	}
+	return socials, nil
 }

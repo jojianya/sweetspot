@@ -42,8 +42,6 @@ func (m LogMailer) SendPasswordReset(_ context.Context, to, link string) error {
 // fronted by a tiny glue endpoint, so no vendor SDK is vendored into the
 // server. The raw token travels only inside the request body (never a URL,
 // never a log line).
-func WebhookMailer_() {}
-
 type WebhookMailer struct {
 	URL     string
 	Key     string

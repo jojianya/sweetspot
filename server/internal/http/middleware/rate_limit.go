@@ -60,6 +60,38 @@ func New(limit int, window time.Duration) *Limiter {
 	}
 }
 
+// Limits holds the per-account and per-IP budgets for one mutating action.
+// Window is shared: splitting it would let a caller produce a per-user and
+// per-IP window that disagree, which is a configuration nobody wants.
+type Limits struct {
+	PerUser int
+	PerIP   int
+	Window  time.Duration
+}
+
+// Production budgets for human-paced toggles (saves, good-spots): reacting to
+// a screen of pins one per second is well inside 30/min, which leaves plenty
+// of headroom for a human while still stopping a hammering script.
+const (
+	DefaultPerUserActions = 30
+	DefaultPerIPActions   = 120
+)
+
+// WithDefaults fills zero budgets with the production defaults, so the zero
+// value keeps production behavior and callers only set what they override.
+func (l Limits) WithDefaults() Limits {
+	if l.PerUser <= 0 {
+		l.PerUser = DefaultPerUserActions
+	}
+	if l.PerIP <= 0 {
+		l.PerIP = DefaultPerIPActions
+	}
+	if l.Window <= 0 {
+		l.Window = time.Minute
+	}
+	return l
+}
+
 func (l *Limiter) AllowKey(key string) bool {
 	now := time.Now()
 
@@ -188,6 +220,31 @@ func (l *Limiter) Middleware() gin.HandlerFunc {
 func (l *Limiter) MiddlewareKeyed(keyFn func(*gin.Context) string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !l.AllowKey(keyFn(c)) {
+			response.AbortError(c, http.StatusTooManyRequests, "too many requests, try again later")
+			return
+		}
+		c.Next()
+	}
+}
+
+// MiddlewareUserKeyed rate-limits authenticated callers by account
+// (keyPrefix + user ID).
+//
+// If requireAuth is true, anonymous callers receive 401 Unauthorized.
+// If requireAuth is false, anonymous callers pass through without consuming
+// the per-user budget (use with a per-IP limiter for flood protection).
+func (l *Limiter) MiddlewareUserKeyed(keyPrefix string, requireAuth bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uid := GetUserID(c)
+		if uid == "" {
+			if requireAuth {
+				response.AbortError(c, http.StatusUnauthorized, "auth required")
+				return
+			}
+			c.Next()
+			return
+		}
+		if !l.AllowKey(keyPrefix + uid) {
 			response.AbortError(c, http.StatusTooManyRequests, "too many requests, try again later")
 			return
 		}

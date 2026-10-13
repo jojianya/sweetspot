@@ -42,10 +42,6 @@ export async function updateCollection(
   });
 }
 
-export async function deleteCollection(id: string): Promise<void> {
-  await api.delete(`/collections/${id}`);
-}
-
 export async function addPinToCollection(collectionId: string, pinId: string): Promise<void> {
   await api.put(`/collections/${collectionId}/pins/${pinId}`);
 }

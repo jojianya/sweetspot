@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useClearOnChange } from "@/hooks/useClearOnChange";
 import { reverseGeocode } from "@/lib/api/geocoding";
 
 /**
@@ -17,11 +18,7 @@ export function usePinAddress(point: { lat: number; lng: number } | null): strin
   // a superseded lookup; this stops the old address from being shown against
   // the new point while its own lookup is still in flight.
   const pointKey = point ? `${point.lat},${point.lng}` : "";
-  const [prevKey, setPrevKey] = useState(pointKey);
-  if (prevKey !== pointKey) {
-    setPrevKey(pointKey);
-    setAddress(null);
-  }
+  useClearOnChange(pointKey, () => setAddress(null));
 
   useEffect(() => {
     if (!point) return;

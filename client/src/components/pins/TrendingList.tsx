@@ -1,23 +1,14 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { CloseIcon } from "@/components/icons";
+import { CloseIcon, iconStroke } from "@/components/icons";
 import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
 import type { TrendingPin } from "@/lib/types";
-import { resolveMediaUrl } from "@/lib/media";
-
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  viewBox: "0 0 24 24",
-};
+import { PinCoverImage } from "@/components/pins/PinCoverImage";
 
 export function TrendingIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
-    <svg className={className} {...stroke} aria-hidden>
+    <svg className={className} {...iconStroke} aria-hidden>
       <path d="M3 17l6-6 4 4 8-8" />
       <path d="M14 7h7v7" />
     </svg>
@@ -81,11 +72,11 @@ export default function TrendingList({
           <ul className="max-h-80 space-y-0.5 overflow-y-auto p-2" role="list" aria-busy="true">
             {Array.from({ length: 5 }).map((_, i) => (
               <li key={`skeleton-${i}`} className="flex items-center gap-3 rounded-xl px-2 py-2">
-                <Skeleton className="w-5 shrink-0" style={{ width: "20px", height: "20px" }} />
+                <Skeleton className="h-5 w-5 shrink-0" />
                 <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
                 <div className="min-w-0 flex-1 space-y-1">
-                  <Skeleton className="h-4 w-3/4" style={{ height: "16px" }} />
-                  <Skeleton className="h-3 w-1/2" style={{ height: "12px" }} />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
                 </div>
               </li>
             ))}
@@ -111,18 +102,12 @@ export default function TrendingList({
                 <span className="w-5 shrink-0 text-center text-xs font-bold text-zinc-400 dark:text-zinc-500">
                   {i + 1}
                 </span>
-                {(() => {
-                  const cover = resolveMediaUrl(pin.cover_url);
-                  return cover ? (
-                    <img
-                      src={cover}
-                      alt=""
-                      className="h-10 w-10 shrink-0 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="h-10 w-10 shrink-0 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
-                  );
-                })()}
+                <PinCoverImage
+                  url={pin.cover_url}
+                  boxClass="h-10 w-10 rounded-lg"
+                  lazy={false}
+                  fallbackClassName="bg-zinc-200 dark:bg-zinc-800"
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
                     {pin.caption?.trim() || "Untitled pin"}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
@@ -10,12 +10,12 @@ import CommentsSection from "@/components/pins/CommentsSection";
 import PinViews from "./PinViews";
 import { BookmarkIcon, PersonIcon, PinIcon } from "@/components/icons";
 import { useCategories } from "@/hooks/useCategories";
+import { useEditablePin } from "@/hooks/useEditablePin";
 import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/hooks/useOptimisticSave";
-import { usePinView } from "@/hooks/usePinView";
 import { usePinShare } from "@/hooks/usePinShare";
-import { formatTime, parsePoint } from "@/lib/utils";
-import { resolveMediaUrl } from "@/lib/media";
+import { isPinOwner } from "@/lib/utils/pinPermission";
+import { formatTime } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 import type { PinDetail } from "@/lib/types";
 
@@ -27,45 +27,28 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
   const router = useRouter();
   const { user } = useAuth();
   const { categories } = useCategories();
-  const [pin, setPin] = useState<PinDetail>(initialPin);
-  const [index, setIndex] = useState(0);
+  const {
+    pin,
+    index,
+    setIndex,
+    count,
+    heroSrc,
+    lightboxSrc,
+    point,
+    name,
+    handleUpdated,
+  } = useEditablePin(initialPin);
   const [lightbox, setLightbox] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { saved, saving, error: saveError, handleSave } = useOptimisticSave(pin.id);
-  const view = usePinView(pin.id, pin.user_id);
 
-  // Applies the counted total to local pin state once per fetch. The parent
-  // remounts via route change on the permalink page, so no pinId guard is
-  // needed here.
-  useEffect(() => {
-    if (!view) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- merge the freshly counted total into local pin state once per fetch
-    setPin((prev) => ({ ...prev, views: view.views }));
-  }, [view]);
-
-  const photo = pin.photos[index];
-  const count = pin.photos.length;
-  const heroSrc = photo ? resolveMediaUrl(photo.photo_url) : "";
-  const lightboxSrc = photo ? resolveMediaUrl(photo.photo_url) : "";
-  const point = useMemo(() => parsePoint(pin.location), [pin.location]);
-
-  const isOwner =
-    user !== null && (user.id === pin.user_id || user.role === "admin" || user.role === "owner");
+  const isOwner = isPinOwner(user, pin.user_id);
 
   const address = usePinAddress(point);
 
   const { copied, handleShare, goDirections } = usePinShare(pin.caption, pin.id, point);
-
-  // The edit sheet hands back the updated pin (its response carries the
-  // current photos), so there is nothing left to refetch.
-  const handleUpdated = (updated: PinDetail) => {
-    setPin(updated);
-    setIndex((prev) => Math.min(prev, Math.max(0, updated.photos.length - 1)));
-  };
-
-  const name = pin.caption?.trim();
 
   return (
     <>

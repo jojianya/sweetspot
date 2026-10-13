@@ -10,7 +10,9 @@ import (
 
 // ParseCategoryID parses the optional "category" query param into a *int.
 // Absent (or blank) yields (nil, true). Present-but-not-an-integer writes a
-// 400 response and yields (nil, false).
+// 400 response and yields (nil, false). Surrounding whitespace is trimmed:
+// the pins list keeps its own strict inline parse (padded values are 400),
+// so this helper serves callers that already trim, like the realtime stream.
 func ParseCategoryID(c *gin.Context) (*int, bool) {
 	raw := strings.TrimSpace(c.Query("category"))
 	if raw == "" {

@@ -14,6 +14,7 @@ import {
   ShareIcon,
 } from "@/components/icons";
 import PhotoLightbox from "./PhotoLightbox";
+import { PhotoThumbStrip } from "./PhotoThumbStrip";
 import CommentsSection from "./CommentsSection";
 import PinEditSheet from "./PinEditSheet";
 import AddToCollectionSheet from "./AddToCollectionSheet";
@@ -217,32 +218,12 @@ export default function PinDetailPanel({ pin: initialPin, onClose, onDeleted }: 
             <div className="mt-5 border-t border-zinc-100 pt-4 dark:border-zinc-800">
               <p className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Photos</p>
               <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {pin.photos.map((p, i) => {
-                  const thumbSrc =
-                    resolveMediaUrl(p.thumbnail_url) || resolveMediaUrl(p.photo_url);
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setIndex(i)}
-                      aria-label={`Photo ${i + 1} of ${count}`}
-                      aria-pressed={i === index}
-                      className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 transition-colors ${
-                        i === index ? "border-sky-500" : "border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
-                      }`}
-                    >
-                      {thumbSrc ? (
-                        <img
-                          src={thumbSrc}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : null}
-                    </button>
-                  );
-                })}
+                <PhotoThumbStrip
+                  photos={pin.photos}
+                  index={index}
+                  onSelect={setIndex}
+                  thumbBoxClass="h-16 w-16 rounded-xl"
+                />
               </div>
             </div>
           )}

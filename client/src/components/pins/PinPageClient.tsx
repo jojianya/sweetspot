@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import PhotoLightbox from "@/components/pins/PhotoLightbox";
+import { PhotoThumbStrip } from "@/components/pins/PhotoThumbStrip";
 import CommentsSection from "@/components/pins/CommentsSection";
 import PinEditSheet from "@/components/pins/PinEditSheet";
 import AddToCollectionSheet from "@/components/pins/AddToCollectionSheet";
@@ -98,34 +99,12 @@ export default function PinPageClient({ initialPin }: PinPageClientProps) {
 
           {count > 1 && (
             <div className="flex gap-2 overflow-x-auto p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {pin.photos.map((p, i) => {
-                const thumbSrc =
-                  resolveMediaUrl(p.thumbnail_url) || resolveMediaUrl(p.photo_url);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setIndex(i)}
-                    aria-label={`Photo ${i + 1} of ${count}`}
-                    aria-pressed={i === index}
-                    className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
-                      i === index
-                        ? "border-sky-500"
-                        : "border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
-                    }`}
-                  >
-                    {thumbSrc ? (
-                      <img
-                        src={thumbSrc}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : null}
-                  </button>
-                );
-              })}
+              <PhotoThumbStrip
+                photos={pin.photos}
+                index={index}
+                onSelect={setIndex}
+                thumbBoxClass="h-14 w-14 rounded-lg"
+              />
             </div>
           )}
         </div>

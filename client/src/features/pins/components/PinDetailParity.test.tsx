@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Category } from "@/shared/types/category"
 import type { PinDetail, PinPhoto } from "@/shared/types/pin";
 import { useAuth } from "@/features/auth/store/auth";
-import PinDetailPanel from "./PinDetailPanel";
-import PinPageClient from "./PinPageClient";
+import PinDetailPanel from "@/features/pins/components/PinDetailPanel";
+import PinPageClient from "@/features/pins/components/PinPageClient";
 
 // Characterization for the PinDetailPanel ↔ PinPageClient consolidation (C9).
 // Every behavior the extraction must preserve, asserted identically on both
@@ -58,10 +58,10 @@ vi.mock("next/link", async () => {
 });
 
 vi.mock("@/shared/layout/Navbar", () => ({ default: () => null }));
-vi.mock("@/hooks/usePinView", () => ({ usePinView: mockUsePinView }));
-vi.mock("@/hooks/usePinAddress", () => ({ usePinAddress: mockUsePinAddress }));
+vi.mock("@/features/pins/hooks/usePinView", () => ({ usePinView: mockUsePinView }));
+vi.mock("@/features/pins/hooks/usePinAddress", () => ({ usePinAddress: mockUsePinAddress }));
 vi.mock("@/features/collections/hooks/useOptimisticSave", () => ({ useOptimisticSave: () => mockSaveState }));
-vi.mock("@/hooks/usePinShare", () => ({
+vi.mock("@/features/pins/hooks/usePinShare", () => ({
   usePinShare: () => ({ copied: false, handleShare: vi.fn(), goDirections: vi.fn() }),
 }));
 vi.mock("@/features/social/hooks/useReaction", () => ({

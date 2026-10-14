@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { registerPinView } from "@/lib/api/pins";
+import { registerPinView } from "../api/pins";
 import { useClearOnChange } from "@/shared/hooks/useClearOnChange";
 import { useAuth } from "@/features/auth/store/auth";
 

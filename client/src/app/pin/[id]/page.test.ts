@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({
   notFound: vi.fn(),
 }));
 
-vi.mock("@/lib/api/server", () => ({ getPinServer: mocks.getPinServer }));
-vi.mock("@/components/pins/PinPageClient", () => ({ default: () => null }));
+vi.mock("@/features/pins/api/server", () => ({ getPinServer: mocks.getPinServer }));
+vi.mock("@/features/pins/components/PinPageClient", () => ({ default: () => null }));
 vi.mock("@/shared/lib/site", () => ({
   getSiteUrl: () => new URL("https://goodspot.example"),
 }));

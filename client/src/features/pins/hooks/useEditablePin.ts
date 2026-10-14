@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { resolveMediaUrl } from "@/shared/lib/media";
 import { parsePoint } from "@/features/map/lib/geo";
-import { usePinView } from "@/hooks/usePinView";
+import { usePinView } from "./usePinView";
 import type { PinDetail } from "@/shared/types/pin";
 
 /**

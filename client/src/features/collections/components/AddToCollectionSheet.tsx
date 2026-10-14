@@ -3,11 +3,11 @@
 import { useState } from "react";
 import PanelSheet from "@/shared/ui/PanelSheet";
 import { CloseIcon } from "@/shared/ui/icons";
-import { SheetHeader, SheetSignIn } from "@/components/pins/SheetChrome";
+import { SheetHeader, SheetSignIn } from "@/features/pins/components/SheetChrome";
 import { useCollections } from "../hooks/useCollections";
 import { errorMessage } from "@/shared/utils";
 import { useAuth } from "@/features/auth/store/auth";
-import { PinCoverImage } from "@/components/pins/PinCoverImage";
+import { PinCoverImage } from "@/features/pins/components/PinCoverImage";
 
 interface AddToCollectionSheetProps {
   pinId: string;

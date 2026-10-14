@@ -10,7 +10,7 @@ import { useAsyncData } from "@/shared/hooks/useAsyncData";
 import { Skeleton } from "@/shared/ui/Skeleton";
 import { PageEmpty, PageError, PageLoading } from "@/shared/ui/PageState";
 import type { PinListEntry } from "@/shared/types/pin";
-import { PinCoverImage } from "@/components/pins/PinCoverImage";
+import { PinCoverImage } from "@/features/pins/components/PinCoverImage";
 
 export default function FeedPage() {
   const { user } = useAuth();

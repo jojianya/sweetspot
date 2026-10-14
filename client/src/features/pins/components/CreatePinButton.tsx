@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CloseIcon } from "@/shared/ui/icons";
-import { createPin } from "@/lib/api/pins";
+import { createPin } from "../api/pins";
 import type { Category } from "@/shared/types/category"
 import type { CreatedPin, NewPinPhoto } from "@/shared/types/pin";
 import type { MapLocation } from "@/features/map/components/MapView";
 import { errorMessage } from "@/shared/utils"
 import { getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/features/map/lib/geo";
 import { useAuth } from "@/features/auth/store/auth";
-import { CreatePinForm } from "@/components/pins/CreatePinForm";
+import { CreatePinForm } from "@/features/pins/components/CreatePinForm";
 import { PhotoPicker } from "@/features/photos/components/PhotoPicker";
 import { usePhotoPreviews } from "@/features/photos/hooks/usePhotoPreviews";
 import { buildCreatePinPayload, validatePhotoFiles } from "@/features/photos/lib/photoValidation";

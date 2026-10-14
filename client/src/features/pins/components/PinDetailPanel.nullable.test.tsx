@@ -22,13 +22,13 @@ const makePin = (userId: string | null): PinDetail => ({
   photos: [],
 });
 
-vi.mock("@/hooks/usePinView", () => ({
+vi.mock("../hooks/usePinView", () => ({
   usePinView: () => null,
 }));
-vi.mock("@/hooks/usePinAddress", () => ({
+vi.mock("../hooks/usePinAddress", () => ({
   usePinAddress: () => "San Francisco, CA",
 }));
-vi.mock("@/hooks/usePinShare", () => ({
+vi.mock("../hooks/usePinShare", () => ({
   usePinShare: () => ({ copied: false, handleShare: vi.fn(), goDirections: vi.fn() }),
 }));
 vi.mock("@/features/collections/hooks/useOptimisticSave", () => ({

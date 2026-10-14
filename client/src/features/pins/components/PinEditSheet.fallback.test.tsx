@@ -3,9 +3,9 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PinDetail } from "@/shared/types/pin";
-import PinEditSheet from "./PinEditSheet";
+import PinEditSheet from "@/features/pins/components/PinEditSheet";
 
-vi.mock("@/lib/api/pins", () => ({
+vi.mock("@/features/pins/api/pins", () => ({
   updatePin: vi.fn(),
   deletePin: vi.fn(),
 }));

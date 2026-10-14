@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchPins } from "@/lib/api/pins";
+import { fetchPins } from "../api/pins";
 import { errorMessage } from "@/shared/utils";
 import type { PinListEntry } from "@/shared/types/pin";
 

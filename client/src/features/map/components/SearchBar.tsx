@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { searchPlaces, type PlaceResult } from "../api/geocoding";
-import { searchPins } from "@/lib/api/pins";
+import { searchPins } from "@/features/pins/api/pins";
 import type { PinListEntry } from "@/shared/types/pin";
 
 interface ResultItem {

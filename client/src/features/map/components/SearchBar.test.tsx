@@ -7,12 +7,12 @@ import SearchBar from "./SearchBar";
 vi.mock("../api/geocoding", () => ({
   searchPlaces: vi.fn(),
 }));
-vi.mock("@/lib/api/pins", () => ({
+vi.mock("@/features/pins/api/pins", () => ({
   searchPins: vi.fn(),
 }));
 
 import { searchPlaces } from "../api/geocoding";
-import { searchPins } from "@/lib/api/pins";
+import { searchPins } from "@/features/pins/api/pins";
 
 const places = [
   { id: "p1", text: "Place One", place_name: "Place One, Earth", center: { lat: 1, lng: 2 } },

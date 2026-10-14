@@ -1,7 +1,7 @@
 "use client";
 
 import PhotoLightbox from "@/features/photos/components/PhotoLightbox";
-import PinEditSheet from "./PinEditSheet";
+import PinEditSheet from "@/features/pins/components/PinEditSheet";
 import AddToCollectionSheet from "@/features/collections/components/AddToCollectionSheet";
 import ReportSheet from "@/features/admin/components/ReportSheet";
 import { categorySlug } from "@/features/map/lib/category";

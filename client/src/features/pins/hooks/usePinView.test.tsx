@@ -9,7 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   registerPinView: vi.fn(),
 }));
 
-vi.mock("@/lib/api/pins", () => ({
+vi.mock("../api/pins", () => ({
   registerPinView: apiMocks.registerPinView,
 }));
 

@@ -19,7 +19,7 @@ const holders = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock("@/hooks/usePins", () => ({
+vi.mock("@/features/pins/hooks/usePins", () => ({
   usePins: () => ({
     pins: holders.pinsState.pins,
     loading: false,
@@ -30,7 +30,7 @@ vi.mock("@/hooks/usePins", () => ({
   }),
 }));
 
-vi.mock("@/hooks/usePinDetail", () => ({
+vi.mock("@/features/pins/hooks/usePinDetail", () => ({
   usePinDetail: (id: string | null) => ({ detail: id ? { id } : null }),
 }));
 
@@ -92,13 +92,13 @@ vi.mock("./MapView", () => ({
 
 vi.mock("./MapNavBar", () => ({ default: () => null }));
 vi.mock("./LocateButton", () => ({ default: () => null }));
-vi.mock("@/components/pins/CreatePinButton", () => ({ default: () => null }));
+vi.mock("@/features/pins/components/CreatePinButton", () => ({ default: () => null }));
 vi.mock("@/features/collections/components/SavedPinsPanel", () => ({ default: () => null }));
 vi.mock("@/features/social/components/TrendingList", () => ({
   default: () => null,
   TrendingIcon: () => null,
 }));
-vi.mock("@/components/pins/PinDetailPanel", () => ({
+vi.mock("@/features/pins/components/PinDetailPanel", () => ({
   default: (props: { pin: { id: string } }) =>
     createElement("div", { "data-testid": "detail", "data-id": props.pin.id }),
 }));

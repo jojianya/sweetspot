@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import PinPageClient from "@/components/pins/PinPageClient";
-import { getPinServer } from "@/lib/api/server";
-import { buildPinMetadata } from "@/lib/metadata/pin";
+import PinPageClient from "@/features/pins/components/PinPageClient";
+import { getPinServer } from "@/features/pins/api/server";
+import { buildPinMetadata } from "@/features/pins/lib/metadata/pin";
 import { getSiteUrl } from "@/shared/lib/site";
 
 interface PinPageParams {

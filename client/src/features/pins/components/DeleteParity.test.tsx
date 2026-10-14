@@ -4,10 +4,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PinDetail } from "@/shared/types/pin";
 import { useAuth } from "@/features/auth/store/auth";
-import PinDetailPanel from "./PinDetailPanel";
-import PinPageClient from "./PinPageClient";
+import PinDetailPanel from "@/features/pins/components/PinDetailPanel";
+import PinPageClient from "@/features/pins/components/PinPageClient";
 
-vi.mock("@/lib/api/pins", () => ({
+vi.mock("@/features/pins/api/pins", () => ({
   fetchPin: vi.fn(),
   updatePin: vi.fn(),
   deletePin: vi.fn(),

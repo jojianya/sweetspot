@@ -1,6 +1,6 @@
 "use client";
 
-import { fetchPin } from "@/lib/api/pins";
+import { fetchPin } from "../api/pins";
 import { useAsyncData } from "@/shared/hooks/useAsyncData";
 import { useClearOnChange } from "@/shared/hooks/useClearOnChange";
 import type { PinDetail } from "@/shared/types/pin";

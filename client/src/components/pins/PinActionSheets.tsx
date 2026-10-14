@@ -1,6 +1,6 @@
 "use client";
 
-import PhotoLightbox from "./PhotoLightbox";
+import PhotoLightbox from "@/features/photos/components/PhotoLightbox";
 import PinEditSheet from "./PinEditSheet";
 import AddToCollectionSheet from "./AddToCollectionSheet";
 import ReportSheet from "./ReportSheet";

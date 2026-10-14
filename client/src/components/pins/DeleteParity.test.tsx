@@ -48,7 +48,7 @@ vi.mock("@/shared/layout/Navbar", () => ({ default: () => null }));
 vi.mock("./PinEditSheet", () => ({ default: () => null }));
 vi.mock("./AddToCollectionSheet", () => ({ default: () => null }));
 vi.mock("./ReportSheet", () => ({ default: () => null }));
-vi.mock("./PhotoLightbox", () => ({ default: () => null }));
+vi.mock("@/features/photos/components/PhotoLightbox", () => ({ default: () => null }));
 
 const pin: PinDetail = {
   id: "pin-1",

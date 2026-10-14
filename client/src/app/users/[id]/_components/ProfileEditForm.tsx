@@ -1,7 +1,7 @@
 "use client";
 
 import Avatar from "@/shared/ui/Avatar";
-import { PHOTO_ACCEPT } from "@/lib/utils/photoValidation";
+import { PHOTO_ACCEPT } from "@/features/photos/lib/photoValidation";
 import type { PublicProfile } from "@/shared/types/social";
 
 const INPUT_CLASS =

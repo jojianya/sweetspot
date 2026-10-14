@@ -13,7 +13,7 @@ import {
   PinIcon,
   ShareIcon,
 } from "@/shared/ui/icons";
-import { PhotoThumbStrip } from "./PhotoThumbStrip";
+import { PhotoThumbStrip } from "@/features/photos/components/PhotoThumbStrip";
 import { PinActionSheets } from "./PinActionSheets";
 import CommentsSection from "@/features/comments/components/CommentsSection";
 import type { PinDetail } from "@/shared/types/pin";

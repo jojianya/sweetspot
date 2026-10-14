@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { PhotoThumbGrid } from "@/components/pins/PhotoThumbGrid";
-import { PHOTO_ACCEPT } from "@/lib/utils/photoValidation";
+import { PhotoThumbGrid } from "./PhotoThumbGrid";
+import { PHOTO_ACCEPT } from "../lib/photoValidation";
 
 /** Dashed photo-picker button, hidden file input and thumbnail previews. */
 export function PhotoPicker({

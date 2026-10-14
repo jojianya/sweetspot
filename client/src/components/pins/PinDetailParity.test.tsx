@@ -95,7 +95,7 @@ vi.mock("./ReportSheet", () => ({
     return <div data-testid="report-sheet">report-{p.pinId}</div>;
   },
 }));
-vi.mock("./PhotoLightbox", () => ({
+vi.mock("@/features/photos/components/PhotoLightbox", () => ({
   default: (p: {
     src: string;
     alt: string;

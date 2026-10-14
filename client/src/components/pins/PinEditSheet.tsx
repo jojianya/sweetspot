@@ -8,9 +8,9 @@ import { errorMessage } from "@/shared/utils";
 import type { Category } from "@/shared/types/category"
 import type { PinDetail } from "@/shared/types/pin";
 import { resolveMediaUrl } from "@/shared/lib/media";
-import { usePhotoPreviews } from "@/hooks/usePhotoPreviews";
-import { PhotoThumbGrid } from "@/components/pins/PhotoThumbGrid";
-import { MAX_PIN_PHOTOS, PHOTO_ACCEPT, validatePhotoFiles } from "@/lib/utils/photoValidation";
+import { usePhotoPreviews } from "@/features/photos/hooks/usePhotoPreviews";
+import { PhotoThumbGrid } from "@/features/photos/components/PhotoThumbGrid";
+import { MAX_PIN_PHOTOS, PHOTO_ACCEPT, validatePhotoFiles } from "@/features/photos/lib/photoValidation";
 
 interface PinEditSheetProps {
   pin: PinDetail;

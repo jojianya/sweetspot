@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/shared/layout/Navbar";
-import { PhotoThumbStrip } from "@/components/pins/PhotoThumbStrip";
+import { PhotoThumbStrip } from "@/features/photos/components/PhotoThumbStrip";
 import { PinActionSheets } from "@/components/pins/PinActionSheets";
 import CommentsSection from "@/features/comments/components/CommentsSection";
 import PinViews from "./PinViews";

@@ -11,9 +11,9 @@ import { errorMessage } from "@/shared/utils"
 import { getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils/geo";
 import { useAuth } from "@/store/auth";
 import { CreatePinForm } from "@/components/pins/CreatePinForm";
-import { PhotoPicker } from "@/components/pins/PhotoPicker";
-import { usePhotoPreviews } from "@/hooks/usePhotoPreviews";
-import { buildCreatePinPayload, validatePhotoFiles } from "@/lib/utils/photoValidation";
+import { PhotoPicker } from "@/features/photos/components/PhotoPicker";
+import { usePhotoPreviews } from "@/features/photos/hooks/usePhotoPreviews";
+import { buildCreatePinPayload, validatePhotoFiles } from "@/features/photos/lib/photoValidation";
 
 interface CreatePinButtonProps {
   lat: number;

@@ -43,10 +43,21 @@ const eslintConfig = defineConfig([
   // app routes may only use the public surface — the feature's index.ts —
   // never a deep path. Test files are excluded: vi.mock must target the
   // leaf module, because mocking a barrel would blank out every sibling
-  // export the module under test needs.
+  // export the module under test needs. The three React Server Components
+  // below are excluded too: an RSC cannot import a barrel, because the
+  // barrel re-exports hook modules (rejected in an RSC graph) and, for pins,
+  // a next/headers module (rejected in client graphs). Those files import
+  // leaves, each with a comment pointing here.
   {
     files: ["src/features/**", "src/app/**", "src/shared/layout/**"],
-    ignores: ["**/*.test.{ts,tsx}"],
+    ignores: [
+      "**/*.test.{ts,tsx}",
+      "src/app/layout.tsx",
+      "src/app/page.tsx",
+      // Brackets are a character class in minimatch, so the literal [id]
+      // segment has to be escaped.
+      "src/app/pin/\\[id\\]/page.tsx",
+    ],
     rules: {
       "no-restricted-imports": [
         "error",

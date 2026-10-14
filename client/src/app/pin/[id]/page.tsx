@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { PinPageClient } from "@/features/pins";
-import { getPinServer } from "@/features/pins";
-import { buildPinMetadata } from "@/features/pins";
+// Leaf imports, not the feature barrel: this is a React Server Component.
+// The pins barrel re-exports hook modules (illegal in an RSC graph) and the
+// barrel as a whole is imported by client components (where api/server's
+// next/headers dependency is illegal). Leaves keep the two graphs separate.
+// See the boundary rule in eslint.config.mjs.
+import PinPageClient from "@/features/pins/components/PinPageClient";
+import { getPinServer } from "@/features/pins/api/server";
+import { buildPinMetadata } from "@/features/pins/lib/metadata/pin";
 import { getSiteUrl } from "@/shared/lib/site";
 
 interface PinPageParams {

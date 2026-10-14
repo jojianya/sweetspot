@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import RuntimeErrorReporter from "@/shared/layout/RuntimeErrorReporter";
-import { SessionSync } from "@/features/auth";
+// Leaf import, not the feature barrel: this is a React Server Component, and
+// a barrel re-export would pull the feature's hook modules into the RSC graph,
+// which Next.js rejects. See the boundary rule in eslint.config.mjs.
+import SessionSync from "@/features/auth/components/SessionSync";
 import { getSiteUrl } from "@/shared/lib/site";
 import "./globals.css";
 

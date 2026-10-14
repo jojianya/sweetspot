@@ -3,7 +3,7 @@
 import { useState } from "react";
 import PanelSheet from "@/shared/ui/PanelSheet";
 import { SheetHeader, SheetSignIn } from "@/components/pins/SheetChrome";
-import { createPinReport } from "@/lib/api/reports";
+import { createPinReport } from "../api/reports";
 import { errorMessage } from "@/shared/utils";
 import { useAuth } from "@/store/auth";
 

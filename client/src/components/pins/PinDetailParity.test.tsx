@@ -89,7 +89,7 @@ vi.mock("@/features/collections/components/AddToCollectionSheet", () => ({
     return <div data-testid="collection-sheet">collection-{p.pinId}</div>;
   },
 }));
-vi.mock("./ReportSheet", () => ({
+vi.mock("@/features/admin/components/ReportSheet", () => ({
   default: (p: { pinId: string; onClose: () => void }) => {
     captured.report = p;
     return <div data-testid="report-sheet">report-{p.pinId}</div>;

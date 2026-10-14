@@ -18,16 +18,16 @@ vi.mock("next/navigation", () => ({
 }));
 // The role console reads the user list from the profiles endpoint, and
 // useSessionRefresh reads /me through the same module, so both are mocked here.
-vi.mock("@/features/profile/api/users", () => ({
+vi.mock("../../profile/api/users", () => ({
   fetchUsers: apiMocks.fetchUsers,
   searchUsers: apiMocks.searchUsers,
   updateUserRole: apiMocks.updateUserRole,
   fetchMe: vi.fn().mockRejectedValue(new Error("offline")),
 }));
 
-import RolesPage from "./page";
+import RolesPanel from "./RolesPanel";
 
-describe("RolesPage authorization", () => {
+describe("RolesPanel authorization", () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -39,7 +39,7 @@ describe("RolesPage authorization", () => {
 
   async function render() {
     await act(async () => {
-      root.render(<RolesPage />);
+      root.render(<RolesPanel />);
     });
   }
 

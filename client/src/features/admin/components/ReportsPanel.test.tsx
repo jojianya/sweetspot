@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { reportEmptyCopy } from "./page";
+import { reportEmptyCopy } from "./ReportsPanel";
 import { useAuth, type PersistedUser } from "@/store/auth";
 
 const apiMocks = vi.hoisted(() => ({
@@ -12,7 +12,7 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/auth", () => ({ fetchSession: apiMocks.fetchSession }));
-vi.mock("@/lib/api/reports", () => ({
+vi.mock("../api/reports", () => ({
   fetchReports: apiMocks.fetchReports,
   reviewReport: apiMocks.reviewReport,
 }));
@@ -20,11 +20,11 @@ vi.mock("@/lib/api/reports", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
-vi.mock("@/features/profile/api/users", () => ({
+vi.mock("../../profile/api/users", () => ({
   fetchMe: vi.fn().mockRejectedValue(new Error("offline")),
 }));
 
-import ReportsPage from "./page";
+import ReportsPanel from "./ReportsPanel";
 
 describe("reportEmptyCopy", () => {
   it("keeps the per-status wording", () => {
@@ -50,7 +50,7 @@ describe("reportEmptyCopy", () => {
   });
 });
 
-describe("ReportsPage authorization", () => {
+describe("ReportsPanel authorization", () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -65,7 +65,7 @@ describe("ReportsPage authorization", () => {
 
   async function render() {
     await act(async () => {
-      root.render(<ReportsPage />);
+      root.render(<ReportsPanel />);
     });
   }
 

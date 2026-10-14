@@ -60,7 +60,7 @@ vi.mock("next/link", async () => {
 
 vi.mock("./PinEditSheet", () => ({ default: () => null }));
 vi.mock("@/features/collections/components/AddToCollectionSheet", () => ({ default: () => null }));
-vi.mock("./ReportSheet", () => ({ default: () => null }));
+vi.mock("@/features/admin/components/ReportSheet", () => ({ default: () => null }));
 vi.mock("@/features/photos/components/PhotoLightbox", () => ({ default: () => null }));
 
 function pin(id: string, views: number): PinDetail {

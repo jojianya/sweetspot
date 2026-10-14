@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   deletePin: vi.fn(),
 }));
 
-vi.mock("@/features/pins/api/pins", () => ({
+vi.mock("../api/pins", () => ({
   fetchPin: apiMocks.fetchPin,
   updatePin: apiMocks.updatePin,
   deletePin: apiMocks.deletePin,
@@ -33,6 +33,42 @@ const pin: PinDetail = {
   avatar_url: null,
   photos: [],
 };
+
+/** A pin whose only photo has neither a thumbnail nor a full URL. */
+const emptyPhotoPin: PinDetail = {
+  ...pin,
+  caption: "hi",
+  views: 0,
+  photos: [
+    {
+      id: "photo-1",
+      pin_id: "pin-1",
+      photo_url: "",
+      thumbnail_url: "",
+      position: 0,
+      created_at: "2026-01-02T00:00:00Z",
+    },
+  ],
+};
+
+/** A pin whose photo lost its thumbnail but kept the full-size URL. */
+function pinWithThumbFallback(): PinDetail {
+  return {
+    ...pin,
+    caption: "hi",
+    views: 0,
+    photos: [
+      {
+        id: "photo-1",
+        pin_id: "pin-1",
+        photo_url: "http://192.168.68.112:8081/uploads/full.webp",
+        thumbnail_url: "",
+        position: 0,
+        created_at: "2026-01-02T00:00:00Z",
+      },
+    ],
+  };
+}
 
 function buttonByName(container: HTMLElement, name: string): HTMLButtonElement | null {
   const buttons = Array.from(container.querySelectorAll("button"));
@@ -57,6 +93,7 @@ describe("PinEditSheet update", () => {
     onUpdated = vi.fn<(pin: PinDetail) => void>();
     apiMocks.fetchPin.mockReset();
     apiMocks.updatePin.mockReset();
+    apiMocks.deletePin.mockReset();
   });
 
   afterEach(async () => {
@@ -222,5 +259,88 @@ describe("PinEditSheet delete", () => {
     expect(alert!.textContent).toContain("you can only delete your own pins");
     expect(onDeleted).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("PinEditSheet empty src guard (H2)", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    const actEnvironment = globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT: boolean;
+    };
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("never renders <img src=\"\"> for empty photo URLs", async () => {
+    await act(async () => {
+      root.render(
+        <PinEditSheet
+          pin={emptyPhotoPin}
+          categories={[{ id: 1, name: "Food", slug: "food" }]}
+          onClose={() => {}}
+          onUpdated={() => {}}
+          onDeleted={() => {}}
+        />
+      );
+    });
+    // React omits empty src entirely (no attribute), which still renders a
+    // broken image. Any img without a usable src is a failure.
+    const bad = Array.from(container.querySelectorAll("img")).filter((img) => {
+      const src = img.getAttribute("src");
+      return !src || !src.trim();
+    });
+    expect(bad).toHaveLength(0);
+  });
+});
+
+describe("PinEditSheet thumbnail fallback (M3)", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    const actEnvironment = globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT: boolean;
+    };
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("falls back to photo_url when thumbnail_url is empty", async () => {
+    await act(async () => {
+      root.render(
+        <PinEditSheet
+          pin={pinWithThumbFallback()}
+          categories={[{ id: 1, name: "Food", slug: "food" }]}
+          onClose={() => {}}
+          onUpdated={() => {}}
+          onDeleted={() => {}}
+        />
+      );
+    });
+    const imgs = Array.from(container.querySelectorAll("img"));
+    expect(imgs.length).toBeGreaterThan(0);
+    expect(imgs[0].getAttribute("src")).toBe("/uploads/full.webp");
   });
 });

@@ -13,7 +13,7 @@ vi.mock("@/lib/api/pins", () => ({
   deletePin: vi.fn(),
   registerPinView: vi.fn().mockResolvedValue(1),
 }));
-vi.mock("@/lib/api/categories", () => ({
+vi.mock("@/features/map/api/categories", () => ({
   fetchCategories: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("@/features/collections/api/favorites", () => ({
@@ -28,7 +28,7 @@ vi.mock("@/features/comments/api/comments", () => ({
   deleteComment: vi.fn(),
 }));
 
-vi.mock("@/lib/api/geocoding", () => ({
+vi.mock("@/features/map/api/geocoding", () => ({
   reverseGeocode: vi.fn().mockResolvedValue(null),
 }));
 

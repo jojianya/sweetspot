@@ -9,7 +9,7 @@ const geoMocks = vi.hoisted(() => ({
   toGeoCoords: vi.fn(() => ({ lat: 1, lng: 2 })),
 }));
 
-vi.mock("@/lib/utils/geo", () => ({
+vi.mock("../lib/geo", () => ({
   geolocationAvailable: () => true,
   getCurrentPosition: geoMocks.getCurrentPosition,
   toGeoCoords: geoMocks.toGeoCoords,

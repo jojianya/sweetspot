@@ -34,7 +34,7 @@ vi.mock("@/hooks/usePinDetail", () => ({
   usePinDetail: (id: string | null) => ({ detail: id ? { id } : null }),
 }));
 
-vi.mock("@/hooks/useCategories", () => ({
+vi.mock("../hooks/useCategories", () => ({
   useCategories: () => ({ categories: [], error: null, retry: vi.fn() }),
 }));
 
@@ -42,7 +42,7 @@ vi.mock("@/features/social/hooks/useTrending", () => ({
   useTrending: () => ({ pins: [], loading: false, error: null }),
 }));
 
-vi.mock("@/hooks/usePinStream", () => ({
+vi.mock("../hooks/usePinStream", () => ({
   usePinStream: (
     _bbox: string | null,
     _category: number | null,
@@ -59,7 +59,7 @@ vi.mock("@/features/auth/store/auth", () => ({
   }),
 }));
 
-vi.mock("@/store/theme", () => ({
+vi.mock("../store/theme", () => ({
   useTheme: () => ({ theme: "light" }),
 }));
 

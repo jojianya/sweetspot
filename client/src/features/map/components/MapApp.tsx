@@ -12,15 +12,15 @@ import SavedPinsPanel from "@/features/collections/components/SavedPinsPanel";
 import TrendingList, { TrendingIcon } from "@/features/social/components/TrendingList";
 import { usePins } from "@/hooks/usePins";
 import { usePinDetail } from "@/hooks/usePinDetail";
-import { useMapCategoryFilter } from "@/hooks/useMapCategoryFilter";
-import { useDebouncedBbox } from "@/hooks/useDebouncedBbox";
-import { useStreamToast } from "@/hooks/useStreamToast";
-import { usePinStream } from "@/hooks/usePinStream";
+import { useMapCategoryFilter } from "../hooks/useMapCategoryFilter";
+import { useDebouncedBbox } from "../hooks/useDebouncedBbox";
+import { useStreamToast } from "../hooks/useStreamToast";
+import { usePinStream } from "../hooks/usePinStream";
 import { useTrending } from "@/features/social/hooks/useTrending";
-import { parsePoint } from "@/lib/utils/geo";
+import { parsePoint } from "../lib/geo";
 import { toPinListEntry } from "@/lib/utils/pinEntry";
 import { useAuth } from "@/features/auth/store/auth";
-import { useTheme } from "@/store/theme";
+import { useTheme } from "../store/theme";
 import type { CreatedPin, NewPinPhoto, PinListEntry, TrendingPin } from "@/shared/types/pin";
 
 export default function MapApp({

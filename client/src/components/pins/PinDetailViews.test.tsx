@@ -27,7 +27,7 @@ vi.mock("@/lib/api/pins", () => ({
   deletePin: apiMocks.deletePin,
   registerPinView: apiMocks.registerPinView,
 }));
-vi.mock("@/lib/api/categories", () => ({
+vi.mock("@/features/map/api/categories", () => ({
   fetchCategories: apiMocks.fetchCategories,
 }));
 vi.mock("@/features/collections/api/favorites", () => ({
@@ -42,7 +42,7 @@ vi.mock("@/features/comments/api/comments", () => ({
   deleteComment: apiMocks.deleteComment,
 }));
 
-vi.mock("@/lib/api/geocoding", () => ({
+vi.mock("@/features/map/api/geocoding", () => ({
   reverseGeocode: vi.fn().mockResolvedValue(null),
 }));
 

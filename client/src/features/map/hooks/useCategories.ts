@@ -1,6 +1,6 @@
 "use client";
 
-import { fetchCategories } from "@/lib/api/categories";
+import { fetchCategories } from "../api/categories";
 import { useAsyncData } from "@/shared/hooks/useAsyncData";
 import type { Category } from "@/shared/types/category";
 

@@ -13,10 +13,10 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { PinListEntry } from "@/shared/types/pin";
-import { boundsToValidBbox, formatBbox, parsePoint, selectNearbyPins, type PinCoordinate } from "@/lib/utils/geo";
-import { neighborhoodBounds } from "@/lib/utils/geo";
-import { useGeolocation } from "@/hooks/useGeolocation";
-import type { Theme } from "@/store/theme";
+import { boundsToValidBbox, formatBbox, parsePoint, selectNearbyPins, type PinCoordinate } from "../lib/geo";
+import { neighborhoodBounds } from "../lib/geo";
+import { useGeolocation } from "../hooks/useGeolocation";
+import type { Theme } from "../store/theme";
 import { ensurePinLayers, notCluster, type GeoFeature } from "./pinLayers";
 import { resolveMediaUrl } from "@/shared/lib/media";
 

@@ -17,7 +17,7 @@ import { PhotoThumbStrip } from "@/features/photos/components/PhotoThumbStrip";
 import { PinActionSheets } from "./PinActionSheets";
 import CommentsSection from "@/features/comments/components/CommentsSection";
 import type { PinDetail } from "@/shared/types/pin";
-import { useCategories } from "@/hooks/useCategories";
+import { useCategories } from "@/features/map/hooks/useCategories";
 import { useEditablePin } from "@/hooks/useEditablePin";
 import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/features/collections/hooks/useOptimisticSave";

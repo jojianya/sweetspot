@@ -4,14 +4,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SearchBar from "./SearchBar";
 
-vi.mock("@/lib/api/geocoding", () => ({
+vi.mock("../api/geocoding", () => ({
   searchPlaces: vi.fn(),
 }));
 vi.mock("@/lib/api/pins", () => ({
   searchPins: vi.fn(),
 }));
 
-import { searchPlaces } from "@/lib/api/geocoding";
+import { searchPlaces } from "../api/geocoding";
 import { searchPins } from "@/lib/api/pins";
 
 const places = [

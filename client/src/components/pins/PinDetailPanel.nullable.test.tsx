@@ -39,7 +39,7 @@ vi.mock("@/features/social/hooks/useReaction", () => ({
   // the app router, which this plain createRoot harness does not mount.
   useReaction: () => ({ reacted: false, count: 0, busy: false, error: null, toggle: vi.fn() }),
 }));
-vi.mock("@/hooks/useCategories", () => ({
+vi.mock("@/features/map/hooks/useCategories", () => ({
   useCategories: () => ({ categories: [{ id: 1, name: "Food", slug: "food" }] }),
 }));
 

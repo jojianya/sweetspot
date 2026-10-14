@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils/geo";
+import { getCurrentPosition, geolocationAvailable, toGeoCoords } from "../lib/geo";
 
 interface Props {
   onLocate: (pos: { lat: number; lng: number }) => void;

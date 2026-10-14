@@ -37,7 +37,7 @@ vi.mock("@/hooks/usePinShare", () => ({
 vi.mock("@/features/collections/hooks/useOptimisticSave", () => ({
   useOptimisticSave: () => ({ saved: false, saving: false, error: null, handleSave: vi.fn() }),
 }));
-vi.mock("@/hooks/useCategories", () => ({
+vi.mock("@/features/map/hooks/useCategories", () => ({
   useCategories: () => ({ categories: [{ id: 1, name: "Food", slug: "food" }] }),
 }));
 

@@ -4,7 +4,7 @@ import PhotoLightbox from "@/features/photos/components/PhotoLightbox";
 import PinEditSheet from "./PinEditSheet";
 import AddToCollectionSheet from "@/features/collections/components/AddToCollectionSheet";
 import ReportSheet from "@/features/admin/components/ReportSheet";
-import { categorySlug } from "@/lib/utils/category";
+import { categorySlug } from "@/features/map/lib/category";
 import type { Category } from "@/shared/types/category"
 import type { PinDetail } from "@/shared/types/pin";
 

@@ -9,7 +9,7 @@ import { PinActionSheets } from "@/components/pins/PinActionSheets";
 import CommentsSection from "@/features/comments/components/CommentsSection";
 import PinViews from "./PinViews";
 import { BookmarkIcon, PersonIcon, PinIcon } from "@/shared/ui/icons";
-import { useCategories } from "@/hooks/useCategories";
+import { useCategories } from "@/features/map/hooks/useCategories";
 import { useEditablePin } from "@/hooks/useEditablePin";
 import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/features/collections/hooks/useOptimisticSave";

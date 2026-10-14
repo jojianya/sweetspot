@@ -67,7 +67,7 @@ vi.mock("@/hooks/usePinShare", () => ({
 vi.mock("@/features/social/hooks/useReaction", () => ({
   useReaction: () => ({ reacted: false, count: 0, busy: false, error: null, toggle: vi.fn() }),
 }));
-vi.mock("@/hooks/useCategories", () => ({ useCategories: () => ({ categories: [] }) }));
+vi.mock("@/features/map/hooks/useCategories", () => ({ useCategories: () => ({ categories: [] }) }));
 vi.mock("./PinEditSheet", () => ({
   default: (p: CapturedEdit) => {
     captured.edit = p;

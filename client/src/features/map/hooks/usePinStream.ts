@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { openPinStream } from "@/lib/api/realtime";
+import { openPinStream } from "../api/realtime";
 import type { PinEvent } from "@/shared/api/schemas";
 import type { PinListEntry } from "@/shared/types/pin";
 

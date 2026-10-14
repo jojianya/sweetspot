@@ -1,6 +1,6 @@
 "use client";
 
-import { useTheme } from "@/store/theme";
+import { useTheme } from "../store/theme";
 
 function SunIcon() {
   return (

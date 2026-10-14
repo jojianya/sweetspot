@@ -8,7 +8,7 @@ const geoMocks = vi.hoisted(() => ({
   reverseGeocode: vi.fn(),
 }));
 
-vi.mock("@/lib/api/geocoding", () => geoMocks);
+vi.mock("@/features/map/api/geocoding", () => geoMocks);
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCategories } from "@/hooks/useCategories";
+import { useCategories } from "./useCategories";
 import {
   canonicalCategoryAction,
   categoryHref,
   pickCategoryParam,
   resolveCategoryParam,
   slugForCategoryId,
-} from "@/lib/utils/category";
+} from "../lib/category";
 
 /**
  * Category filter synced with the URL. Category slugs are the public URL

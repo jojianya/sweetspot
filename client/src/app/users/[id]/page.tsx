@@ -3,7 +3,7 @@
 import { use } from "react";
 import Link from "next/link";
 import Navbar from "@/shared/layout/Navbar";
-import { useFollow } from "@/hooks/useFollow";
+import { useFollow } from "@/features/social/hooks/useFollow";
 import { useProfile } from "@/hooks/useProfile";
 import { useProfileEditor } from "@/hooks/useProfileEditor";
 import { useAuth } from "@/store/auth";

@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   unfollowUser: vi.fn(),
 }));
 
-vi.mock("@/lib/api/social", () => ({
+vi.mock("../api/social", () => ({
   fetchUserStats: apiMocks.fetchUserStats,
   followUser: apiMocks.followUser,
   unfollowUser: apiMocks.unfollowUser,

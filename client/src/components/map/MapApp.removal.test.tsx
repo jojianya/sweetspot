@@ -38,7 +38,7 @@ vi.mock("@/hooks/useCategories", () => ({
   useCategories: () => ({ categories: [], error: null, retry: vi.fn() }),
 }));
 
-vi.mock("@/hooks/useTrending", () => ({
+vi.mock("@/features/social/hooks/useTrending", () => ({
   useTrending: () => ({ pins: [], loading: false, error: null }),
 }));
 
@@ -94,7 +94,7 @@ vi.mock("./MapNavBar", () => ({ default: () => null }));
 vi.mock("./LocateButton", () => ({ default: () => null }));
 vi.mock("@/components/pins/CreatePinButton", () => ({ default: () => null }));
 vi.mock("@/components/pins/SavedPinsPanel", () => ({ default: () => null }));
-vi.mock("@/components/pins/TrendingList", () => ({
+vi.mock("@/features/social/components/TrendingList", () => ({
   default: () => null,
   TrendingIcon: () => null,
 }));

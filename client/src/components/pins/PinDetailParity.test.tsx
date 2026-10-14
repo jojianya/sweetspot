@@ -64,7 +64,7 @@ vi.mock("@/hooks/useOptimisticSave", () => ({ useOptimisticSave: () => mockSaveS
 vi.mock("@/hooks/usePinShare", () => ({
   usePinShare: () => ({ copied: false, handleShare: vi.fn(), goDirections: vi.fn() }),
 }));
-vi.mock("@/hooks/useReaction", () => ({
+vi.mock("@/features/social/hooks/useReaction", () => ({
   useReaction: () => ({ reacted: false, count: 0, busy: false, error: null, toggle: vi.fn() }),
 }));
 vi.mock("@/hooks/useCategories", () => ({ useCategories: () => ({ categories: [] }) }));

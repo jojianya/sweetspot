@@ -23,7 +23,7 @@ import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/hooks/useOptimisticSave";
 import { usePinShare } from "@/hooks/usePinShare";
 import { isPinOwner } from "@/lib/utils/pinPermission";
-import GoodSpotButton from "./GoodSpotButton";
+import GoodSpotButton from "@/features/social/components/GoodSpotButton";
 import PinViews from "./PinViews";
 import { useAuth } from "@/store/auth";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useReaction } from "@/hooks/useReaction";
+import { useReaction } from "../hooks/useReaction";
 import { GoodSpotIcon } from "@/shared/ui/icons";
 
 interface GoodSpotButtonProps {

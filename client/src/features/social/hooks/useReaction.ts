@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { reactToPin, unreactToPin } from "@/lib/api/reactions";
+import { reactToPin, unreactToPin } from "../api/reactions";
 import { errorMessage } from "@/shared/utils";
 import { useAuth } from "@/store/auth";
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Navbar from "@/shared/layout/Navbar";
 import { ChevronRightIcon, FeedIcon, PinIcon } from "@/shared/ui/icons";
-import { fetchFeed } from "@/lib/api/social";
+import { fetchFeed } from "@/features/social/api/social";
 import { relativeTime } from "@/shared/utils";
 import { useAuth } from "@/store/auth";
 import { useAsyncData } from "@/shared/hooks/useAsyncData";

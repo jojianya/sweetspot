@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchUserStats, followUser, unfollowUser } from "@/lib/api/social";
+import { fetchUserStats, followUser, unfollowUser } from "../api/social";
 import { errorMessage } from "@/shared/utils";
 import type { UserStats } from "@/shared/types/social";
 

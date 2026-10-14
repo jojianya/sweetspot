@@ -10,7 +10,7 @@ const apiMocks = vi.hoisted(() => ({
   updateCollection: vi.fn(),
 }));
 
-vi.mock("@/lib/api/collections", () => ({
+vi.mock("../api/collections", () => ({
   fetchCollection: apiMocks.fetchCollection,
   updateCollection: apiMocks.updateCollection,
 }));
@@ -20,7 +20,7 @@ const collectionsMocks = vi.hoisted(() => ({
   patchLocal: vi.fn(),
 }));
 
-vi.mock("@/hooks/useCollections", () => ({
+vi.mock("./useCollections", () => ({
   useCollections: () => ({
     collections: [],
     loading: false,

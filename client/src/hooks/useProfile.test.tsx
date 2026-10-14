@@ -15,7 +15,7 @@ vi.mock("@/lib/api/users", () => ({
   fetchUser: apiMocks.fetchUser,
   fetchUserPins: apiMocks.fetchUserPins,
 }));
-vi.mock("@/lib/api/collections", () => ({
+vi.mock("@/features/collections/api/collections", () => ({
   fetchUserCollections: apiMocks.fetchUserCollections,
 }));
 

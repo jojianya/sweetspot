@@ -20,7 +20,7 @@ import type { PinDetail } from "@/shared/types/pin";
 import { useCategories } from "@/hooks/useCategories";
 import { useEditablePin } from "@/hooks/useEditablePin";
 import { usePinAddress } from "@/hooks/usePinAddress";
-import { useOptimisticSave } from "@/hooks/useOptimisticSave";
+import { useOptimisticSave } from "@/features/collections/hooks/useOptimisticSave";
 import { usePinShare } from "@/hooks/usePinShare";
 import { isPinOwner } from "@/lib/utils/pinPermission";
 import GoodSpotButton from "@/features/social/components/GoodSpotButton";

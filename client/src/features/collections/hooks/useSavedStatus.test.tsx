@@ -9,7 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   fetchFavorites: vi.fn(),
 }));
 
-vi.mock("@/lib/api/favorites", () => ({
+vi.mock("../api/favorites", () => ({
   fetchIsSaved: apiMocks.fetchIsSaved,
   fetchFavorites: apiMocks.fetchFavorites,
 }));

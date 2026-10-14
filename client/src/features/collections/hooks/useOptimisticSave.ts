@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { removeFavorite, saveFavorite } from "@/lib/api/favorites";
-import { useSavedStatus } from "@/hooks/useFavorites";
+import { removeFavorite, saveFavorite } from "../api/favorites";
+import { useSavedStatus } from "./useFavorites";
 import { errorMessage } from "@/shared/utils";
 import { useAuth } from "@/store/auth";
 

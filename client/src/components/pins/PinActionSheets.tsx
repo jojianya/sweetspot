@@ -2,7 +2,7 @@
 
 import PhotoLightbox from "@/features/photos/components/PhotoLightbox";
 import PinEditSheet from "./PinEditSheet";
-import AddToCollectionSheet from "./AddToCollectionSheet";
+import AddToCollectionSheet from "@/features/collections/components/AddToCollectionSheet";
 import ReportSheet from "./ReportSheet";
 import { categorySlug } from "@/lib/utils/category";
 import type { Category } from "@/shared/types/category"

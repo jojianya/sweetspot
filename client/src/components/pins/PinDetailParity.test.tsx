@@ -60,7 +60,7 @@ vi.mock("next/link", async () => {
 vi.mock("@/shared/layout/Navbar", () => ({ default: () => null }));
 vi.mock("@/hooks/usePinView", () => ({ usePinView: mockUsePinView }));
 vi.mock("@/hooks/usePinAddress", () => ({ usePinAddress: mockUsePinAddress }));
-vi.mock("@/hooks/useOptimisticSave", () => ({ useOptimisticSave: () => mockSaveState }));
+vi.mock("@/features/collections/hooks/useOptimisticSave", () => ({ useOptimisticSave: () => mockSaveState }));
 vi.mock("@/hooks/usePinShare", () => ({
   usePinShare: () => ({ copied: false, handleShare: vi.fn(), goDirections: vi.fn() }),
 }));
@@ -83,7 +83,7 @@ vi.mock("./PinEditSheet", () => ({
     );
   },
 }));
-vi.mock("./AddToCollectionSheet", () => ({
+vi.mock("@/features/collections/components/AddToCollectionSheet", () => ({
   default: (p: { pinId: string; onClose: () => void }) => {
     captured.collection = p;
     return <div data-testid="collection-sheet">collection-{p.pinId}</div>;

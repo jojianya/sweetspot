@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { fetchCollection, updateCollection } from "@/lib/api/collections";
+import { fetchCollection, updateCollection } from "../api/collections";
 import { errorMessage } from "@/shared/utils";
-import { useCollections } from "@/hooks/useCollections";
+import { useCollections } from "./useCollections";
 import type { CollectionDetail } from "@/shared/types/social";
 
 /**

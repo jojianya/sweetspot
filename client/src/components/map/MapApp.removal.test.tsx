@@ -93,7 +93,7 @@ vi.mock("./MapView", () => ({
 vi.mock("./MapNavBar", () => ({ default: () => null }));
 vi.mock("./LocateButton", () => ({ default: () => null }));
 vi.mock("@/components/pins/CreatePinButton", () => ({ default: () => null }));
-vi.mock("@/components/pins/SavedPinsPanel", () => ({ default: () => null }));
+vi.mock("@/features/collections/components/SavedPinsPanel", () => ({ default: () => null }));
 vi.mock("@/features/social/components/TrendingList", () => ({
   default: () => null,
   TrendingIcon: () => null,

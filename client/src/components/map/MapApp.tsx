@@ -8,7 +8,7 @@ import { PinsNotification } from "./PinsNotification";
 import { PostingCrosshair } from "./PostingCrosshair";
 import PinDetailPanel from "@/components/pins/PinDetailPanel";
 import CreatePinButton from "@/components/pins/CreatePinButton";
-import SavedPinsPanel from "@/components/pins/SavedPinsPanel";
+import SavedPinsPanel from "@/features/collections/components/SavedPinsPanel";
 import TrendingList, { TrendingIcon } from "@/features/social/components/TrendingList";
 import { usePins } from "@/hooks/usePins";
 import { usePinDetail } from "@/hooks/usePinDetail";

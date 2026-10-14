@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/hooks/useFavorites", () => ({
+vi.mock("../hooks/useFavorites", () => ({
   useFavorites: () => ({
     entries: [
       {
@@ -20,7 +20,7 @@ vi.mock("@/hooks/useFavorites", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useCollections", () => ({
+vi.mock("../hooks/useCollections", () => ({
   useCollections: () => ({
     collections: [
       {
@@ -38,7 +38,7 @@ vi.mock("@/hooks/useCollections", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useCollectionDetail", () => ({
+vi.mock("../hooks/useCollectionDetail", () => ({
   useCollectionDetail: () => ({
     openCollection: null,
     setOpenCollection: vi.fn(),

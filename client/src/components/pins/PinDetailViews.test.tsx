@@ -30,7 +30,7 @@ vi.mock("@/lib/api/pins", () => ({
 vi.mock("@/lib/api/categories", () => ({
   fetchCategories: apiMocks.fetchCategories,
 }));
-vi.mock("@/lib/api/favorites", () => ({
+vi.mock("@/features/collections/api/favorites", () => ({
   fetchIsSaved: apiMocks.fetchIsSaved,
   fetchFavorites: apiMocks.fetchFavorites,
   saveFavorite: apiMocks.saveFavorite,
@@ -59,7 +59,7 @@ vi.mock("next/link", async () => {
 });
 
 vi.mock("./PinEditSheet", () => ({ default: () => null }));
-vi.mock("./AddToCollectionSheet", () => ({ default: () => null }));
+vi.mock("@/features/collections/components/AddToCollectionSheet", () => ({ default: () => null }));
 vi.mock("./ReportSheet", () => ({ default: () => null }));
 vi.mock("@/features/photos/components/PhotoLightbox", () => ({ default: () => null }));
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useClearOnChange } from "@/shared/hooks/useClearOnChange";
-import { fetchFavorites, fetchIsSaved, type FavoriteEntry } from "@/lib/api/favorites";
+import { fetchFavorites, fetchIsSaved, type FavoriteEntry } from "../api/favorites";
 import { errorMessage } from "@/shared/utils";
 
 /** Matches the server's maximum page size for the saved-pins list. */

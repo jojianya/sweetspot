@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { addPinToCollection, createCollection, fetchMyCollections, removePinFromCollection } from "@/lib/api/collections";
+import { addPinToCollection, createCollection, fetchMyCollections, removePinFromCollection } from "../api/collections";
 import { useAsyncData } from "@/shared/hooks/useAsyncData";
 import type { CollectionEntry } from "@/shared/types/social";
 

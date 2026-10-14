@@ -34,7 +34,7 @@ vi.mock("@/hooks/usePinAddress", () => ({
 vi.mock("@/hooks/usePinShare", () => ({
   usePinShare: () => ({ copied: false, handleShare: vi.fn(), goDirections: vi.fn() }),
 }));
-vi.mock("@/hooks/useOptimisticSave", () => ({
+vi.mock("@/features/collections/hooks/useOptimisticSave", () => ({
   useOptimisticSave: () => ({ saved: false, saving: false, error: null, handleSave: vi.fn() }),
 }));
 vi.mock("@/hooks/useCategories", () => ({

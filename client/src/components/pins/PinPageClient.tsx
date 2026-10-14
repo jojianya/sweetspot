@@ -16,7 +16,7 @@ import { useOptimisticSave } from "@/features/collections/hooks/useOptimisticSav
 import { usePinShare } from "@/hooks/usePinShare";
 import { isPinOwner } from "@/lib/utils/pinPermission";
 import { formatTime } from "@/shared/utils";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 import type { PinDetail } from "@/shared/types/pin";
 
 interface PinPageClientProps {

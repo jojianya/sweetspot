@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { fetchSession } from "@/lib/api/auth";
+import { fetchSession } from "../api/auth";
 import { ApiError } from "@/shared/api/client";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "../store/auth";
 
 /**
  * Reconciles the cached user with the real session credential, once per page

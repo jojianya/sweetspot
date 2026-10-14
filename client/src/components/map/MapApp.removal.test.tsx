@@ -53,7 +53,7 @@ vi.mock("@/hooks/usePinStream", () => ({
   },
 }));
 
-vi.mock("@/store/auth", () => ({
+vi.mock("@/features/auth/store/auth", () => ({
   useAuth: Object.assign(() => ({ user: null }), {
     getState: () => ({ user: null }),
   }),

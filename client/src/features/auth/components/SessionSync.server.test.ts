@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { AxiosAdapter } from "axios";
 import api from "@/shared/api/client";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "../store/auth";
 // Importing the component module (not rendering it) must be safe without a
 // browser: registration happens in an effect, so effects never run here.
-import "@/components/SessionSync";
+import "./SessionSync";
 
 function failWith(status: number, url: string): AxiosAdapter {
   return () =>

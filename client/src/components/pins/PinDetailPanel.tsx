@@ -25,7 +25,7 @@ import { usePinShare } from "@/hooks/usePinShare";
 import { isPinOwner } from "@/lib/utils/pinPermission";
 import GoodSpotButton from "@/features/social/components/GoodSpotButton";
 import PinViews from "./PinViews";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 
 interface PinDetailPanelProps {
   pin: PinDetail;

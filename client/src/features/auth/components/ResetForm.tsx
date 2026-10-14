@@ -4,9 +4,9 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Navbar from "@/shared/layout/Navbar";
-import { AuthError, AuthField, AuthShell, AuthSubmit } from "@/components/auth/AuthChrome";
-import { checkPassword } from "@/lib/password";
-import { confirmPasswordReset } from "@/lib/api/auth";
+import { AuthError, AuthField, AuthShell, AuthSubmit } from "./AuthChrome";
+import { checkPassword } from "../lib/password";
+import { confirmPasswordReset } from "../api/auth";
 
 const GENERIC_FAILURE = "This link is invalid or has expired. Request a new one below.";
 

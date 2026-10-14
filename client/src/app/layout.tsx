@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import RuntimeErrorReporter from "@/shared/layout/RuntimeErrorReporter";
-import SessionSync from "@/components/SessionSync";
+import SessionSync from "@/features/auth/components/SessionSync";
 import { getSiteUrl } from "@/shared/lib/site";
 import "./globals.css";
 

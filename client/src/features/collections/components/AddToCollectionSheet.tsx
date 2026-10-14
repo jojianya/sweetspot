@@ -6,7 +6,7 @@ import { CloseIcon } from "@/shared/ui/icons";
 import { SheetHeader, SheetSignIn } from "@/components/pins/SheetChrome";
 import { useCollections } from "../hooks/useCollections";
 import { errorMessage } from "@/shared/utils";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 import { PinCoverImage } from "@/components/pins/PinCoverImage";
 
 interface AddToCollectionSheetProps {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AxiosAdapter } from "axios";
 import api, { ApiError, setUnauthorizedHandler } from "./client";
 import { errorMessage } from "@/shared/utils";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 
 describe("ApiError", () => {
   it("carries status, code, and message", () => {

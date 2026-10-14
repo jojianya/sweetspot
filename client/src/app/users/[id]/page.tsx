@@ -6,7 +6,7 @@ import Navbar from "@/shared/layout/Navbar";
 import { useFollow } from "@/features/social/hooks/useFollow";
 import { useProfile } from "@/features/profile/hooks/useProfile";
 import { useProfileEditor } from "@/features/profile/hooks/useProfileEditor";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 import { PageError } from "@/shared/ui/PageState";
 import { PinGrid } from "@/features/profile/components/PinGrid";
 import { ProfileCollections } from "@/features/profile/components/ProfileCollections";

@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Comment } from "../types";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 
 function makeComment(userId: string | null, username: string | null): Comment {
   return {

@@ -34,7 +34,7 @@ vi.mock("../hooks/useComments", () => ({
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 import CommentsSection from "./CommentsSection";
 
 describe("CommentsSection delete failure", () => {

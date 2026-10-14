@@ -4,10 +4,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AxiosAdapter } from "axios";
 import api, { setUnauthorizedHandler } from "@/shared/api/client";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "../store/auth";
 import SessionSync from "./SessionSync";
 
-vi.mock("@/hooks/useSessionSync", () => ({
+vi.mock("../hooks/useSessionSync", () => ({
   useSessionSync: () => {},
 }));
 

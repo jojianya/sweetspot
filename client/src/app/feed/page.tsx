@@ -5,7 +5,7 @@ import Navbar from "@/shared/layout/Navbar";
 import { ChevronRightIcon, FeedIcon, PinIcon } from "@/shared/ui/icons";
 import { fetchFeed } from "@/features/social/api/social";
 import { relativeTime } from "@/shared/utils";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 import { useAsyncData } from "@/shared/hooks/useAsyncData";
 import { Skeleton } from "@/shared/ui/Skeleton";
 import { PageEmpty, PageError, PageLoading } from "@/shared/ui/PageState";

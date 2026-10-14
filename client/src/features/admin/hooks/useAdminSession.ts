@@ -1,8 +1,8 @@
 "use client";
 
-import { fetchSession } from "@/lib/api/auth";
+import { fetchSession } from "@/features/auth/api/auth";
 import { useAsyncData } from "@/shared/hooks/useAsyncData";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 
 /**
  * Authorizes an admin surface against the server before rendering it.

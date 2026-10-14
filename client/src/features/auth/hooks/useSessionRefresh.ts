@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { fetchMe } from "@/features/profile/api/users";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "../store/auth";
 
 /**
  * Re-sync the persisted session with the server on mount so role changes

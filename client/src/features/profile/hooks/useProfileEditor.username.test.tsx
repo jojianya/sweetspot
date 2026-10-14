@@ -14,7 +14,7 @@ vi.mock("../api/users", () => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 
 const profile: PublicProfile = {
   id: "u-1",

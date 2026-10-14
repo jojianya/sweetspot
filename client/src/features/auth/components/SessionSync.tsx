@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import { setUnauthorizedHandler } from "@/shared/api/client";
-import { useAuth } from "@/store/auth";
-import { useSessionSync } from "@/hooks/useSessionSync";
+import { useAuth } from "../store/auth";
+import { useSessionSync } from "../hooks/useSessionSync";
 
 function clearSession() {
   useAuth.getState().clearAuth();

@@ -2,8 +2,8 @@
 
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { logout } from "@/lib/api/auth";
-import { useAuth } from "@/store/auth";
+import { logout } from "../api/auth";
+import { useAuth } from "../store/auth";
 
 export function useLogout() {
   const clearAuth = useAuth((s) => s.clearAuth);

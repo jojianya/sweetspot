@@ -19,7 +19,7 @@ import { usePinStream } from "@/hooks/usePinStream";
 import { useTrending } from "@/features/social/hooks/useTrending";
 import { parsePoint } from "@/lib/utils/geo";
 import { toPinListEntry } from "@/lib/utils/pinEntry";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 import { useTheme } from "@/store/theme";
 import type { CreatedPin, NewPinPhoto, PinListEntry, TrendingPin } from "@/shared/types/pin";
 

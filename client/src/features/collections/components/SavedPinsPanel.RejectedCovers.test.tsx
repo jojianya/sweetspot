@@ -52,7 +52,7 @@ vi.mock("../hooks/useCollectionDetail", () => ({
   }),
 }));
 
-vi.mock("@/store/auth", () => ({
+vi.mock("@/features/auth/store/auth", () => ({
   useAuth: () => ({ user: null }),
 }));
 

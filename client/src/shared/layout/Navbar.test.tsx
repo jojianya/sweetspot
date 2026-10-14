@@ -3,13 +3,13 @@ import { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Navbar from "./Navbar";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-vi.mock("@/lib/api/auth", () => ({
+vi.mock("@/features/auth/api/auth", () => ({
   logout: vi.fn(),
 }));
 

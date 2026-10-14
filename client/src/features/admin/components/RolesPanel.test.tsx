@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 
 const apiMocks = vi.hoisted(() => ({
   fetchSession: vi.fn(),
@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   updateUserRole: vi.fn(),
 }));
 
-vi.mock("@/lib/api/auth", () => ({ fetchSession: apiMocks.fetchSession }));
+vi.mock("@/features/auth/api/auth", () => ({ fetchSession: apiMocks.fetchSession }));
 // Navbar pulls in useRouter through useLogout.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),

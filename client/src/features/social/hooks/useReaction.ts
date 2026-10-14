@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { reactToPin, unreactToPin } from "../api/reactions";
 import { errorMessage } from "@/shared/utils";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 
 interface ReactionState {
   reacted: boolean;

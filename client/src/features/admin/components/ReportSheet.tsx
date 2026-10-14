@@ -5,7 +5,7 @@ import PanelSheet from "@/shared/ui/PanelSheet";
 import { SheetHeader, SheetSignIn } from "@/components/pins/SheetChrome";
 import { createPinReport } from "../api/reports";
 import { errorMessage } from "@/shared/utils";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 
 interface ReportSheetProps {
   pinId: string;

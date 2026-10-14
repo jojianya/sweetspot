@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Category } from "@/shared/types/category"
 import type { PinDetail, PinPhoto } from "@/shared/types/pin";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 import PinDetailPanel from "./PinDetailPanel";
 import PinPageClient from "./PinPageClient";
 

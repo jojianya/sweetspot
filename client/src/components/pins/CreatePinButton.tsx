@@ -9,7 +9,7 @@ import type { CreatedPin, NewPinPhoto } from "@/shared/types/pin";
 import type { MapLocation } from "@/components/map/MapView";
 import { errorMessage } from "@/shared/utils"
 import { getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils/geo";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 import { CreatePinForm } from "@/components/pins/CreatePinForm";
 import { PhotoPicker } from "@/features/photos/components/PhotoPicker";
 import { usePhotoPreviews } from "@/features/photos/hooks/usePhotoPreviews";

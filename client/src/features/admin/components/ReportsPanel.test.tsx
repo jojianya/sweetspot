@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reportEmptyCopy } from "./ReportsPanel";
-import { useAuth, type PersistedUser } from "@/store/auth";
+import { useAuth, type PersistedUser } from "@/features/auth/store/auth";
 
 const apiMocks = vi.hoisted(() => ({
   fetchSession: vi.fn(),
@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   reviewReport: vi.fn(),
 }));
 
-vi.mock("@/lib/api/auth", () => ({ fetchSession: apiMocks.fetchSession }));
+vi.mock("@/features/auth/api/auth", () => ({ fetchSession: apiMocks.fetchSession }));
 vi.mock("../api/reports", () => ({
   fetchReports: apiMocks.fetchReports,
   reviewReport: apiMocks.reviewReport,

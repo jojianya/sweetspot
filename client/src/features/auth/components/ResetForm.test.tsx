@@ -8,7 +8,7 @@ const apiMocks = vi.hoisted(() => ({
   confirmPasswordReset: vi.fn(),
 }));
 
-vi.mock("@/lib/api/auth", () => ({
+vi.mock("../api/auth", () => ({
   confirmPasswordReset: apiMocks.confirmPasswordReset,
 }));
 

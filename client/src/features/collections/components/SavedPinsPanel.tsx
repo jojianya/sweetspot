@@ -10,7 +10,7 @@ import { useFavorites } from "../hooks/useFavorites";
 import { useCollections } from "../hooks/useCollections";
 import { useCollectionDetail } from "../hooks/useCollectionDetail";
 import { errorMessage } from "@/shared/utils";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 import type { PinListEntry } from "@/shared/types/pin";
 
 interface SavedPinsPanelProps {

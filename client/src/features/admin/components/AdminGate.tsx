@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import Navbar from "@/shared/layout/Navbar";
 import { useAdminSession } from "../hooks/useAdminSession";
-import { useAuth } from "@/store/auth";
+import { useAuth } from "@/features/auth/store/auth";
 
 /**
  * Gate for the admin surfaces (reports, roles). The cached role is not a

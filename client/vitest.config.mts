@@ -7,6 +7,8 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
+      "@/features": resolve(rootDir, "src/features"),
+      "@/shared": resolve(rootDir, "src/shared"),
       "@": resolve(rootDir, "src"),
     },
   },

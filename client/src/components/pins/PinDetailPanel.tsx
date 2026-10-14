@@ -15,7 +15,7 @@ import {
 } from "@/shared/ui/icons";
 import { PhotoThumbStrip } from "./PhotoThumbStrip";
 import { PinActionSheets } from "./PinActionSheets";
-import CommentsSection from "./CommentsSection";
+import CommentsSection from "@/features/comments/components/CommentsSection";
 import type { PinDetail } from "@/shared/types/pin";
 import { useCategories } from "@/hooks/useCategories";
 import { useEditablePin } from "@/hooks/useEditablePin";

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/shared/layout/Navbar";
 import { PhotoThumbStrip } from "@/components/pins/PhotoThumbStrip";
 import { PinActionSheets } from "@/components/pins/PinActionSheets";
-import CommentsSection from "@/components/pins/CommentsSection";
+import CommentsSection from "@/features/comments/components/CommentsSection";
 import PinViews from "./PinViews";
 import { BookmarkIcon, PersonIcon, PinIcon } from "@/shared/ui/icons";
 import { useCategories } from "@/hooks/useCategories";

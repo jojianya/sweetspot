@@ -108,7 +108,7 @@ vi.mock("./PhotoLightbox", () => ({
     return null;
   },
 }));
-vi.mock("./CommentsSection", () => ({
+vi.mock("@/features/comments/components/CommentsSection", () => ({
   default: (p: { pinId: string; compact?: boolean }) => {
     captured.comments = p;
     return (

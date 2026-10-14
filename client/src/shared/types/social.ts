@@ -1,16 +1,5 @@
 import type { PinListEntry } from "./pin";
 
-export interface Comment {
-  id: string;
-  pin_id: string;
-  user_id: string | null;
-  body: string;
-  is_hidden: boolean;
-  created_at: string;
-  username: string | null;
-  avatar_url: string | null;
-}
-
 export interface CollectionEntry {
   id: string;
   user_id: string;

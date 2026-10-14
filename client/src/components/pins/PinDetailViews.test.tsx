@@ -36,7 +36,7 @@ vi.mock("@/lib/api/favorites", () => ({
   saveFavorite: apiMocks.saveFavorite,
   removeFavorite: apiMocks.removeFavorite,
 }));
-vi.mock("@/lib/api/comments", () => ({
+vi.mock("@/features/comments/api/comments", () => ({
   fetchComments: apiMocks.fetchComments,
   createComment: apiMocks.createComment,
   deleteComment: apiMocks.deleteComment,

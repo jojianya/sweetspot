@@ -1,6 +1,6 @@
 import api from "@/shared/api/client";
 import { commentSchema } from "@/shared/api/schemas";
-import type { Comment } from "@/shared/types/social";
+import type { Comment } from "../types";
 
 /**
  * GET /pins/:id/comments — one page of comments plus the total number of

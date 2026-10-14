@@ -22,7 +22,7 @@ vi.mock("@/lib/api/favorites", () => ({
   saveFavorite: vi.fn(),
   removeFavorite: vi.fn(),
 }));
-vi.mock("@/lib/api/comments", () => ({
+vi.mock("@/features/comments/api/comments", () => ({
   fetchComments: vi.fn().mockResolvedValue([]),
   createComment: vi.fn(),
   deleteComment: vi.fn(),

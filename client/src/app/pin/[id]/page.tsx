@@ -18,7 +18,8 @@ interface PinPageParams {
  * Resolves a pin for the page: null means the API answered 404, and anything
  * else propagates to error.tsx.
  *
- * getPinServer already maps a 404 response to null (see lib/api/server.ts), so
+ * getPinServer already maps a 404 response to null (see
+ * features/pins/api/server.ts), so
  * there is no ApiError to inspect here: a missing or hidden pin arrives as null,
  * and timeouts, 500s and network failures arrive as thrown errors that belong
  * in the error boundary. The previous ApiError 404 branch was unreachable —

@@ -23,8 +23,8 @@
  * which the client read as an ended session and logged the user out.
  *
  * NEXT_PUBLIC_API_URL still exists for two unrelated jobs and must not be
- * confused with this one: absolute URLs in SSR metadata (lib/site.ts) and the
- * SSR fetch fallback (lib/api/server.ts).
+ * confused with this one: absolute URLs in SSR metadata (shared/lib/site.ts) and the
+ * SSR fetch fallback (features/pins/api/server.ts).
  */
 export const API_BASE_URL = "/api";
 

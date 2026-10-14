@@ -83,7 +83,7 @@ describe("pin page metadata", () => {
     expect(mocks.notFound).toHaveBeenCalledOnce();
   });
 
-  // getPinServer maps a 404 response to null (lib/api/server.ts), so the
+  // getPinServer maps a 404 response to null (features/pins/api/server.ts), so the
   // page's contract is "null means missing". Anything it throws is a real
   // failure and belongs in error.tsx, including an ApiError carrying 404.
   it("treats a thrown ApiError 404 as a real failure, not a missing pin", async () => {

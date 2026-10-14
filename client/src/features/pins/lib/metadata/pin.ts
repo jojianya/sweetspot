@@ -36,7 +36,7 @@ function parseHttpUrl(value: string | undefined): URL | null {
  * Contract (for OG tags and links): returns string | null, null means omit.
  * Allowed: http/https only. Everything else (relative without apiUrl,
  * blob:, data:, javascript:, protocol-relative) is null. Uploads handling
- * shares isUploadsPath/extractUploadsSuffix with lib/media.ts.
+ * shares isUploadsPath/extractUploadsSuffix with shared/lib/media.ts.
  */
 export function resolvePublicMediaUrl(
   value: string | undefined,

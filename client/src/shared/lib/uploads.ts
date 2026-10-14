@@ -4,7 +4,7 @@
  * The Go server stores absolute URLs (`{STORAGE_BASE_URL}/uploads/<id>.webp`)
  * at upload time. When the LAN IP changes every old URL points at a dead
  * host, so the client re-roots any `/uploads/...` pathname to same-origin
- * (see `lib/media.ts`) and metadata re-roots it to the public API
+ * (see `shared/lib/media.ts`) and metadata re-roots it to the public API
  * (see `lib/metadata/pin.ts`). Both use these helpers so the `/uploads/`
  * rule lives in exactly one place.
  */

@@ -55,7 +55,7 @@ export function useProfileEditor(
     try {
       // A rename is the only field with a character rule; check it here so the
       // user is told before the upload rather than after (mirrors the server,
-      // see lib/username.ts).
+      // see features/profile/lib/username.ts).
       if (editUsername.trim() !== profile.username) {
         const usernameCheck = checkUsername(editUsername);
         if (!usernameCheck.ok) {

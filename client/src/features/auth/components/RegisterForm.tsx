@@ -26,7 +26,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
     if (!EMAIL_RE.test(email.trim())) return setError("Enter a valid email");
-    // Mirrors the server's rules (see lib/username.ts) so the problem is named
+    // Mirrors the server's rules (see features/profile/lib/username.ts) so the problem is named
     // before the request rather than after it.
     const usernameCheck = checkUsername(username);
     if (!usernameCheck.ok) return setError(usernameCheck.message);

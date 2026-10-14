@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   updateUserRole: vi.fn(),
 }));
 
-vi.mock("@/lib/api/users", () => ({
+vi.mock("@/features/profile/api/users", () => ({
   fetchUsers: apiMocks.fetchUsers,
   searchUsers: apiMocks.searchUsers,
   updateUserRole: apiMocks.updateUserRole,

@@ -1,4 +1,4 @@
-import type { ProfileEdit } from "@/lib/api/users";
+import type { ProfileEdit } from "../api/users";
 import type { PublicProfile } from "@/shared/types/social";
 
 export function strSocial(value: unknown): string {

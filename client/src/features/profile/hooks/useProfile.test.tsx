@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   fetchUserCollections: vi.fn(),
 }));
 
-vi.mock("@/lib/api/users", () => ({
+vi.mock("../api/users", () => ({
   fetchUser: apiMocks.fetchUser,
   fetchUserPins: apiMocks.fetchUserPins,
 }));

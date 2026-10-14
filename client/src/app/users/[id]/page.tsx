@@ -4,15 +4,15 @@ import { use } from "react";
 import Link from "next/link";
 import Navbar from "@/shared/layout/Navbar";
 import { useFollow } from "@/features/social/hooks/useFollow";
-import { useProfile } from "@/hooks/useProfile";
-import { useProfileEditor } from "@/hooks/useProfileEditor";
+import { useProfile } from "@/features/profile/hooks/useProfile";
+import { useProfileEditor } from "@/features/profile/hooks/useProfileEditor";
 import { useAuth } from "@/store/auth";
 import { PageError } from "@/shared/ui/PageState";
-import { PinGrid } from "./_components/PinGrid";
-import { ProfileCollections } from "./_components/ProfileCollections";
-import { ProfileEditForm } from "./_components/ProfileEditForm";
-import { ProfileHeader } from "./_components/ProfileHeader";
-import { ProfileSkeleton } from "./_components/ProfileSkeleton";
+import { PinGrid } from "@/features/profile/components/PinGrid";
+import { ProfileCollections } from "@/features/profile/components/ProfileCollections";
+import { ProfileEditForm } from "@/features/profile/components/ProfileEditForm";
+import { ProfileHeader } from "@/features/profile/components/ProfileHeader";
+import { ProfileSkeleton } from "@/features/profile/components/ProfileSkeleton";
 
 interface ProfilePageProps {
   params: Promise<{ id: string }>;

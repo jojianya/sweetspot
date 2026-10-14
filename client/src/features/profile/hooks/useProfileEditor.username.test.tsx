@@ -9,7 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   updateMyProfile: vi.fn(),
 }));
 
-vi.mock("@/lib/api/users", () => ({
+vi.mock("../api/users", () => ({
   updateMyProfile: apiMocks.updateMyProfile,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));

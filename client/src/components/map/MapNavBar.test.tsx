@@ -8,7 +8,7 @@ import MapNavBar from "./MapNavBar";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
-vi.mock("@/lib/api/users", () => ({
+vi.mock("@/features/profile/api/users", () => ({
   fetchMe: vi.fn().mockRejectedValue(new Error("offline")),
 }));
 vi.mock("./ThemeToggle", () => ({

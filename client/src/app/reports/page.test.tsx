@@ -20,7 +20,7 @@ vi.mock("@/lib/api/reports", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
-vi.mock("@/lib/api/users", () => ({
+vi.mock("@/features/profile/api/users", () => ({
   fetchMe: vi.fn().mockRejectedValue(new Error("offline")),
 }));
 

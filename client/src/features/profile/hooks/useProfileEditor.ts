@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { updateMyProfile } from "@/lib/api/users";
+import { updateMyProfile } from "../api/users";
 import { errorMessage } from "@/shared/utils";
-import { checkUsername } from "@/lib/username";
-import { buildProfileEdit, strSocial } from "@/lib/utils/profile";
+import { checkUsername } from "../lib/username";
+import { buildProfileEdit, strSocial } from "../lib/profile";
 import { useAuth } from "@/store/auth";
 import type { PublicProfile } from "@/shared/types/social";
 

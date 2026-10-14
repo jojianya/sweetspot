@@ -18,7 +18,7 @@ vi.mock("next/navigation", () => ({
 }));
 // The role console reads the user list from the profiles endpoint, and
 // useSessionRefresh reads /me through the same module, so both are mocked here.
-vi.mock("@/lib/api/users", () => ({
+vi.mock("@/features/profile/api/users", () => ({
   fetchUsers: apiMocks.fetchUsers,
   searchUsers: apiMocks.searchUsers,
   updateUserRole: apiMocks.updateUserRole,

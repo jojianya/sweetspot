@@ -13,7 +13,7 @@ vi.mock("@/lib/api/auth", () => ({
   logout: vi.fn(),
 }));
 
-vi.mock("@/lib/api/users", () => ({
+vi.mock("@/features/profile/api/users", () => ({
   fetchMe: vi.fn().mockRejectedValue(new Error("offline")),
 }));
 

@@ -19,7 +19,7 @@ const apiMocks = vi.hoisted(() => ({
   updateMyProfile: vi.fn(),
 }));
 
-vi.mock("@/lib/api/users", () => ({
+vi.mock("@/features/profile/api/users", () => ({
   fetchUser: apiMocks.fetchUser,
   fetchUserPins: apiMocks.fetchUserPins,
   updateMyProfile: apiMocks.updateMyProfile,

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import PanelSheet from "@/components/PanelSheet";
+import PanelSheet from "@/shared/ui/PanelSheet";
 import { SheetHeader, SheetSignIn } from "@/components/pins/SheetChrome";
-import { createPinReport } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
+import { createPinReport } from "@/lib/api/reports";
+import { errorMessage } from "@/shared/utils";
 import { useAuth } from "@/store/auth";
 
 interface ReportSheetProps {

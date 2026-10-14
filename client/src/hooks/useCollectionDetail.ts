@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { fetchCollection, updateCollection } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
+import { fetchCollection, updateCollection } from "@/lib/api/collections";
+import { errorMessage } from "@/shared/utils";
 import { useCollections } from "@/hooks/useCollections";
-import type { CollectionDetail } from "@/lib/types";
+import type { CollectionDetail } from "@/shared/types/social";
 
 /**
  * Open collection detail with its pin-removal and privacy mutations.

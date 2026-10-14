@@ -1,5 +1,5 @@
 import { z } from "zod";
-import api from "./client";
+import api from "@/shared/api/client";
 
 /**
  * Shape of the answer to one toggle. `reacted` is the caller's state after the

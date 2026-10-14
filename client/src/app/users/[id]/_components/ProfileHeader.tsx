@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import Avatar from "@/components/Avatar";
-import { formatTime } from "@/lib/utils";
+import Avatar from "@/shared/ui/Avatar";
+import { formatTime } from "@/shared/utils";
 import { socialLinks } from "@/lib/utils/profile";
 import type { PersistedUser } from "@/store/auth";
-import type { PublicProfile, UserStats } from "@/lib/types";
+import type { PublicProfile, UserStats } from "@/shared/types/social";
 
 export function ProfileHeader({
   profile,

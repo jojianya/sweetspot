@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CloseIcon } from "@/components/icons";
+import { CloseIcon } from "@/shared/ui/icons";
 
 /**
  * Shared bottom-sheet header: title plus close button. The five sheet

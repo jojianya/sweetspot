@@ -1,10 +1,10 @@
 "use client";
 
-import { BookmarkIcon } from "@/components/icons";
+import { BookmarkIcon } from "@/shared/ui/icons";
 import { ListSkeleton } from "@/components/pins/ListSkeleton";
 import { PinCoverImage } from "@/components/pins/PinCoverImage";
-import type { PinListEntry } from "@/lib/types";
-import type { FavoriteEntry } from "@/lib/api";
+import type { PinListEntry } from "@/shared/types/pin";
+import type { FavoriteEntry } from "@/lib/api/favorites";
 
 /** Saved tab: favorite pins with load-more paging. */
 export function SavedPinsList({

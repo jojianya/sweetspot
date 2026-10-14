@@ -1,8 +1,8 @@
 "use client";
 
-import Navbar from "@/components/layout/Navbar";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { PageLoading } from "@/components/ui/PageState";
+import Navbar from "@/shared/layout/Navbar";
+import { Skeleton } from "@/shared/ui/Skeleton";
+import { PageLoading } from "@/shared/ui/PageState";
 
 /** Loading placeholder mirroring the profile page layout. */
 export function ProfileSkeleton() {

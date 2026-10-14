@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { resolveMediaUrl } from "@/lib/media";
-import { parsePoint } from "@/lib/utils";
+import { resolveMediaUrl } from "@/shared/lib/media";
+import { parsePoint } from "@/lib/utils/geo";
 import { usePinView } from "@/hooks/usePinView";
-import type { PinDetail } from "@/lib/types";
+import type { PinDetail } from "@/shared/types/pin";
 
 /**
  * Local editable copy of a pin shared by the detail panel and the permalink

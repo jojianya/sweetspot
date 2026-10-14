@@ -5,7 +5,8 @@ import PinEditSheet from "./PinEditSheet";
 import AddToCollectionSheet from "./AddToCollectionSheet";
 import ReportSheet from "./ReportSheet";
 import { categorySlug } from "@/lib/utils/category";
-import type { Category, PinDetail } from "@/lib/types";
+import type { Category } from "@/shared/types/category"
+import type { PinDetail } from "@/shared/types/pin";
 
 /**
  * Lightbox plus edit/collection/report sheets shared by the panel and the

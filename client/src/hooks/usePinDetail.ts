@@ -1,9 +1,9 @@
 "use client";
 
-import { fetchPin } from "@/lib/api";
-import { useAsyncData } from "@/hooks/useAsyncData";
-import { useClearOnChange } from "@/hooks/useClearOnChange";
-import type { PinDetail } from "@/lib/types";
+import { fetchPin } from "@/lib/api/pins";
+import { useAsyncData } from "@/shared/hooks/useAsyncData";
+import { useClearOnChange } from "@/shared/hooks/useClearOnChange";
+import type { PinDetail } from "@/shared/types/pin";
 
 interface UsePinDetailOptions {
   onError?: (message: string) => void;

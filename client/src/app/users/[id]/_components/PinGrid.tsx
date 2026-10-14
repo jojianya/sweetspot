@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { iconStroke } from "@/components/icons";
-import type { PinListEntry } from "@/lib/types";
-import { resolveMediaUrl } from "@/lib/media";
+import { iconStroke } from "@/shared/ui/icons";
+import type { PinListEntry } from "@/shared/types/pin";
+import { resolveMediaUrl } from "@/shared/lib/media";
 
 export function PinGrid({ pins }: { pins: PinListEntry[] }) {
   if (pins.length === 0) {

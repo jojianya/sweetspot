@@ -1,5 +1,5 @@
-import api from "./client";
-import type { PinListEntry } from "@/lib/types";
+import api from "@/shared/api/client";
+import type { PinListEntry } from "@/shared/types/pin";
 
 export interface FavoriteEntry extends PinListEntry {
   saved_at: string;

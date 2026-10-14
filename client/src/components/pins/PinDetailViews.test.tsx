@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PinDetail } from "@/lib/types";
+import type { PinDetail } from "@/shared/types/pin";
 import { useAuth } from "@/store/auth";
 import PinDetailPanel from "./PinDetailPanel";
 
@@ -21,7 +21,26 @@ const apiMocks = vi.hoisted(() => ({
   registerPinView: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/pins", () => ({
+  fetchPin: apiMocks.fetchPin,
+  updatePin: apiMocks.updatePin,
+  deletePin: apiMocks.deletePin,
+  registerPinView: apiMocks.registerPinView,
+}));
+vi.mock("@/lib/api/categories", () => ({
+  fetchCategories: apiMocks.fetchCategories,
+}));
+vi.mock("@/lib/api/favorites", () => ({
+  fetchIsSaved: apiMocks.fetchIsSaved,
+  fetchFavorites: apiMocks.fetchFavorites,
+  saveFavorite: apiMocks.saveFavorite,
+  removeFavorite: apiMocks.removeFavorite,
+}));
+vi.mock("@/lib/api/comments", () => ({
+  fetchComments: apiMocks.fetchComments,
+  createComment: apiMocks.createComment,
+  deleteComment: apiMocks.deleteComment,
+}));
 
 vi.mock("@/lib/api/geocoding", () => ({
   reverseGeocode: vi.fn().mockResolvedValue(null),

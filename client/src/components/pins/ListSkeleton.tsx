@@ -1,6 +1,6 @@
 "use client";
 
-import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
+import { Skeleton, SkeletonRegion } from "@/shared/ui/Skeleton";
 
 /** Loading rows for the saved/collections lists: thumbnail box plus two text lines. */
 export function ListSkeleton({ label }: { label: string }) {

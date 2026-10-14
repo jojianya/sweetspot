@@ -1,4 +1,4 @@
-import { formatViews } from "@/lib/utils";
+import { formatViews } from "@/shared/utils";
 
 /**
  * Plain-text view count shared by the map detail panel and the permalink

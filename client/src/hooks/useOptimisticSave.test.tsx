@@ -11,7 +11,11 @@ const apiMocks = vi.hoisted(() => ({
   fetchIsSaved: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/favorites", () => ({
+  saveFavorite: apiMocks.saveFavorite,
+  removeFavorite: apiMocks.removeFavorite,
+  fetchIsSaved: apiMocks.fetchIsSaved,
+}));
 
 const routerMocks = vi.hoisted(() => ({
   push: vi.fn(),

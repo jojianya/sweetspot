@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import PanelSheet from "@/components/PanelSheet";
+import PanelSheet from "@/shared/ui/PanelSheet";
 import { SheetHeader } from "@/components/pins/SheetChrome";
-import { deletePin, updatePin } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
-import type { Category, PinDetail } from "@/lib/types";
-import { resolveMediaUrl } from "@/lib/media";
+import { deletePin, updatePin } from "@/lib/api/pins";
+import { errorMessage } from "@/shared/utils";
+import type { Category } from "@/shared/types/category"
+import type { PinDetail } from "@/shared/types/pin";
+import { resolveMediaUrl } from "@/shared/lib/media";
 import { usePhotoPreviews } from "@/hooks/usePhotoPreviews";
 import { PhotoThumbGrid } from "@/components/pins/PhotoThumbGrid";
 import { MAX_PIN_PHOTOS, PHOTO_ACCEPT, validatePhotoFiles } from "@/lib/utils/photoValidation";

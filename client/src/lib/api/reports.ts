@@ -1,6 +1,6 @@
-import api from "./client";
-import { reportEntrySchema, reportSchema } from "./schemas";
-import type { Report, ReportEntry, ReportStatus } from "@/lib/types";
+import api from "@/shared/api/client";
+import { reportEntrySchema, reportSchema } from "@/shared/api/schemas";
+import type { Report, ReportEntry, ReportStatus } from "@/lib/types/report";
 
 /** GET /reports — moderation queue (admin/owner only). */
 export async function fetchReports(options: {

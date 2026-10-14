@@ -1,5 +1,5 @@
 import axios from "axios";
-import { API_BASE_URL, reportError } from "@/lib/monitoring";
+import { API_BASE_URL, reportError } from "@/shared/lib/monitoring";
 import { isSessionEnded } from "./session";
 
 export { API_BASE_URL };

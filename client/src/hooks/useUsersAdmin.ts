@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchUsers, searchUsers, updateUserRole } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
-import type { PublicProfile } from "@/lib/types";
+import { fetchUsers, searchUsers, updateUserRole } from "@/lib/api/users";
+import { errorMessage } from "@/shared/utils";
+import type { PublicProfile } from "@/shared/types/social";
 
 /** Users per page when listing all users. */
 export const USERS_PAGE_SIZE = 50;

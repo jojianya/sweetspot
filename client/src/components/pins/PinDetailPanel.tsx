@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import PanelSheet from "@/components/PanelSheet";
+import PanelSheet from "@/shared/ui/PanelSheet";
 import {
   BookmarkIcon,
   ChatIcon,
@@ -12,11 +12,11 @@ import {
   PersonIcon,
   PinIcon,
   ShareIcon,
-} from "@/components/icons";
+} from "@/shared/ui/icons";
 import { PhotoThumbStrip } from "./PhotoThumbStrip";
 import { PinActionSheets } from "./PinActionSheets";
 import CommentsSection from "./CommentsSection";
-import type { PinDetail } from "@/lib/types";
+import type { PinDetail } from "@/shared/types/pin";
 import { useCategories } from "@/hooks/useCategories";
 import { useEditablePin } from "@/hooks/useEditablePin";
 import { usePinAddress } from "@/hooks/usePinAddress";

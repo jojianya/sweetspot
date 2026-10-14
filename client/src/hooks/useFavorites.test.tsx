@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FavoriteEntry } from "@/lib/api";
+import type { FavoriteEntry } from "@/lib/api/favorites";
 import { useFavorites } from "./useFavorites";
 
 const apiMocks = vi.hoisted(() => ({
@@ -10,7 +10,10 @@ const apiMocks = vi.hoisted(() => ({
   fetchIsSaved: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/favorites", () => ({
+  fetchFavorites: apiMocks.fetchFavorites,
+  fetchIsSaved: apiMocks.fetchIsSaved,
+}));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

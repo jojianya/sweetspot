@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { UserStats } from "@/lib/types";
+import type { UserStats } from "@/shared/types/social";
 import { useFollow } from "./useFollow";
 
 const apiMocks = vi.hoisted(() => ({
@@ -11,7 +11,11 @@ const apiMocks = vi.hoisted(() => ({
   unfollowUser: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/social", () => ({
+  fetchUserStats: apiMocks.fetchUserStats,
+  followUser: apiMocks.followUser,
+  unfollowUser: apiMocks.unfollowUser,
+}));
 
 function stats(followers: number, isFollowing = false): UserStats {
   return { followers, following: 2, pins_count: 3, is_following: isFollowing };

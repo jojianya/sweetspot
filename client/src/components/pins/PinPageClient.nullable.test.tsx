@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PinDetail } from "@/lib/types";
+import type { PinDetail } from "@/shared/types/pin";
 import { useAuth } from "@/store/auth";
 
 const makePin = (userId: string | null): PinDetail => ({

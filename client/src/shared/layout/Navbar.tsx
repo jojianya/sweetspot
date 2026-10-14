@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import Avatar from "@/components/Avatar";
-import { BackIcon } from "@/components/icons";
+import Avatar from "@/shared/ui/Avatar";
+import { BackIcon } from "@/shared/ui/icons";
 import { useLogout } from "@/hooks/useLogout";
 import { useSessionRefresh } from "@/hooks/useSessionRefresh";
 import { useAuth } from "@/store/auth";

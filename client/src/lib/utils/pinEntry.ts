@@ -1,4 +1,4 @@
-import type { CreatedPin, NewPinPhoto, PinListEntry } from "@/lib/types";
+import type { CreatedPin, NewPinPhoto, PinListEntry } from "@/shared/types/pin";
 
 /**
  * Assembles the list entry for a just-created pin so it can merge into the

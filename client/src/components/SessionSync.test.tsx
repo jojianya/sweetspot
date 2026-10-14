@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AxiosAdapter } from "axios";
-import api, { setUnauthorizedHandler } from "@/lib/api/client";
+import api, { setUnauthorizedHandler } from "@/shared/api/client";
 import { useAuth } from "@/store/auth";
 import SessionSync from "./SessionSync";
 

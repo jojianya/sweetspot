@@ -1,6 +1,6 @@
-import api from "./client";
-import { collectionDetailSchema, collectionEntrySchema } from "./schemas";
-import type { CollectionDetail, CollectionEntry } from "@/lib/types";
+import api from "@/shared/api/client";
+import { collectionDetailSchema, collectionEntrySchema } from "@/shared/api/schemas";
+import type { CollectionDetail, CollectionEntry } from "@/shared/types/social";
 
 export async function fetchMyCollections(): Promise<CollectionEntry[]> {
   const { data } = await api.get<{ collections: unknown }>("/collections");

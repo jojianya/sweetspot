@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import PanelSheet from "@/components/PanelSheet";
-import { BookmarkIcon, CloseIcon } from "@/components/icons";
+import PanelSheet from "@/shared/ui/PanelSheet";
+import { BookmarkIcon, CloseIcon } from "@/shared/ui/icons";
 import { CollectionDetail } from "@/components/pins/CollectionDetail";
 import { CollectionsList } from "@/components/pins/CollectionsList";
 import { SavedPinsList } from "@/components/pins/SavedPinsList";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useCollections } from "@/hooks/useCollections";
 import { useCollectionDetail } from "@/hooks/useCollectionDetail";
-import { errorMessage } from "@/lib/utils";
+import { errorMessage } from "@/shared/utils";
 import { useAuth } from "@/store/auth";
-import type { PinListEntry } from "@/lib/types";
+import type { PinListEntry } from "@/shared/types/pin";
 
 interface SavedPinsPanelProps {
   onClose: () => void;

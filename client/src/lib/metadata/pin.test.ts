@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { PinDetail } from "@/lib/types";
-import { resolveMediaUrl } from "@/lib/media";
+import type { PinDetail } from "@/shared/types/pin";
+import { resolveMediaUrl } from "@/shared/lib/media";
 import { buildPinMetadata, resolvePublicMediaUrl } from "./pin";
 
 function pin(overrides: Partial<PinDetail> = {}): PinDetail {

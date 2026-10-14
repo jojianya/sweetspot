@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { initGlobalErrorReporting } from "@/lib/monitoring";
+import { initGlobalErrorReporting } from "@/shared/lib/monitoring";
 
 /**
  * Registers window-level error and unhandled-rejection listeners once on

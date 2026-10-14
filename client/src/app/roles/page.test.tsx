@@ -12,16 +12,16 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/auth", () => ({ fetchSession: apiMocks.fetchSession }));
-vi.mock("@/lib/api", () => ({
-  fetchUsers: apiMocks.fetchUsers,
-  searchUsers: apiMocks.searchUsers,
-  updateUserRole: apiMocks.updateUserRole,
-}));
 // Navbar pulls in useRouter through useLogout.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
+// The role console reads the user list from the profiles endpoint, and
+// useSessionRefresh reads /me through the same module, so both are mocked here.
 vi.mock("@/lib/api/users", () => ({
+  fetchUsers: apiMocks.fetchUsers,
+  searchUsers: apiMocks.searchUsers,
+  updateUserRole: apiMocks.updateUserRole,
   fetchMe: vi.fn().mockRejectedValue(new Error("offline")),
 }));
 

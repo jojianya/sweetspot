@@ -1,7 +1,7 @@
 "use client";
 
 import { useReaction } from "@/hooks/useReaction";
-import { GoodSpotIcon } from "@/components/icons";
+import { GoodSpotIcon } from "@/shared/ui/icons";
 
 interface GoodSpotButtonProps {
   /** The pin this button acts on. `reactedByMe` is optional because the same

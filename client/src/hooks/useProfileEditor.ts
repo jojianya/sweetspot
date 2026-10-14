@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { updateMyProfile } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
+import { updateMyProfile } from "@/lib/api/users";
+import { errorMessage } from "@/shared/utils";
 import { checkUsername } from "@/lib/username";
 import { buildProfileEdit, strSocial } from "@/lib/utils/profile";
 import { useAuth } from "@/store/auth";
-import type { PublicProfile } from "@/lib/types";
+import type { PublicProfile } from "@/shared/types/social";
 
 /**
  * Own-profile editor: form state, avatar preview with object-URL cleanup,

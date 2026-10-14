@@ -1,6 +1,8 @@
-import api from "./client";
-import { pinListEntrySchema, privateUserSchema, publicUserSchema } from "./schemas";
-import type { PinListEntry, PublicProfile, User } from "@/lib/types";
+import api from "@/shared/api/client";
+import { pinListEntrySchema, privateUserSchema, publicUserSchema } from "@/shared/api/schemas";
+import type { PinListEntry } from "@/shared/types/pin"
+import type { PublicProfile } from "@/shared/types/social"
+import type { User } from "@/shared/types/auth";
 
 /** Raw profile payload (GET /users/:id returns the user object directly). */
 export async function fetchUser(userId: string): Promise<PublicProfile> {

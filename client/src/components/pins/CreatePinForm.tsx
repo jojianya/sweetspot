@@ -1,6 +1,6 @@
 "use client";
 
-import type { Category } from "@/lib/types";
+import type { Category } from "@/shared/types/category";
 
 /** Category select, caption field, error line and submit button. */
 export function CreatePinForm({

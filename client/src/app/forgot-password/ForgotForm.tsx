@@ -2,10 +2,10 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import Navbar from "@/components/layout/Navbar";
+import Navbar from "@/shared/layout/Navbar";
 import { AuthError, AuthField, AuthShell, AuthSubmit } from "@/components/auth/AuthChrome";
-import { errorMessage } from "@/lib/utils";
-import { requestPasswordReset } from "@/lib/api";
+import { errorMessage } from "@/shared/utils";
+import { requestPasswordReset } from "@/lib/api/auth";
 
 export default function ForgotForm() {
   const [email, setEmail] = useState("");

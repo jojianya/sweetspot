@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toPinListEntry } from "./pinEntry";
-import type { CreatedPin, NewPinPhoto } from "@/lib/types";
+import type { CreatedPin, NewPinPhoto } from "@/shared/types/pin";
 
 const pin: CreatedPin = {
   id: "pin-1",

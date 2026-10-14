@@ -1,7 +1,7 @@
 "use client";
 
 import { ChipIcon } from "./CategoryIcons";
-import type { Category } from "@/lib/types";
+import type { Category } from "@/shared/types/category";
 
 /** Category chip strip: "All" plus one chip per category. */
 export function CategoryChipStrip({

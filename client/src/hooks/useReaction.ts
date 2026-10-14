@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { reactToPin, unreactToPin } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
+import { reactToPin, unreactToPin } from "@/lib/api/reactions";
+import { errorMessage } from "@/shared/utils";
 import { useAuth } from "@/store/auth";
 
 interface ReactionState {

@@ -40,7 +40,9 @@ class FakeEventSource {
 
 const apiMocks = vi.hoisted(() => ({ openPinStream: vi.fn() }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/realtime", () => ({
+  openPinStream: apiMocks.openPinStream,
+}));
 
 function StreamProbe({
   bbox,

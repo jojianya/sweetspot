@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
+import { Skeleton, SkeletonRegion } from "@/shared/ui/Skeleton";
 
 describe("Skeleton", () => {
   let container: HTMLDivElement;

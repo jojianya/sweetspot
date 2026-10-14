@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { logout } from "@/lib/api";
+import { logout } from "@/lib/api/auth";
 import { useAuth } from "@/store/auth";
 
 export function useLogout() {

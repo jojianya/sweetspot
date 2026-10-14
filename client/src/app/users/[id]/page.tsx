@@ -2,12 +2,12 @@
 
 import { use } from "react";
 import Link from "next/link";
-import Navbar from "@/components/layout/Navbar";
+import Navbar from "@/shared/layout/Navbar";
 import { useFollow } from "@/hooks/useFollow";
 import { useProfile } from "@/hooks/useProfile";
 import { useProfileEditor } from "@/hooks/useProfileEditor";
 import { useAuth } from "@/store/auth";
-import { PageError } from "@/components/ui/PageState";
+import { PageError } from "@/shared/ui/PageState";
 import { PinGrid } from "./_components/PinGrid";
 import { ProfileCollections } from "./_components/ProfileCollections";
 import { ProfileEditForm } from "./_components/ProfileEditForm";

@@ -1,6 +1,7 @@
-import api from "./client";
-import { pinListEntrySchema, userStatsSchema } from "./schemas";
-import type { PinListEntry, UserStats } from "@/lib/types";
+import api from "@/shared/api/client";
+import { pinListEntrySchema, userStatsSchema } from "@/shared/api/schemas";
+import type { PinListEntry } from "@/shared/types/pin"
+import type { UserStats } from "@/shared/types/social";
 
 export async function fetchUserStats(userId: string): Promise<UserStats> {
   const { data } = await api.get<unknown>(`/users/${userId}/stats`);

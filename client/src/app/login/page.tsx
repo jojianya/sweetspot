@@ -3,11 +3,11 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/layout/Navbar";
-import LegalFooter from "@/components/LegalFooter";
+import Navbar from "@/shared/layout/Navbar";
+import LegalFooter from "@/shared/ui/LegalFooter";
 import { AuthError, AuthField, AuthHero, AuthShell, AuthSubmit } from "@/components/auth/AuthChrome";
-import { errorMessage } from "@/lib/utils";
-import { login } from "@/lib/api";
+import { errorMessage } from "@/shared/utils";
+import { login } from "@/lib/api/auth";
 import { useAuth } from "@/store/auth";
 
 export default function LoginPage() {

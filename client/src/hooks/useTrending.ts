@@ -1,8 +1,8 @@
 "use client";
 
-import { fetchTrendingPins } from "@/lib/api";
-import { useAsyncData } from "@/hooks/useAsyncData";
-import type { TrendingPin } from "@/lib/types";
+import { fetchTrendingPins } from "@/lib/api/pins";
+import { useAsyncData } from "@/shared/hooks/useAsyncData";
+import type { TrendingPin } from "@/shared/types/pin";
 
 /**
  * Loads the pins trending in a viewport. Pass `null` to keep it idle (e.g.

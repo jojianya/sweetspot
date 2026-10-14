@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getCurrentPosition, toGeoCoords, type GeoCoords } from "@/lib/utils";
+import { getCurrentPosition, toGeoCoords, type GeoCoords } from "@/lib/utils/geo";
 
 export type { GeoCoords };
 

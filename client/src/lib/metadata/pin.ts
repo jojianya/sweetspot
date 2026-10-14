@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import type { PinDetail } from "@/lib/types";
-import { extractUploadsSuffix, isUploadsPath } from "@/lib/uploads";
+import type { PinDetail } from "@/shared/types/pin";
+import { extractUploadsSuffix, isUploadsPath } from "@/shared/lib/uploads";
 
 const SITE_NAME = "Goodspot";
 const TITLE_MAX_LENGTH = 70;

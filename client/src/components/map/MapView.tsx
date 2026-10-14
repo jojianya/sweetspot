@@ -12,19 +12,13 @@ import {
   type Marker as MaplibreMarker,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { PinListEntry } from "@/lib/types";
-import {
-  boundsToValidBbox,
-  formatBbox,
-  parsePoint,
-  selectNearbyPins,
-  type PinCoordinate,
-} from "@/lib/utils";
+import type { PinListEntry } from "@/shared/types/pin";
+import { boundsToValidBbox, formatBbox, parsePoint, selectNearbyPins, type PinCoordinate } from "@/lib/utils/geo";
 import { neighborhoodBounds } from "@/lib/utils/geo";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import type { Theme } from "@/store/theme";
 import { ensurePinLayers, notCluster, type GeoFeature } from "./pinLayers";
-import { resolveMediaUrl } from "@/lib/media";
+import { resolveMediaUrl } from "@/shared/lib/media";
 
 // MapTiler-hosted basemap styles (light + dark). The key is NEXT_PUBLIC_
 // (sent to the browser), so it MUST be scoped to your domains and the

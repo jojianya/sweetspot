@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-import { resolveAllowedDevOrigins } from "./src/lib/devOrigins";
+import { resolveAllowedDevOrigins } from "./src/shared/lib/devOrigins";
 
 /**
  * Server-side address of the Go API, used as the rewrite destination.
@@ -57,7 +57,7 @@ const nextConfig: NextConfig = {
   // reached by hostname (localhost), by loopback IP (127.0.0.1) and by LAN IP
   // when testing from another device, so the list comes from
   // NEXT_ALLOWED_DEV_ORIGINS (comma-separated) and falls back to the two
-  // loopback names. See src/lib/devOrigins.ts.
+  // loopback names. See src/shared/lib/devOrigins.ts.
   allowedDevOrigins: resolveAllowedDevOrigins(),
   async rewrites() {
     return [

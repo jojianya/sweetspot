@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import PanelSheet from "@/components/PanelSheet";
-import { CloseIcon } from "@/components/icons";
+import PanelSheet from "@/shared/ui/PanelSheet";
+import { CloseIcon } from "@/shared/ui/icons";
 import { SheetHeader, SheetSignIn } from "@/components/pins/SheetChrome";
 import { useCollections } from "@/hooks/useCollections";
-import { errorMessage } from "@/lib/utils";
+import { errorMessage } from "@/shared/utils";
 import { useAuth } from "@/store/auth";
 import { PinCoverImage } from "@/components/pins/PinCoverImage";
 

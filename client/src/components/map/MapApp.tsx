@@ -17,11 +17,11 @@ import { useDebouncedBbox } from "@/hooks/useDebouncedBbox";
 import { useStreamToast } from "@/hooks/useStreamToast";
 import { usePinStream } from "@/hooks/usePinStream";
 import { useTrending } from "@/hooks/useTrending";
-import { parsePoint } from "@/lib/utils";
+import { parsePoint } from "@/lib/utils/geo";
 import { toPinListEntry } from "@/lib/utils/pinEntry";
 import { useAuth } from "@/store/auth";
 import { useTheme } from "@/store/theme";
-import type { CreatedPin, NewPinPhoto, PinListEntry, TrendingPin } from "@/lib/types";
+import type { CreatedPin, NewPinPhoto, PinListEntry, TrendingPin } from "@/shared/types/pin";
 
 export default function MapApp({
   initialCategory = null,

@@ -1,8 +1,8 @@
 "use client";
 
-import Avatar from "@/components/Avatar";
+import Avatar from "@/shared/ui/Avatar";
 import { PHOTO_ACCEPT } from "@/lib/utils/photoValidation";
-import type { PublicProfile } from "@/lib/types";
+import type { PublicProfile } from "@/shared/types/social";
 
 const INPUT_CLASS =
   "w-full rounded-xl border border-zinc-300 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100";

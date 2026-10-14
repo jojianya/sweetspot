@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ListIcon } from "@/components/icons";
+import { ListIcon } from "@/shared/ui/icons";
 import { PinCoverImage } from "@/components/pins/PinCoverImage";
-import type { CollectionEntry } from "@/lib/types";
+import type { CollectionEntry } from "@/shared/types/social";
 
 export function ProfileCollections({
   userId,

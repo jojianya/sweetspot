@@ -3,13 +3,15 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useProfileEditor } from "./useProfileEditor";
-import type { PublicProfile } from "@/lib/types";
+import type { PublicProfile } from "@/shared/types/social";
 
 const apiMocks = vi.hoisted(() => ({
   updateMyProfile: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => ({ updateMyProfile: apiMocks.updateMyProfile }));
+vi.mock("@/lib/api/users", () => ({
+  updateMyProfile: apiMocks.updateMyProfile,
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import { useAuth } from "@/store/auth";

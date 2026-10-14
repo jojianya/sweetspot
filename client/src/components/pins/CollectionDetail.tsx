@@ -1,8 +1,9 @@
 "use client";
 
-import { BackIcon, BookmarkIcon } from "@/components/icons";
+import { BackIcon, BookmarkIcon } from "@/shared/ui/icons";
 import { PinCoverImage } from "@/components/pins/PinCoverImage";
-import type { CollectionDetail, PinListEntry } from "@/lib/types";
+import type { CollectionDetail } from "@/shared/types/social"
+import type { PinListEntry } from "@/shared/types/pin";
 
 /** Open-collection sub-screen: pins inside plus a remove action per row. */
 export function CollectionDetail({

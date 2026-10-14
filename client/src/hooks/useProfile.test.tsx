@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api/client";
+import { ApiError } from "@/shared/api/client";
 import { useProfile } from "./useProfile";
 
 const apiMocks = vi.hoisted(() => ({
@@ -11,7 +11,13 @@ const apiMocks = vi.hoisted(() => ({
   fetchUserCollections: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/users", () => ({
+  fetchUser: apiMocks.fetchUser,
+  fetchUserPins: apiMocks.fetchUserPins,
+}));
+vi.mock("@/lib/api/collections", () => ({
+  fetchUserCollections: apiMocks.fetchUserCollections,
+}));
 
 function ProfileProbe({ id }: { id: string }) {
   const { profile, pins, collections, loading, notFound, error, retry } = useProfile(id);

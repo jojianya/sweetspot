@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Avatar from "@/components/Avatar";
+import Avatar from "@/shared/ui/Avatar";
 import { useComments } from "@/hooks/useComments";
-import { errorMessage, relativeTime } from "@/lib/utils";
+import { errorMessage, relativeTime } from "@/shared/utils";
 import { useAuth } from "@/store/auth";
-import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
-import type { Comment } from "@/lib/types";
+import { Skeleton, SkeletonRegion } from "@/shared/ui/Skeleton";
+import type { Comment } from "@/shared/types/social";
 
 interface CommentsSectionProps {
   pinId: string;

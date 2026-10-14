@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
-import { createComment, deleteComment, fetchComments } from "@/lib/api";
-import { useAsyncData } from "@/hooks/useAsyncData";
-import type { Comment } from "@/lib/types";
+import { createComment, deleteComment, fetchComments } from "@/lib/api/comments";
+import { useAsyncData } from "@/shared/hooks/useAsyncData";
+import type { Comment } from "@/shared/types/social";
 
 /** Matches the server's maximum page size for a pin's comments. */
 const COMMENT_PAGE_SIZE = 200;

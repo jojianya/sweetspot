@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useClearOnChange } from "@/hooks/useClearOnChange";
-import { fetchUser, fetchUserCollections, fetchUserPins } from "@/lib/api";
-import { ApiError } from "@/lib/api/client";
-import { errorMessage } from "@/lib/utils";
-import type { CollectionEntry, PinListEntry, PublicProfile } from "@/lib/types";
+import { useClearOnChange } from "@/shared/hooks/useClearOnChange";
+import { fetchUser, fetchUserPins } from "@/lib/api/users"
+import { fetchUserCollections } from "@/lib/api/collections";
+import { ApiError } from "@/shared/api/client";
+import { errorMessage } from "@/shared/utils";
+import type { CollectionEntry, PublicProfile } from "@/shared/types/social"
+import type { PinListEntry } from "@/shared/types/pin";
 
 /**
  * Profile data fan-out: loads the profile, its pins and its collections in

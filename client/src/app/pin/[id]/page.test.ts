@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PinDetail } from "@/lib/types";
-import { ApiError } from "@/lib/api/client";
+import type { PinDetail } from "@/shared/types/pin";
+import { ApiError } from "@/shared/api/client";
 import PinPage, { generateMetadata } from "./page";
 
 const mocks = vi.hoisted(() => ({
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/api/server", () => ({ getPinServer: mocks.getPinServer }));
 vi.mock("@/components/pins/PinPageClient", () => ({ default: () => null }));
-vi.mock("@/lib/site", () => ({
+vi.mock("@/shared/lib/site", () => ({
   getSiteUrl: () => new URL("https://goodspot.example"),
 }));
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));

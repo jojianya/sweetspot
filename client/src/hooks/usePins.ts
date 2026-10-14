@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchPins } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
-import type { PinListEntry } from "@/lib/types";
+import { fetchPins } from "@/lib/api/pins";
+import { errorMessage } from "@/shared/utils";
+import type { PinListEntry } from "@/shared/types/pin";
 
 export function usePins(bbox: string | null, category: number | null) {
   const [pins, setPins] = useState<PinListEntry[]>([]);

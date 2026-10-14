@@ -3,21 +3,21 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/layout/Navbar";
+import Navbar from "@/shared/layout/Navbar";
 import { PhotoThumbStrip } from "@/components/pins/PhotoThumbStrip";
 import { PinActionSheets } from "@/components/pins/PinActionSheets";
 import CommentsSection from "@/components/pins/CommentsSection";
 import PinViews from "./PinViews";
-import { BookmarkIcon, PersonIcon, PinIcon } from "@/components/icons";
+import { BookmarkIcon, PersonIcon, PinIcon } from "@/shared/ui/icons";
 import { useCategories } from "@/hooks/useCategories";
 import { useEditablePin } from "@/hooks/useEditablePin";
 import { usePinAddress } from "@/hooks/usePinAddress";
 import { useOptimisticSave } from "@/hooks/useOptimisticSave";
 import { usePinShare } from "@/hooks/usePinShare";
 import { isPinOwner } from "@/lib/utils/pinPermission";
-import { formatTime } from "@/lib/utils";
+import { formatTime } from "@/shared/utils";
 import { useAuth } from "@/store/auth";
-import type { PinDetail } from "@/lib/types";
+import type { PinDetail } from "@/shared/types/pin";
 
 interface PinPageClientProps {
   initialPin: PinDetail;

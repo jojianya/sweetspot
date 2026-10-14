@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { headers } from "next/headers";
-import { pinDetailSchema } from "./schemas";
-import type { PinDetail } from "@/lib/types";
+import { pinDetailSchema } from "@/shared/api/schemas";
+import type { PinDetail } from "@/shared/types/pin";
 
 /**
  * Internal API base used for server-side (SSR) fetches.

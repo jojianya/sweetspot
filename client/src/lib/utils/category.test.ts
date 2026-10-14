@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Category } from "@/lib/types";
+import type { Category } from "@/shared/types/category";
 import {
   canonicalCategoryAction,
   categoryHref,

@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
-import Avatar from "@/components/Avatar";
-import { BookmarkIcon, PersonIcon } from "@/components/icons";
+import Avatar from "@/shared/ui/Avatar";
+import { BookmarkIcon, PersonIcon } from "@/shared/ui/icons";
 import { useLogout } from "@/hooks/useLogout";
 import { useSessionRefresh } from "@/hooks/useSessionRefresh";
 import { useAuth } from "@/store/auth";

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { CloseIcon, iconStroke } from "@/components/icons";
-import { Skeleton, SkeletonRegion } from "@/components/ui/Skeleton";
-import type { TrendingPin } from "@/lib/types";
+import { CloseIcon, iconStroke } from "@/shared/ui/icons";
+import { Skeleton, SkeletonRegion } from "@/shared/ui/Skeleton";
+import type { TrendingPin } from "@/shared/types/pin";
 import { PinCoverImage } from "@/components/pins/PinCoverImage";
 
 export function TrendingIcon({ className = "h-4 w-4" }: { className?: string }) {

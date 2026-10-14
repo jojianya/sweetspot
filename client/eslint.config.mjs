@@ -22,7 +22,7 @@ const eslintConfig = defineConfig([
   // need the store to assert behavior. Hooks/components importing the
   // store is the correct direction and stays allowed.
   {
-    files: ["src/lib/api/**", "src/lib/types/**"],
+    files: ["src/shared/api/**", "src/shared/types/**"],
     ignores: ["**/*.test.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [

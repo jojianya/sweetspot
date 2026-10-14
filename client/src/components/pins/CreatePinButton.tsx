@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CloseIcon } from "@/components/icons";
-import { createPin } from "@/lib/api";
-import type { Category, CreatedPin, NewPinPhoto } from "@/lib/types";
+import { CloseIcon } from "@/shared/ui/icons";
+import { createPin } from "@/lib/api/pins";
+import type { Category } from "@/shared/types/category"
+import type { CreatedPin, NewPinPhoto } from "@/shared/types/pin";
 import type { MapLocation } from "@/components/map/MapView";
-import { errorMessage, getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils";
+import { errorMessage } from "@/shared/utils"
+import { getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/lib/utils/geo";
 import { useAuth } from "@/store/auth";
 import { CreatePinForm } from "@/components/pins/CreatePinForm";
 import { PhotoPicker } from "@/components/pins/PhotoPicker";

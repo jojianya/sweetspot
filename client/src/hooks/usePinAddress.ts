@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useClearOnChange } from "@/hooks/useClearOnChange";
+import { useClearOnChange } from "@/shared/hooks/useClearOnChange";
 import { reverseGeocode } from "@/lib/api/geocoding";
 
 /**

@@ -2,7 +2,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Category, PinDetail, PinPhoto } from "@/lib/types";
+import type { Category } from "@/shared/types/category"
+import type { PinDetail, PinPhoto } from "@/shared/types/pin";
 import { useAuth } from "@/store/auth";
 import PinDetailPanel from "./PinDetailPanel";
 import PinPageClient from "./PinPageClient";
@@ -56,7 +57,7 @@ vi.mock("next/link", async () => {
   };
 });
 
-vi.mock("@/components/layout/Navbar", () => ({ default: () => null }));
+vi.mock("@/shared/layout/Navbar", () => ({ default: () => null }));
 vi.mock("@/hooks/usePinView", () => ({ usePinView: mockUsePinView }));
 vi.mock("@/hooks/usePinAddress", () => ({ usePinAddress: mockUsePinAddress }));
 vi.mock("@/hooks/useOptimisticSave", () => ({ useOptimisticSave: () => mockSaveState }));

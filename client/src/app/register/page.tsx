@@ -3,12 +3,12 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/layout/Navbar";
+import Navbar from "@/shared/layout/Navbar";
 import { AuthError, AuthField, AuthHero, AuthShell, AuthSubmit } from "@/components/auth/AuthChrome";
-import { errorMessage } from "@/lib/utils";
+import { errorMessage } from "@/shared/utils";
 import { checkPassword } from "@/lib/password";
 import { checkUsername } from "@/lib/username";
-import { register } from "@/lib/api";
+import { register } from "@/lib/api/auth";
 import { useAuth } from "@/store/auth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

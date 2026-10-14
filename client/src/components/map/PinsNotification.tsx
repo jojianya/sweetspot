@@ -1,6 +1,6 @@
 "use client";
 
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/shared/ui/Skeleton";
 
 /** Map status chrome: pins loading skeleton or the aggregated error banner. */
 export function PinsNotification({

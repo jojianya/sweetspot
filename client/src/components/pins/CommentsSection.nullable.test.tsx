@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Comment } from "@/lib/types";
+import type { Comment } from "@/shared/types/social";
 import { useAuth } from "@/store/auth";
 
 function makeComment(userId: string | null, username: string | null): Comment {

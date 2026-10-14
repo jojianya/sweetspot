@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
-import RuntimeErrorReporter from "@/components/RuntimeErrorReporter";
+import RuntimeErrorReporter from "@/shared/layout/RuntimeErrorReporter";
 import SessionSync from "@/components/SessionSync";
-import { getSiteUrl } from "@/lib/site";
+import { getSiteUrl } from "@/shared/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({

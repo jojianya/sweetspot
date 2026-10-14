@@ -1,7 +1,7 @@
 "use client";
 
-import { resolveMediaUrl } from "@/lib/media";
-import type { PinPhoto } from "@/lib/types";
+import { resolveMediaUrl } from "@/shared/lib/media";
+import type { PinPhoto } from "@/shared/types/pin";
 
 /** Photo thumbnail buttons shared by the panel and permalink strips.
  * thumbBoxClass carries the shell's size and rounding (panel "h-16 w-16

@@ -1,7 +1,7 @@
 "use client";
 
 import { fetchSession } from "@/lib/api/auth";
-import { useAsyncData } from "@/hooks/useAsyncData";
+import { useAsyncData } from "@/shared/hooks/useAsyncData";
 import { useAuth } from "@/store/auth";
 
 /**

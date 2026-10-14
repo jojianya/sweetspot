@@ -2,15 +2,15 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import Navbar from "@/components/layout/Navbar";
-import { fetchReports, reviewReport } from "@/lib/api";
-import { errorMessage, relativeTime } from "@/lib/utils";
+import Navbar from "@/shared/layout/Navbar";
+import { fetchReports, reviewReport } from "@/lib/api/reports";
+import { errorMessage, relativeTime } from "@/shared/utils";
 import { AdminGate } from "@/components/admin/AdminGate";
-import { useAsyncData } from "@/hooks/useAsyncData";
+import { useAsyncData } from "@/shared/hooks/useAsyncData";
 import { useAuth } from "@/store/auth";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { PageEmpty, PageError, PageLoading } from "@/components/ui/PageState";
-import type { ReportEntry, ReportStatus } from "@/lib/types";
+import { Skeleton } from "@/shared/ui/Skeleton";
+import { PageEmpty, PageError, PageLoading } from "@/shared/ui/PageState";
+import type { ReportEntry, ReportStatus } from "@/lib/types/report";
 
 const STATUS_OPTIONS: Array<{ value: ReportStatus | "all"; label: string }> = [
   { value: "pending", label: "Pending" },

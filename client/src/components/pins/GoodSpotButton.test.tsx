@@ -10,7 +10,10 @@ const apiMocks = vi.hoisted(() => ({
   unreactToPin: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/reactions", () => ({
+  reactToPin: apiMocks.reactToPin,
+  unreactToPin: apiMocks.unreactToPin,
+}));
 
 const routerMocks = vi.hoisted(() => ({
   push: vi.fn(),

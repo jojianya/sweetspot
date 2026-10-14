@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { fetchSession } from "@/lib/api/auth";
-import { ApiError } from "@/lib/api/client";
+import { ApiError } from "@/shared/api/client";
 import { useAuth } from "@/store/auth";
 
 /**

@@ -3,7 +3,8 @@
 import SearchBar from "./SearchBar";
 import { AccountMenu } from "./AccountMenu";
 import { CategoryChipStrip } from "./CategoryChipStrip";
-import type { Category, PinListEntry } from "@/lib/types";
+import type { Category } from "@/shared/types/category"
+import type { PinListEntry } from "@/shared/types/pin";
 
 interface MapNavBarProps {
   center: { lat: number; lng: number };

@@ -1,4 +1,4 @@
-import api from "./client";
+import api from "@/shared/api/client";
 import {
   createdPinSchema,
   newPinPhotoSchema,
@@ -6,15 +6,8 @@ import {
   pinListEntrySchema,
   pinPhotoSchema,
   trendingPinSchema,
-} from "./schemas";
-import type {
-  CreatedPin,
-  NewPinPhoto,
-  PinDetail,
-  PinListEntry,
-  PinPhoto,
-  TrendingPin,
-} from "@/lib/types";
+} from "@/shared/api/schemas";
+import type { CreatedPin, NewPinPhoto, PinDetail, PinListEntry, PinPhoto, TrendingPin } from "@/shared/types/pin";
 
 export async function fetchPins(
   bbox: string,

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchUserStats, followUser, unfollowUser } from "@/lib/api";
-import { errorMessage } from "@/lib/utils";
-import type { UserStats } from "@/lib/types";
+import { fetchUserStats, followUser, unfollowUser } from "@/lib/api/social";
+import { errorMessage } from "@/shared/utils";
+import type { UserStats } from "@/shared/types/social";
 
 interface FollowState {
   userId: string;

@@ -1,6 +1,6 @@
-import { API_BASE_URL } from "./client";
-import { pinEventSchema, pinRemovedEventSchema } from "./schemas";
-import type { PinEvent, PinRemovedEvent } from "./schemas";
+import { API_BASE_URL } from "@/shared/api/client";
+import { pinEventSchema, pinRemovedEventSchema } from "@/shared/api/schemas";
+import type { PinEvent, PinRemovedEvent } from "@/shared/api/schemas";
 
 /**
  * Opens a Server-Sent Events stream of newly created pins within a bbox

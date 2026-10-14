@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { setUnauthorizedHandler } from "@/lib/api/client";
+import { setUnauthorizedHandler } from "@/shared/api/client";
 import { useAuth } from "@/store/auth";
 import { useSessionSync } from "@/hooks/useSessionSync";
 

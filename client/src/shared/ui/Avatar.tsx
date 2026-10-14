@@ -1,4 +1,4 @@
-import { resolveMediaUrl } from "@/lib/media";
+import { resolveMediaUrl } from "@/shared/lib/media";
 
 const FALLBACK_CLASS =
   "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";

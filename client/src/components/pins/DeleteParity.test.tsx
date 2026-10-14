@@ -2,24 +2,30 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PinDetail } from "@/lib/types";
+import type { PinDetail } from "@/shared/types/pin";
 import { useAuth } from "@/store/auth";
 import PinDetailPanel from "./PinDetailPanel";
 import PinPageClient from "./PinPageClient";
 
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api/pins", () => ({
   fetchPin: vi.fn(),
+  updatePin: vi.fn(),
+  deletePin: vi.fn(),
+  registerPinView: vi.fn().mockResolvedValue(1),
+}));
+vi.mock("@/lib/api/categories", () => ({
   fetchCategories: vi.fn().mockResolvedValue([]),
+}));
+vi.mock("@/lib/api/favorites", () => ({
   fetchIsSaved: vi.fn().mockResolvedValue(false),
   fetchFavorites: vi.fn().mockResolvedValue([]),
   saveFavorite: vi.fn(),
   removeFavorite: vi.fn(),
+}));
+vi.mock("@/lib/api/comments", () => ({
   fetchComments: vi.fn().mockResolvedValue([]),
   createComment: vi.fn(),
   deleteComment: vi.fn(),
-  updatePin: vi.fn(),
-  deletePin: vi.fn(),
-  registerPinView: vi.fn().mockResolvedValue(1),
 }));
 
 vi.mock("@/lib/api/geocoding", () => ({
@@ -38,7 +44,7 @@ vi.mock("next/link", async () => {
   };
 });
 
-vi.mock("@/components/layout/Navbar", () => ({ default: () => null }));
+vi.mock("@/shared/layout/Navbar", () => ({ default: () => null }));
 vi.mock("./PinEditSheet", () => ({ default: () => null }));
 vi.mock("./AddToCollectionSheet", () => ({ default: () => null }));
 vi.mock("./ReportSheet", () => ({ default: () => null }));

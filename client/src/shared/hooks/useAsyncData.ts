@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage } from "@/lib/utils";
+import { errorMessage } from "@/shared/utils";
 
 export interface UseAsyncDataOptions {
   /** When false the fetcher is not called (idle). Default true. */

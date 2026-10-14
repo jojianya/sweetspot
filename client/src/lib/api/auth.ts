@@ -1,5 +1,5 @@
-import api from "./client";
-import type { AuthResponse } from "@/lib/types";
+import api from "@/shared/api/client";
+import type { AuthResponse } from "@/shared/types/auth";
 
 export async function login(identifier: string, password: string): Promise<AuthResponse> {
   const { data } = await api.post<AuthResponse>("/auth/login", {

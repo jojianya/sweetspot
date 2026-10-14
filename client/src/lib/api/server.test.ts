@@ -8,7 +8,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-import type { PinDetail } from "@/lib/types";
+import type { PinDetail } from "@/shared/types/pin";
 import { fetchPinServer } from "./server";
 
 const PIN_ID = "11111111-1111-4111-8111-111111111111";

@@ -3,7 +3,7 @@ import { createCollection, updateCollection } from "./collections";
 
 const apiMocks = vi.hoisted(() => ({ post: vi.fn(), patch: vi.fn() }));
 
-vi.mock("./client", () => ({ default: apiMocks }));
+vi.mock("@/shared/api/client", () => ({ default: apiMocks }));
 
 const entry = {
   id: "col-1",

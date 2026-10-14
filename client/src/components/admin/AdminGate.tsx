@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import Navbar from "@/components/layout/Navbar";
+import Navbar from "@/shared/layout/Navbar";
 import { useAdminSession } from "@/hooks/useAdminSession";
 import { useAuth } from "@/store/auth";
 

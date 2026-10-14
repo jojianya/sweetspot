@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Navbar from "@/components/layout/Navbar";
-import Avatar from "@/components/Avatar";
+import Navbar from "@/shared/layout/Navbar";
+import Avatar from "@/shared/ui/Avatar";
 import { AdminGate } from "@/components/admin/AdminGate";
 import { useUsersAdmin } from "@/hooks/useUsersAdmin";
 import { useAuth } from "@/store/auth";

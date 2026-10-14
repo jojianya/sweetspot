@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { CloseIcon, iconStroke } from "@/components/icons";
-import { useDialogFocus } from "@/hooks/useDialogFocus";
+import { CloseIcon, iconStroke } from "@/shared/ui/icons";
+import { useDialogFocus } from "@/shared/hooks/useDialogFocus";
 
 type PhotoLightboxProps = {
   src: string;

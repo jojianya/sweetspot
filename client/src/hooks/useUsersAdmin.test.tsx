@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PublicProfile } from "@/lib/types";
+import type { PublicProfile } from "@/shared/types/social";
 import { useUsersAdmin, USERS_PAGE_SIZE } from "./useUsersAdmin";
 
 const apiMocks = vi.hoisted(() => ({
@@ -11,7 +11,11 @@ const apiMocks = vi.hoisted(() => ({
   updateUserRole: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/users", () => ({
+  fetchUsers: apiMocks.fetchUsers,
+  searchUsers: apiMocks.searchUsers,
+  updateUserRole: apiMocks.updateUserRole,
+}));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

@@ -1,8 +1,8 @@
 "use client";
 
-import { fetchCategories } from "@/lib/api";
-import { useAsyncData } from "@/hooks/useAsyncData";
-import type { Category } from "@/lib/types";
+import { fetchCategories } from "@/lib/api/categories";
+import { useAsyncData } from "@/shared/hooks/useAsyncData";
+import type { Category } from "@/shared/types/category";
 
 export function useCategories() {
   const { data, error, retry } = useAsyncData<Category[]>(() => fetchCategories(), []);

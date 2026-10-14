@@ -3,7 +3,7 @@ import { fetchUser } from "./users";
 
 const apiMocks = vi.hoisted(() => ({ get: vi.fn() }));
 
-vi.mock("./client", () => ({ default: apiMocks }));
+vi.mock("@/shared/api/client", () => ({ default: apiMocks }));
 
 const profile = {
   id: "user-1",

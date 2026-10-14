@@ -1,9 +1,9 @@
 "use client";
 
-import { BookmarkIcon } from "@/components/icons";
+import { BookmarkIcon } from "@/shared/ui/icons";
 import { ListSkeleton } from "@/components/pins/ListSkeleton";
 import { PinCoverImage } from "@/components/pins/PinCoverImage";
-import type { CollectionEntry } from "@/lib/types";
+import type { CollectionEntry } from "@/shared/types/social";
 
 /** Collections tab: create form plus the collection list. */
 export function CollectionsList({

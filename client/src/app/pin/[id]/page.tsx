@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import PinPageClient from "@/components/pins/PinPageClient";
 import { getPinServer } from "@/lib/api/server";
 import { buildPinMetadata } from "@/lib/metadata/pin";
-import { getSiteUrl } from "@/lib/site";
+import { getSiteUrl } from "@/shared/lib/site";
 
 interface PinPageParams {
   params: Promise<{ id: string }>;

@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CollectionDetail } from "@/lib/types";
+import type { CollectionDetail } from "@/shared/types/social";
 import { useCollectionDetail } from "./useCollectionDetail";
 
 const apiMocks = vi.hoisted(() => ({
@@ -10,7 +10,10 @@ const apiMocks = vi.hoisted(() => ({
   updateCollection: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/collections", () => ({
+  fetchCollection: apiMocks.fetchCollection,
+  updateCollection: apiMocks.updateCollection,
+}));
 
 const collectionsMocks = vi.hoisted(() => ({
   removePin: vi.fn(),

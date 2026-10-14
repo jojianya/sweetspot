@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { openPinStream } from "@/lib/api";
-import type { PinEvent } from "@/lib/api/schemas";
-import type { PinListEntry } from "@/lib/types/pin";
+import { openPinStream } from "@/lib/api/realtime";
+import type { PinEvent } from "@/shared/api/schemas";
+import type { PinListEntry } from "@/shared/types/pin";
 
 /**
  * Subscribes to the realtime stream of new pins for the current view.

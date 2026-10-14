@@ -8,13 +8,15 @@ const apiMocks = vi.hoisted(() => ({
   confirmPasswordReset: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/auth", () => ({
+  confirmPasswordReset: apiMocks.confirmPasswordReset,
+}));
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
-vi.mock("@/components/layout/Navbar", () => ({ default: () => null }));
+vi.mock("@/shared/layout/Navbar", () => ({ default: () => null }));
 
 const TOKEN = "secret-reset-token-xyz";
 

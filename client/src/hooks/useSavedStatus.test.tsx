@@ -9,7 +9,10 @@ const apiMocks = vi.hoisted(() => ({
   fetchFavorites: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/favorites", () => ({
+  fetchIsSaved: apiMocks.fetchIsSaved,
+  fetchFavorites: apiMocks.fetchFavorites,
+}));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

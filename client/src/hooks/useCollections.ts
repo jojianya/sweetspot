@@ -1,14 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
-import {
-  addPinToCollection,
-  createCollection,
-  fetchMyCollections,
-  removePinFromCollection,
-} from "@/lib/api";
-import { useAsyncData } from "@/hooks/useAsyncData";
-import type { CollectionEntry } from "@/lib/types";
+import { addPinToCollection, createCollection, fetchMyCollections, removePinFromCollection } from "@/lib/api/collections";
+import { useAsyncData } from "@/shared/hooks/useAsyncData";
+import type { CollectionEntry } from "@/shared/types/social";
 
 /**
  * The viewer's collections plus the pin-membership actions used by the

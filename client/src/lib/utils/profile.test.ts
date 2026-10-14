@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildProfileEdit, socialLinks, socialsChanged, strSocial } from "./profile";
-import type { PublicProfile } from "@/lib/types";
+import type { PublicProfile } from "@/shared/types/social";
 
 function profile(overrides: Partial<PublicProfile> = {}): PublicProfile {
   return {

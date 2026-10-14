@@ -1,4 +1,4 @@
-import type { Category } from "@/lib/types";
+import type { Category } from "@/shared/types/category";
 
 /** Converts a display name into the URL shape used by category links. */
 export function categorySlug(name: string): string {

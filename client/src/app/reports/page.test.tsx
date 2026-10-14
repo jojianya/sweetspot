@@ -12,7 +12,7 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/auth", () => ({ fetchSession: apiMocks.fetchSession }));
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api/reports", () => ({
   fetchReports: apiMocks.fetchReports,
   reviewReport: apiMocks.reviewReport,
 }));

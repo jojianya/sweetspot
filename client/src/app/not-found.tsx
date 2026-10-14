@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Navbar from "@/components/layout/Navbar";
+import Navbar from "@/shared/layout/Navbar";
 
 // Reached both by notFound() calls in route segments and by unmatched URLs.
 // The root app/not-found.tsx handles both cases (Next.js v13.3+).

@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, type ComponentPropsWithoutRef } from "react";
-import { useDialogFocus } from "@/hooks/useDialogFocus";
+import { useRef, ComponentPropsWithoutRef } from "react";
+import { useDialogFocus } from "@/shared/hooks/useDialogFocus";
 
 const BASE_CLASS =
   "absolute z-40 flex flex-col bg-white shadow-2xl shadow-zinc-900/20 " +

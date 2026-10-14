@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import type { PinDetail } from "@/lib/types";
+import type { PinDetail } from "@/shared/types/pin";
 import PinEditSheet from "./PinEditSheet";
 
 const apiMocks = vi.hoisted(() => ({
@@ -11,7 +11,11 @@ const apiMocks = vi.hoisted(() => ({
   deletePin: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/pins", () => ({
+  fetchPin: apiMocks.fetchPin,
+  updatePin: apiMocks.updatePin,
+  deletePin: apiMocks.deletePin,
+}));
 
 const pin: PinDetail = {
   id: "pin-1",

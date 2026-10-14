@@ -9,7 +9,9 @@ const apiMocks = vi.hoisted(() => ({
   registerPinView: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@/lib/api/pins", () => ({
+  registerPinView: apiMocks.registerPinView,
+}));
 
 function ViewProbe({ pinId, ownerId }: { pinId: string | null; ownerId?: string | null }) {
   usePinView(pinId, ownerId);

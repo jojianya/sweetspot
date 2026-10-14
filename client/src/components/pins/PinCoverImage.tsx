@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { resolveMediaUrl } from "@/lib/media";
+import { resolveMediaUrl } from "@/shared/lib/media";
 
 /**
  * List-row cover thumbnail with a glyph fallback for pins without a cover.

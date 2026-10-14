@@ -13,19 +13,19 @@ import {
   PinIcon,
   ShareIcon,
 } from "@/shared/ui/icons";
-import { PhotoThumbStrip } from "@/features/photos/components/PhotoThumbStrip";
+import { PhotoThumbStrip } from "@/features/photos";
 import { PinActionSheets } from "./PinActionSheets";
-import CommentsSection from "@/features/comments/components/CommentsSection";
+import { CommentsSection } from "@/features/comments";
 import type { PinDetail } from "@/shared/types/pin";
-import { useCategories } from "@/features/map/hooks/useCategories";
+import { useCategories } from "@/features/map";
 import { useEditablePin } from "../hooks/useEditablePin";
 import { usePinAddress } from "../hooks/usePinAddress";
-import { useOptimisticSave } from "@/features/collections/hooks/useOptimisticSave";
+import { useOptimisticSave } from "@/features/collections";
 import { usePinShare } from "../hooks/usePinShare";
 import { isPinOwner } from "../lib/pinPermission";
-import GoodSpotButton from "@/features/social/components/GoodSpotButton";
+import { GoodSpotButton } from "@/features/social";
 import PinViews from "./PinViews";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 
 interface PinDetailPanelProps {
   pin: PinDetail;

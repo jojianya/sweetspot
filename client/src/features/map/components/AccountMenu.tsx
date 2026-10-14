@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 import Avatar from "@/shared/ui/Avatar";
 import { BookmarkIcon, PersonIcon } from "@/shared/ui/icons";
-import { useLogout } from "@/features/auth/hooks/useLogout";
-import { useSessionRefresh } from "@/features/auth/hooks/useSessionRefresh";
-import { useAuth } from "@/features/auth/store/auth";
+import { useLogout } from "@/features/auth";
+import { useSessionRefresh } from "@/features/auth";
+import { useAuth } from "@/features/auth";
 
 /** Account cluster in the map nav bar: avatar menu when signed in, auth CTAs otherwise. */
 export function AccountMenu({ onOpenSaved }: { onOpenSaved: () => void }) {

@@ -1,4 +1,4 @@
-import MapApp from "@/features/map/components/MapApp";
+import { MapApp } from "@/features/map";
 
 export default async function Home({
   searchParams,

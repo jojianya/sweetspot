@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { registerPinView } from "../api/pins";
 import { useClearOnChange } from "@/shared/hooks/useClearOnChange";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 
 /**
  * One registered view: the pin it belongs to and the server's resulting count.

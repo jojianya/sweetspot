@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useClearOnChange } from "@/shared/hooks/useClearOnChange";
 import { fetchUser, fetchUserPins } from "../api/users"
-import { fetchUserCollections } from "@/features/collections/api/collections";
+import { fetchUserCollections } from "@/features/collections";
 import { ApiError } from "@/shared/api/client";
 import { errorMessage } from "@/shared/utils";
 import type { CollectionEntry, PublicProfile } from "@/shared/types/social"

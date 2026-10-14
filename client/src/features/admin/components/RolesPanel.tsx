@@ -5,7 +5,7 @@ import Navbar from "@/shared/layout/Navbar";
 import Avatar from "@/shared/ui/Avatar";
 import { AdminGate } from "./AdminGate";
 import { useUsersAdmin } from "../hooks/useUsersAdmin";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 
 const ROLE_OPTIONS = ["user", "admin", "owner"] as const;
 

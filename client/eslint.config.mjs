@@ -30,9 +30,65 @@ const eslintConfig = defineConfig([
         {
           patterns: [
             {
-              group: ["@/store/*"],
+              group: ["@/features/auth/store/*"],
               message:
                 "Pure lib must not import the store. Inject a callback instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Feature boundary: a feature's internals are private. Other features and
+  // app routes may only use the public surface — the feature's index.ts —
+  // never a deep path. Test files are excluded: vi.mock must target the
+  // leaf module, because mocking a barrel would blank out every sibling
+  // export the module under test needs.
+  {
+    files: ["src/features/**", "src/app/**", "src/shared/layout/**"],
+    ignores: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/features/*/*",
+                "@/features/*/*/*",
+                "@/features/*/*/**",
+              ],
+              message:
+                "Import the feature's public surface (@/features/<name>) instead of a deep path. Mocks are exempt: keep mocking the leaf module.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Shared library code must not depend on features at all. src/shared/layout
+  // is intentionally outside this block: the app chrome (Navbar) renders
+  // session-dependent UI and consumes the auth public surface. Test files are
+  // excluded, as with the guards above.
+  {
+    files: [
+      "src/shared/api/**",
+      "src/shared/utils/**",
+      "src/shared/lib/**",
+      "src/shared/types/**",
+      "src/shared/ui/**",
+      "src/shared/hooks/**",
+    ],
+    ignores: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/features/*", "@/features/*/**"],
+              message:
+                "Shared library code must not import from features. Move the dependency into shared/ or lift it to the caller.",
             },
           ],
         },

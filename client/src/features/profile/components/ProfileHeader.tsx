@@ -4,7 +4,7 @@ import Link from "next/link";
 import Avatar from "@/shared/ui/Avatar";
 import { formatTime } from "@/shared/utils";
 import { socialLinks } from "../lib/profile";
-import type { PersistedUser } from "@/features/auth/store/auth";
+import type { PersistedUser } from "@/features/auth";
 import type { PublicProfile, UserStats } from "@/shared/types/social";
 
 export function ProfileHeader({

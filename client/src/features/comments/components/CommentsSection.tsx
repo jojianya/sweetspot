@@ -5,7 +5,7 @@ import Link from "next/link";
 import Avatar from "@/shared/ui/Avatar";
 import { useComments } from "../hooks/useComments";
 import { errorMessage, relativeTime } from "@/shared/utils";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 import { Skeleton, SkeletonRegion } from "@/shared/ui/Skeleton";
 import type { Comment } from "../types";
 

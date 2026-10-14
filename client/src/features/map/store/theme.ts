@@ -18,7 +18,12 @@ function applyTheme(theme: Theme) {
 }
 
 function systemTheme(): Theme {
+  // matchMedia is universal in browsers, but a barrel import evaluates this
+  // module in non-browser JS environments too (jsdom without the API, SSR
+  // contexts where window exists but the API does not). Absent the API there
+  // is no system preference to read, so "light" is the only honest answer.
   return typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";

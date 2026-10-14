@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { removeFavorite, saveFavorite } from "../api/favorites";
 import { useSavedStatus } from "./useFavorites";
 import { errorMessage } from "@/shared/utils";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 
 /**
  * Optimistic save toggle for a pin. Logged-out callers are sent to /login;

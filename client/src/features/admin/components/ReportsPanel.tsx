@@ -7,7 +7,7 @@ import { fetchReports, reviewReport } from "../api/reports";
 import { errorMessage, relativeTime } from "@/shared/utils";
 import { AdminGate } from "./AdminGate";
 import { useAsyncData } from "@/shared/hooks/useAsyncData";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 import { Skeleton } from "@/shared/ui/Skeleton";
 import { PageEmpty, PageError, PageLoading } from "@/shared/ui/PageState";
 import type { ReportEntry, ReportStatus } from "../types";

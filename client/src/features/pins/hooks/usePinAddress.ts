@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useClearOnChange } from "@/shared/hooks/useClearOnChange";
-import { reverseGeocode } from "@/features/map/api/geocoding";
+import { reverseGeocode } from "@/features/map";
 
 /**
  * Reverse-geocoded address for a parsed pin coordinate. Fire-and-forget with

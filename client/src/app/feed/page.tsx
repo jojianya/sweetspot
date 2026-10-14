@@ -3,14 +3,14 @@
 import Link from "next/link";
 import Navbar from "@/shared/layout/Navbar";
 import { ChevronRightIcon, FeedIcon, PinIcon } from "@/shared/ui/icons";
-import { fetchFeed } from "@/features/social/api/social";
+import { fetchFeed } from "@/features/social";
 import { relativeTime } from "@/shared/utils";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 import { useAsyncData } from "@/shared/hooks/useAsyncData";
 import { Skeleton } from "@/shared/ui/Skeleton";
 import { PageEmpty, PageError, PageLoading } from "@/shared/ui/PageState";
 import type { PinListEntry } from "@/shared/types/pin";
-import { PinCoverImage } from "@/features/pins/components/PinCoverImage";
+import { PinCoverImage } from "@/features/pins";
 
 export default function FeedPage() {
   const { user } = useAuth();

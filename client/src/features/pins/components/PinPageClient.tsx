@@ -4,19 +4,19 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/shared/layout/Navbar";
-import { PhotoThumbStrip } from "@/features/photos/components/PhotoThumbStrip";
-import { PinActionSheets } from "@/features/pins/components/PinActionSheets";
-import CommentsSection from "@/features/comments/components/CommentsSection";
+import { PhotoThumbStrip } from "@/features/photos";
+import { PinActionSheets } from "./PinActionSheets";
+import { CommentsSection } from "@/features/comments";
 import PinViews from "./PinViews";
 import { BookmarkIcon, PersonIcon, PinIcon } from "@/shared/ui/icons";
-import { useCategories } from "@/features/map/hooks/useCategories";
+import { useCategories } from "@/features/map";
 import { useEditablePin } from "../hooks/useEditablePin";
 import { usePinAddress } from "../hooks/usePinAddress";
-import { useOptimisticSave } from "@/features/collections/hooks/useOptimisticSave";
+import { useOptimisticSave } from "@/features/collections";
 import { usePinShare } from "../hooks/usePinShare";
 import { isPinOwner } from "../lib/pinPermission";
 import { formatTime } from "@/shared/utils";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 import type { PinDetail } from "@/shared/types/pin";
 
 interface PinPageClientProps {

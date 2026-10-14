@@ -1,10 +1,10 @@
 "use client";
 
-import PhotoLightbox from "@/features/photos/components/PhotoLightbox";
-import PinEditSheet from "@/features/pins/components/PinEditSheet";
-import AddToCollectionSheet from "@/features/collections/components/AddToCollectionSheet";
-import ReportSheet from "@/features/admin/components/ReportSheet";
-import { categorySlug } from "@/features/map/lib/category";
+import { PhotoLightbox } from "@/features/photos";
+import PinEditSheet from "./PinEditSheet";
+import { AddToCollectionSheet } from "@/features/collections";
+import { ReportSheet } from "@/features/admin";
+import { categorySlug } from "@/features/map";
 import type { Category } from "@/shared/types/category"
 import type { PinDetail } from "@/shared/types/pin";
 

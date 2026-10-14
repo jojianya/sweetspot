@@ -3,16 +3,16 @@
 import { use } from "react";
 import Link from "next/link";
 import Navbar from "@/shared/layout/Navbar";
-import { useFollow } from "@/features/social/hooks/useFollow";
-import { useProfile } from "@/features/profile/hooks/useProfile";
-import { useProfileEditor } from "@/features/profile/hooks/useProfileEditor";
-import { useAuth } from "@/features/auth/store/auth";
+import { useFollow } from "@/features/social";
+import { useProfile } from "@/features/profile";
+import { useProfileEditor } from "@/features/profile";
+import { useAuth } from "@/features/auth";
 import { PageError } from "@/shared/ui/PageState";
-import { PinGrid } from "@/features/profile/components/PinGrid";
-import { ProfileCollections } from "@/features/profile/components/ProfileCollections";
-import { ProfileEditForm } from "@/features/profile/components/ProfileEditForm";
-import { ProfileHeader } from "@/features/profile/components/ProfileHeader";
-import { ProfileSkeleton } from "@/features/profile/components/ProfileSkeleton";
+import { PinGrid } from "@/features/profile";
+import { ProfileCollections } from "@/features/profile";
+import { ProfileEditForm } from "@/features/profile";
+import { ProfileHeader } from "@/features/profile";
+import { ProfileSkeleton } from "@/features/profile";
 
 interface ProfilePageProps {
   params: Promise<{ id: string }>;

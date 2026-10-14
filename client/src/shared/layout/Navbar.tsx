@@ -4,9 +4,9 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import Avatar from "@/shared/ui/Avatar";
 import { BackIcon } from "@/shared/ui/icons";
-import { useLogout } from "@/features/auth/hooks/useLogout";
-import { useSessionRefresh } from "@/features/auth/hooks/useSessionRefresh";
-import { useAuth } from "@/features/auth/store/auth";
+import { useLogout } from "@/features/auth";
+import { useSessionRefresh } from "@/features/auth";
+import { useAuth } from "@/features/auth";
 
 interface NavbarProps {
   children?: ReactNode;

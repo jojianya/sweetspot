@@ -5,7 +5,7 @@ import { updateMyProfile } from "../api/users";
 import { errorMessage } from "@/shared/utils";
 import { checkUsername } from "../lib/username";
 import { buildProfileEdit, strSocial } from "../lib/profile";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 import type { PublicProfile } from "@/shared/types/social";
 
 /**

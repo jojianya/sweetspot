@@ -1,6 +1,6 @@
 "use client";
 
-import { fetchTrendingPins } from "@/features/pins/api/pins";
+import { fetchTrendingPins } from "@/features/pins";
 import { useAsyncData } from "@/shared/hooks/useAsyncData";
 import type { TrendingPin } from "@/shared/types/pin";
 

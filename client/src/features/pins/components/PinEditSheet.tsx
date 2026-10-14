@@ -2,15 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import PanelSheet from "@/shared/ui/PanelSheet";
-import { SheetHeader } from "@/features/pins/components/SheetChrome";
-import { deletePin, updatePin } from "@/features/pins/api/pins";
+import { SheetHeader } from "./SheetChrome";
+import { deletePin, updatePin } from "../api/pins";
 import { errorMessage } from "@/shared/utils";
 import type { Category } from "@/shared/types/category"
 import type { PinDetail } from "@/shared/types/pin";
 import { resolveMediaUrl } from "@/shared/lib/media";
-import { usePhotoPreviews } from "@/features/photos/hooks/usePhotoPreviews";
-import { PhotoThumbGrid } from "@/features/photos/components/PhotoThumbGrid";
-import { MAX_PIN_PHOTOS, PHOTO_ACCEPT, validatePhotoFiles } from "@/features/photos/lib/photoValidation";
+import { usePhotoPreviews } from "@/features/photos";
+import { PhotoThumbGrid } from "@/features/photos";
+import { MAX_PIN_PHOTOS, PHOTO_ACCEPT, validatePhotoFiles } from "@/features/photos";
 
 interface PinEditSheetProps {
   pin: PinDetail;

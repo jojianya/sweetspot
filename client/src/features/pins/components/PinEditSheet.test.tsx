@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { PinDetail } from "@/shared/types/pin";
-import PinEditSheet from "@/features/pins/components/PinEditSheet";
+import PinEditSheet from "./PinEditSheet";
 
 const apiMocks = vi.hoisted(() => ({
   fetchPin: vi.fn(),

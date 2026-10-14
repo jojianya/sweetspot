@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reportEmptyCopy } from "./ReportsPanel";
-import { useAuth, type PersistedUser } from "@/features/auth/store/auth";
+import { useAuth, type PersistedUser } from "@/features/auth";
 
 const apiMocks = vi.hoisted(() => ({
   fetchSession: vi.fn(),

@@ -50,7 +50,7 @@ function orphanComment(userId: string | null, username: string | null): Comment 
   };
 }
 
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 import CommentsSection from "./CommentsSection";
 
 describe("CommentsSection delete failure", () => {

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { fetchMe } from "@/features/profile/api/users";
+import { fetchMe } from "@/features/profile";
 import { useAuth } from "../store/auth";
 
 /**

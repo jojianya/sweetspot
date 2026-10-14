@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import PanelSheet from "@/shared/ui/PanelSheet";
-import { SheetHeader, SheetSignIn } from "@/features/pins/components/SheetChrome";
+import { SheetHeader, SheetSignIn } from "@/features/pins";
 import { createPinReport } from "../api/reports";
 import { errorMessage } from "@/shared/utils";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 
 interface ReportSheetProps {
   pinId: string;

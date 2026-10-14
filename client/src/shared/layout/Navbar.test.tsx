@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Navbar from "./Navbar";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),

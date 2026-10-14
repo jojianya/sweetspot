@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { CloseIcon, iconStroke } from "@/shared/ui/icons";
 import { Skeleton, SkeletonRegion } from "@/shared/ui/Skeleton";
 import type { TrendingPin } from "@/shared/types/pin";
-import { PinCoverImage } from "@/features/pins/components/PinCoverImage";
+import { PinCoverImage } from "@/features/pins";
 
 export function TrendingIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (

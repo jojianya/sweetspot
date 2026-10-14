@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchUsers, searchUsers, updateUserRole } from "@/features/profile/api/users";
+import { fetchUsers, searchUsers, updateUserRole } from "@/features/profile";
 import { errorMessage } from "@/shared/utils";
 import type { PublicProfile } from "@/shared/types/social";
 

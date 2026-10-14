@@ -7,7 +7,7 @@ import Navbar from "@/shared/layout/Navbar";
 import { AuthError, AuthField, AuthHero, AuthShell, AuthSubmit } from "./AuthChrome";
 import { errorMessage } from "@/shared/utils";
 import { checkPassword } from "../lib/password";
-import { checkUsername } from "@/features/profile/lib/username";
+import { checkUsername } from "@/features/profile";
 import { register } from "../api/auth";
 import { useAuth } from "../store/auth";
 

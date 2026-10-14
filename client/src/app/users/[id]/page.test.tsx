@@ -6,7 +6,7 @@ import type { PinListEntry } from "@/shared/types/pin"
 import type { PublicProfile, UserStats } from "@/shared/types/social"
 import type { User } from "@/shared/types/auth";
 import { ApiError } from "@/shared/api/client";
-import { useAuth } from "@/features/auth/store/auth";
+import { useAuth } from "@/features/auth";
 import ProfilePage from "./page";
 
 const apiMocks = vi.hoisted(() => ({

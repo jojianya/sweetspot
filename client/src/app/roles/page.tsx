@@ -1,6 +1,6 @@
 "use client";
 
-import RolesPanel from "@/features/admin/components/RolesPanel";
+import { RolesPanel } from "@/features/admin";
 
 export default function RolesPage() {
   return <RolesPanel />;

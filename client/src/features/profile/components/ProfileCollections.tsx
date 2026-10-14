@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ListIcon } from "@/shared/ui/icons";
-import { PinCoverImage } from "@/features/pins/components/PinCoverImage";
+import { PinCoverImage } from "@/features/pins";
 import type { CollectionEntry } from "@/shared/types/social";
 
 export function ProfileCollections({

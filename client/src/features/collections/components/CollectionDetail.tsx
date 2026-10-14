@@ -1,7 +1,7 @@
 "use client";
 
 import { BackIcon, BookmarkIcon } from "@/shared/ui/icons";
-import { PinCoverImage } from "@/features/pins/components/PinCoverImage";
+import { PinCoverImage } from "@/features/pins";
 import type { CollectionDetail } from "@/shared/types/social"
 import type { PinListEntry } from "@/shared/types/pin";
 

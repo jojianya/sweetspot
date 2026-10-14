@@ -12,7 +12,7 @@ vi.mock("@/features/pins/api/pins", () => ({
 }));
 
 import { searchPlaces } from "../api/geocoding";
-import { searchPins } from "@/features/pins/api/pins";
+import { searchPins } from "@/features/pins";
 
 const places = [
   { id: "p1", text: "Place One", place_name: "Place One, Earth", center: { lat: 1, lng: 2 } },

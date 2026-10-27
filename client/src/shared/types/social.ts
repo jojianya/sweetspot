@@ -1,0 +1,34 @@
+import type { PinListEntry } from "./pin";
+
+export interface CollectionEntry {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  is_private: boolean;
+  created_at: string;
+  pin_count: number;
+  cover_url: string;
+}
+
+export interface CollectionDetail extends CollectionEntry {
+  pins: PinListEntry[];
+}
+
+export interface UserStats {
+  followers: number;
+  following: number;
+  pins_count: number;
+  is_following: boolean;
+}
+
+/** Public profile payload from GET /users/:id. */
+export interface PublicProfile {
+  id: string;
+  username: string;
+  avatar_url: string | null;
+  socials: Record<string, unknown>;
+  role: string;
+  created_at: string;
+  email?: string;
+}

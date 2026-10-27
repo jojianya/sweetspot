@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import Navbar from "@/components/layout/Navbar";
-import LegalFooter from "@/components/LegalFooter";
+import Navbar from "@/shared/layout/Navbar";
+import LegalFooter from "@/shared/ui/LegalFooter";
 
 function DraftBanner() {
   return (

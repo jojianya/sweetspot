@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PinDetail } from "@/lib/types";
-import { ApiError } from "@/lib/api/client";
+import type { PinDetail } from "@/shared/types/pin";
+import { ApiError } from "@/shared/api/client";
 import PinPage, { generateMetadata } from "./page";
 
 const mocks = vi.hoisted(() => ({
@@ -8,9 +8,9 @@ const mocks = vi.hoisted(() => ({
   notFound: vi.fn(),
 }));
 
-vi.mock("@/lib/api/server", () => ({ getPinServer: mocks.getPinServer }));
-vi.mock("@/components/pins/PinPageClient", () => ({ default: () => null }));
-vi.mock("@/lib/site", () => ({
+vi.mock("@/features/pins/api/server", () => ({ getPinServer: mocks.getPinServer }));
+vi.mock("@/features/pins/components/PinPageClient", () => ({ default: () => null }));
+vi.mock("@/shared/lib/site", () => ({
   getSiteUrl: () => new URL("https://goodspot.example"),
 }));
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));
@@ -83,7 +83,7 @@ describe("pin page metadata", () => {
     expect(mocks.notFound).toHaveBeenCalledOnce();
   });
 
-  // getPinServer maps a 404 response to null (lib/api/server.ts), so the
+  // getPinServer maps a 404 response to null (features/pins/api/server.ts), so the
   // page's contract is "null means missing". Anything it throws is a real
   // failure and belongs in error.tsx, including an ApiError carrying 404.
   it("treats a thrown ApiError 404 as a real failure, not a missing pin", async () => {

@@ -1,0 +1,71 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchPins } from "../api/pins";
+import { errorMessage } from "@/shared/utils";
+import type { PinListEntry } from "@/shared/types/pin";
+
+export function usePins(bbox: string | null, category: number | null) {
+  const [pins, setPins] = useState<PinListEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const [query, setQuery] = useState<{
+    bbox: string | null;
+    category: number | null;
+  }>({ bbox, category });
+  const [refreshSeq, setRefreshSeq] = useState(0);
+  if (query.bbox !== bbox || query.category !== category) {
+    setQuery({ bbox, category });
+    if (bbox) {
+      setLoading(true);
+      setError(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!bbox) return;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    fetchPins(bbox, category, ctrl.signal)
+      .then((data) => {
+        if (!ctrl.signal.aborted) setPins(data);
+      })
+      .catch((e: unknown) => {
+        if (!ctrl.signal.aborted) {
+          setError(errorMessage(e));
+        }
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
+
+    return () => {
+      ctrl.abort();
+      if (abortRef.current === ctrl) abortRef.current = null;
+    };
+  }, [bbox, category, refreshSeq]);
+
+  const refetch = useCallback(() => {
+    setRefreshSeq((n) => n + 1);
+    if (bbox) {
+      setLoading(true);
+      setError(null);
+    }
+  }, [bbox]);
+
+  const addPin = useCallback((pin: PinListEntry) => {
+    setPins((prev) =>
+      prev.some((p) => p.id === pin.id) ? prev : [pin, ...prev]
+    );
+  }, []);
+
+  const removePin = useCallback((id: string) => {
+    setPins((prev) => prev.filter((p) => p.id !== id));
+  }, []);
+
+  return { pins, loading, error, addPin, removePin, refetch };
+}

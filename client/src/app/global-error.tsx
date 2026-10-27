@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
-import { reportError } from "@/lib/monitoring";
+import { reportError } from "@/shared/lib/monitoring";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });

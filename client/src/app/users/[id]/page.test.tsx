@@ -2,9 +2,11 @@
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PinListEntry, PublicProfile, User, UserStats } from "@/lib/types";
-import { ApiError } from "@/lib/api/client";
-import { useAuth } from "@/store/auth";
+import type { PinListEntry } from "@/shared/types/pin"
+import type { PublicProfile, UserStats } from "@/shared/types/social"
+import type { User } from "@/shared/types/auth";
+import { ApiError } from "@/shared/api/client";
+import { useAuth } from "@/features/auth";
 import ProfilePage from "./page";
 
 const apiMocks = vi.hoisted(() => ({
@@ -17,8 +19,20 @@ const apiMocks = vi.hoisted(() => ({
   updateMyProfile: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => apiMocks);
-vi.mock("@/components/layout/Navbar", () => ({ default: () => null }));
+vi.mock("@/features/profile/api/users", () => ({
+  fetchUser: apiMocks.fetchUser,
+  fetchUserPins: apiMocks.fetchUserPins,
+  updateMyProfile: apiMocks.updateMyProfile,
+}));
+vi.mock("@/features/collections/api/collections", () => ({
+  fetchUserCollections: apiMocks.fetchUserCollections,
+}));
+vi.mock("@/features/social/api/social", () => ({
+  fetchUserStats: apiMocks.fetchUserStats,
+  followUser: apiMocks.followUser,
+  unfollowUser: apiMocks.unfollowUser,
+}));
+vi.mock("@/shared/layout/Navbar", () => ({ default: () => null }));
 vi.mock("next/link", async () => {
   const { createElement } = await import("react");
   type LinkProps = {

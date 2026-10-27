@@ -1,16 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import Navbar from "@/components/layout/Navbar";
-import { ChevronRightIcon, FeedIcon, PinIcon } from "@/components/icons";
-import { fetchFeed } from "@/lib/api";
-import { relativeTime } from "@/lib/utils";
-import { useAuth } from "@/store/auth";
-import { useAsyncData } from "@/hooks/useAsyncData";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { PageEmpty, PageError, PageLoading } from "@/components/ui/PageState";
-import type { PinListEntry } from "@/lib/types";
-import { PinCoverImage } from "@/components/pins/PinCoverImage";
+import Navbar from "@/shared/layout/Navbar";
+import { ChevronRightIcon, FeedIcon, PinIcon } from "@/shared/ui/icons";
+import { fetchFeed } from "@/features/social";
+import { relativeTime } from "@/shared/utils";
+import { useAuth } from "@/features/auth";
+import { useAsyncData } from "@/shared/hooks/useAsyncData";
+import { Skeleton } from "@/shared/ui/Skeleton";
+import { PageEmpty, PageError, PageLoading } from "@/shared/ui/PageState";
+import type { PinListEntry } from "@/shared/types/pin";
+import { PinCoverImage } from "@/features/pins";
 
 export default function FeedPage() {
   const { user } = useAuth();

@@ -1,10 +1,6 @@
-import type { Metadata } from "next";
-import ForgotForm from "./ForgotForm";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Forgot password · Goodspot",
-  robots: { index: false, follow: false },
-};
+import { ForgotForm } from "@/features/auth";
 
 export default function ForgotPasswordPage() {
   return <ForgotForm />;

@@ -1,0 +1,252 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import Link from "next/link";
+import Navbar from "@/shared/layout/Navbar";
+import { fetchReports, reviewReport } from "../api/reports";
+import { errorMessage, relativeTime } from "@/shared/utils";
+import { AdminGate } from "./AdminGate";
+import { useAsyncData } from "@/shared/hooks/useAsyncData";
+import { useAuth } from "@/features/auth";
+import { Skeleton } from "@/shared/ui/Skeleton";
+import { PageEmpty, PageError, PageLoading } from "@/shared/ui/PageState";
+import type { ReportEntry, ReportStatus } from "../types";
+
+const STATUS_OPTIONS: Array<{ value: ReportStatus | "all"; label: string }> = [
+  { value: "pending", label: "Pending" },
+  { value: "reviewed", label: "Reviewed" },
+  { value: "actioned", label: "Actioned" },
+  { value: "all", label: "All" },
+];
+
+const STATUS_STYLES: Record<ReportStatus, string> = {
+  pending:
+    "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
+  reviewed: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+  actioned:
+    "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300",
+};
+
+/** Empty-state copy per tab. The All tab has no filter applied, so it must not suggest trying another one. */
+export function reportEmptyCopy(status: ReportStatus | "all"): {
+  title: string;
+  description: string;
+} {
+  if (status === "all") {
+    return { title: "No reports", description: "No reports have been filed yet." };
+  }
+  return {
+    title: `No ${status} reports`,
+    description: status === "pending" ? "You're all caught up." : "Try another filter.",
+  };
+}
+
+export default function ReportsPanel() {
+  return (
+    <AdminGate
+      required="moderator"
+      signedOutTitle="Sign in to moderate"
+      deniedTitle="Admins only"
+      deniedCopy="You don't have permission to review reports."
+    >
+      <ReportsShell />
+    </AdminGate>
+  );
+}
+
+/**
+ * The moderation queue. Split out so the reports fetch only runs for a caller
+ * /me has confirmed is a moderator.
+ */
+function ReportsShell() {
+  const { user } = useAuth();
+  const [status, setStatus] = useState<ReportStatus | "all">("pending");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  // Review failures surface in the same page-level error as fetch failures,
+  // but live in their own slot so a refetch never has to clear them first.
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  const {
+    data,
+    loading,
+    error: fetchError,
+    retry: refetch,
+    setData,
+  } = useAsyncData<ReportEntry[]>(() => fetchReports(status === "all" ? {} : { status }), [
+    status,
+  ]);
+  const reports = data ?? [];
+  const error = fetchError ?? reviewError;
+
+  const retry = useCallback(() => {
+    setReviewError(null);
+    refetch();
+  }, [refetch]);
+
+  const selectStatus = (value: ReportStatus | "all") => {
+    setReviewError(null);
+    setStatus(value);
+  };
+
+  const handleReview = async (report: ReportEntry, action: "approve" | "dismiss") => {
+    if (busyId) return;
+    setBusyId(report.id);
+    setReviewError(null);
+    try {
+      await reviewReport(report.id, action);
+      // Refilter: resolved reports leave the pending tab, others refresh.
+      setData((prev) => (prev ?? []).filter((r) => r.id !== report.id));
+    } catch (e) {
+      const msg = errorMessage(e);
+      if (/already resolved/i.test(msg)) {
+        retry();
+      } else {
+        setReviewError(msg);
+      }
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Render the reports list or appropriate state
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <PageLoading label="Loading reports…">
+          <ul className="mt-4 space-y-2.5" role="list" aria-busy="true">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <li key={`skeleton-${i}`}>
+                <Skeleton className="rounded-xl border border-zinc-200/70 p-4 dark:border-zinc-800" aria-hidden="true">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    <Skeleton className="h-3 w-20 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                    <Skeleton className="h-3 w-24 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                    <Skeleton className="h-3 w-16 shrink-0" />
+                    <Skeleton className="h-3 w-10 shrink-0 rounded-full" />
+                  </div>
+                  <Skeleton className="mt-2 h-4 w-full" />
+                  <Skeleton className="mt-1 h-3 w-3/4" />
+                </Skeleton>
+              </li>
+            ))}
+          </ul>
+        </PageLoading>
+      );
+    }
+
+    if (error) {
+      return <PageError error={error} onRetry={retry} />;
+    }
+
+    if (reports.length === 0) {
+      const copy = reportEmptyCopy(status);
+      return (
+        <PageEmpty
+          title={copy.title}
+          description={
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              {copy.description}
+            </p>
+          }
+        />
+      );
+    }
+
+    return (
+      <ul className="mt-4 space-y-2.5">
+        {reports.map((report) => (
+          <li key={report.id} className="rounded-xl border border-zinc-200/70 p-4 dark:border-zinc-800">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                {report.reporter_username ? `@${report.reporter_username}` : "deleted user"}
+              </span>
+              <span className="text-zinc-300 dark:text-zinc-600">reported</span>
+              <Link
+                href={`/pin/${report.pin_id}`}
+                className="max-w-full truncate font-medium text-sky-600 hover:underline dark:text-sky-400"
+              >
+                {report.pin_caption?.trim() || "this pin"}
+              </Link>
+              <span className="text-zinc-300 dark:text-zinc-600">·</span>
+              <time dateTime={report.created_at}>{relativeTime(report.created_at)}</time>
+              <span
+                className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[report.status]}`}
+              >
+                {report.status}
+              </span>
+            </div>
+
+            <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
+              {report.reason}
+            </p>
+
+            {report.status === "pending" && (
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleReview(report, "dismiss")}
+                  disabled={busyId !== null}
+                  className="rounded-full border border-zinc-300 px-3.5 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Dismiss
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleReview(report, "approve")}
+                  disabled={busyId !== null}
+                  className="rounded-full bg-rose-600 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+                >
+                  {busyId === report.id ? "Working…" : "Hide pin"}
+                </button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
+  return (
+    <>
+      <Navbar backHref="/" backLabel="Back to map" hideAccountNav />
+
+      <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-16 pt-20">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Reports</h1>
+          {user?.role === "owner" && (
+            <Link
+              href="/roles"
+              className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Manage roles
+            </Link>
+          )}
+        </div>
+
+        {/* Status filter */}
+        <div className="mt-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Report status">
+          {STATUS_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              role="tab"
+              aria-selected={status === opt.value}
+              onClick={() => selectStatus(opt.value)}
+              className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                status === opt.value
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "border border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {renderContent()}
+
+      </div>
+    </>
+  );
+}

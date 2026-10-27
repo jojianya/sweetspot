@@ -1,0 +1,234 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { CloseIcon } from "@/shared/ui/icons";
+import { createPin } from "../api/pins";
+import type { Category } from "@/shared/types/category"
+import type { CreatedPin, NewPinPhoto } from "@/shared/types/pin";
+import type { MapLocation } from "@/features/map";
+import { errorMessage } from "@/shared/utils"
+import { getCurrentPosition, geolocationAvailable, toGeoCoords } from "@/features/map";
+import { useAuth } from "@/features/auth";
+import { CreatePinForm } from "./CreatePinForm";
+import { PhotoPicker } from "@/features/photos";
+import { usePhotoPreviews } from "@/features/photos";
+import { buildCreatePinPayload, validatePhotoFiles } from "@/features/photos";
+
+interface CreatePinButtonProps {
+  lat: number;
+  lng: number;
+  categories: Category[];
+  posting: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (
+    pin: CreatedPin,
+    photos: NewPinPhoto[]
+  ) => void;
+  onSetLocation: (location: MapLocation) => void;
+}
+
+export default function CreatePinButton({
+  lat,
+  lng,
+  categories,
+  posting,
+  open,
+  onOpenChange,
+  onCreated,
+  onSetLocation,
+}: CreatePinButtonProps) {
+  const { user } = useAuth();
+  const isLoggedIn = user !== null;
+  const [files, setFiles] = useState<File[]>([]);
+  const [caption, setCaption] = useState("");
+  const [categoryId, setCategoryId] = useState<number | null>(categories[0]?.id ?? null);
+  const [submitting, setSubmitting] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const previews = usePhotoPreviews(files);
+
+  const handleClose = useCallback(() => {
+    onOpenChange(false);
+    setFiles([]);
+    setCaption("");
+    setError(null);
+  }, [onOpenChange]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, handleClose]);
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleFiles = (list: FileList | null) => {
+    if (!list) return;
+    const picked = Array.from(list);
+    const error = validatePhotoFiles(picked);
+    if (error) {
+      setError(error);
+      return;
+    }
+    setError(null);
+    setFiles(picked);
+  };
+
+  const useCurrentLocation = () => {
+    if (!geolocationAvailable()) {
+      setError("Location is not available in this browser");
+      return;
+    }
+    setLocating(true);
+    setError(null);
+    getCurrentPosition()
+      .then((pos) => {
+        setLocating(false);
+        onSetLocation(toGeoCoords(pos));
+      })
+      .catch((e: unknown) => {
+        setLocating(false);
+        setError(errorMessage(e));
+      });
+  };
+
+  const selectedCategoryId = categoryId ?? categories[0]?.id ?? null;
+
+  const submit = async () => {
+    if (!user) return;
+    if (selectedCategoryId === null) {
+      setError("Choose a category");
+      return;
+    }
+    const shaped = buildCreatePinPayload({ lat, lng, categoryId: selectedCategoryId, caption, files });
+    if ("error" in shaped) {
+      setError(shaped.error);
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await createPin(shaped.payload);
+      onCreated(result.pin, result.photos);
+      setFiles([]);
+      setCaption("");
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      {posting && !open && (
+        <button
+          type="button"
+          onClick={() => onOpenChange(true)}
+          className="absolute bottom-6 right-6 z-10 flex h-14 w-14 items-center justify-center rounded-full bg-rose-600 text-3xl text-white shadow-lg transition-transform hover:scale-105"
+          aria-label="Create a pin"
+        >
+          +
+        </button>
+      )}
+
+      <div
+        role="dialog"
+        aria-label="Create a pin"
+        className={`absolute z-40 flex flex-col bg-white shadow-2xl shadow-zinc-900/20 transition-transform duration-300 ease-out will-change-transform
+          inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl
+          sm:left-0 sm:right-auto sm:top-16 sm:bottom-0 sm:max-h-none sm:w-full sm:max-w-md sm:rounded-none sm:rounded-r-2xl
+          dark:bg-zinc-900 dark:shadow-zinc-950/60
+          ${
+            open
+              ? "translate-y-0 sm:translate-y-0 sm:translate-x-0"
+              : "translate-y-full sm:translate-y-0 sm:-translate-x-full"
+          }`}
+      >
+        <header className="flex items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            {isLoggedIn ? "Create a pin" : "Sign in required"}
+          </h2>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            aria-label="Close"
+          >
+            <CloseIcon />
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {!isLoggedIn ? (
+            <div className="space-y-3 text-sm text-zinc-600 dark:text-zinc-400">
+              <p>
+                You need to sign in before you can post a pin to the map.
+              </p>
+              <div className="flex gap-2">
+                <Link
+                  href="/login"
+                  className="flex-1 rounded-lg bg-rose-600 px-4 py-2 text-center font-medium text-white hover:bg-rose-700"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/register"
+                  className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-center font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Sign up
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <PhotoPicker
+                files={files}
+                previews={previews}
+                onFiles={handleFiles}
+                onRemove={removeFile}
+                title="Tap to add photos"
+                hint="JPG/PNG, up to 5 photos, 10MB each"
+                inputAriaLabel="Add photos"
+              />
+
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700">
+                <span className="truncate text-zinc-500 dark:text-zinc-400">
+                  Posting at {lat.toFixed(5)}, {lng.toFixed(5)}
+                </span>
+                <button
+                  type="button"
+                  onClick={useCurrentLocation}
+                  disabled={locating}
+                  className="shrink-0 font-medium text-rose-600 hover:underline disabled:opacity-60"
+                >
+                  {locating ? "Locating…" : "Use current location"}
+                </button>
+              </div>
+
+              <CreatePinForm
+                categories={categories}
+                selectedCategoryId={selectedCategoryId}
+                onCategoryChange={setCategoryId}
+                caption={caption}
+                onCaptionChange={setCaption}
+                error={error}
+                submitting={submitting}
+                onSubmit={submit}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}

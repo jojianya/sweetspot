@@ -2,17 +2,17 @@
 
 import { use } from "react";
 import Link from "next/link";
-import Navbar from "@/components/layout/Navbar";
-import { useFollow } from "@/hooks/useFollow";
-import { useProfile } from "@/hooks/useProfile";
-import { useProfileEditor } from "@/hooks/useProfileEditor";
-import { useAuth } from "@/store/auth";
-import { PageError } from "@/components/ui/PageState";
-import { PinGrid } from "./_components/PinGrid";
-import { ProfileCollections } from "./_components/ProfileCollections";
-import { ProfileEditForm } from "./_components/ProfileEditForm";
-import { ProfileHeader } from "./_components/ProfileHeader";
-import { ProfileSkeleton } from "./_components/ProfileSkeleton";
+import Navbar from "@/shared/layout/Navbar";
+import { useFollow } from "@/features/social";
+import { useProfile } from "@/features/profile";
+import { useProfileEditor } from "@/features/profile";
+import { useAuth } from "@/features/auth";
+import { PageError } from "@/shared/ui/PageState";
+import { PinGrid } from "@/features/profile";
+import { ProfileCollections } from "@/features/profile";
+import { ProfileEditForm } from "@/features/profile";
+import { ProfileHeader } from "@/features/profile";
+import { ProfileSkeleton } from "@/features/profile";
 
 interface ProfilePageProps {
   params: Promise<{ id: string }>;

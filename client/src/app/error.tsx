@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import Navbar from "@/components/layout/Navbar";
-import { reportError } from "@/lib/monitoring";
+import Navbar from "@/shared/layout/Navbar";
+import { reportError } from "@/shared/lib/monitoring";
 
 export default function Error({
   error,

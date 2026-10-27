@@ -1,0 +1,158 @@
+import { describe, expect, it } from "vitest";
+import type { PinDetail } from "@/shared/types/pin";
+import { resolveMediaUrl } from "@/shared/lib/media";
+import { buildPinMetadata, resolvePublicMediaUrl } from "./pin";
+
+function pin(overrides: Partial<PinDetail> = {}): PinDetail {
+  return {
+    id: "11111111-1111-4111-8111-111111111111",
+    user_id: "22222222-2222-4222-8222-222222222222",
+    location: "POINT(0 0)",
+    geohash: "s000",
+    caption: "Sunset lookout",
+    category_id: 1,
+    is_hidden: false,
+    views: 4,
+    good_spot_count: 0,
+    created_at: "2026-01-02T00:00:00Z",
+    category: "Food",
+    username: "alice",
+    avatar_url: null,
+    photos: [
+      {
+        id: "photo-1",
+        pin_id: "11111111-1111-4111-8111-111111111111",
+        photo_url: "https://media.example/pin.webp",
+        thumbnail_url: "https://media.example/pin-thumb.webp",
+        position: 0,
+        created_at: "2026-01-02T00:00:00Z",
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe("buildPinMetadata", () => {
+  it("builds canonical, Open Graph, and Twitter metadata from the first full photo", () => {
+    const metadata = buildPinMetadata(
+      pin(),
+      new URL("https://goodspot.example"),
+      "https://api.goodspot.example"
+    );
+
+    expect(metadata.title).toBe("Sunset lookout · Goodspot");
+    expect(metadata.description).toContain("by @alice in Food");
+    expect(metadata.alternates?.canonical).toBe(
+      "https://goodspot.example/pin/11111111-1111-4111-8111-111111111111"
+    );
+    expect(metadata.openGraph).toMatchObject({
+      type: "website",
+      url: "https://goodspot.example/pin/11111111-1111-4111-8111-111111111111",
+      siteName: "Goodspot",
+      title: "Sunset lookout · Goodspot",
+      images: [
+        {
+          url: "https://media.example/pin.webp",
+          alt: "Sunset lookout — Food by @alice",
+        },
+      ],
+    });
+    expect(metadata.twitter).toMatchObject({
+      card: "summary_large_image",
+      title: "Sunset lookout · Goodspot",
+      images: [
+        {
+          url: "https://media.example/pin.webp",
+          alt: "Sunset lookout — Food by @alice",
+        },
+      ],
+    });
+    expect(metadata.twitter?.description).toBe(metadata.description);
+    expect(metadata.openGraph?.images).not.toMatchObject([{ width: 1200, height: 630 }]);
+  });
+
+  it("uses category and summary-card fallbacks when caption and photo are absent", () => {
+    const metadata = buildPinMetadata(
+      pin({ caption: null, category: "Live Music", photos: [] }),
+      new URL("https://goodspot.example"),
+      "https://api.goodspot.example"
+    );
+
+    expect(metadata.title).toBe("Live Music on Goodspot");
+    expect(metadata.description).toContain("Live Music shared by @alice");
+    expect(metadata.openGraph).not.toHaveProperty("images");
+    expect(metadata.twitter).toMatchObject({ card: "summary" });
+    expect(metadata.twitter).not.toHaveProperty("images");
+  });
+
+  it("truncates long user-generated text", () => {
+    const caption = "A".repeat(500);
+    const metadata = buildPinMetadata(
+      pin({ caption }),
+      new URL("https://goodspot.example"),
+      "https://api.goodspot.example"
+    );
+
+    expect(String(metadata.title)).toContain("… · Goodspot");
+    expect(String(metadata.title).length).toBeLessThan(100);
+    expect(String(metadata.description).length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("resolvePublicMediaUrl", () => {
+  it("resolves relative storage paths against the public API", () => {
+    expect(resolvePublicMediaUrl("/uploads/pin.webp", "https://api.goodspot.example")).toBe(
+      "https://api.goodspot.example/uploads/pin.webp"
+    );
+  });
+
+  it("rewrites legacy localhost media URLs to the public API", () => {
+    expect(resolvePublicMediaUrl("http://localhost:8081/uploads/pin.webp", "https://api.goodspot.example")).toBe(
+      "https://api.goodspot.example/uploads/pin.webp"
+    );
+  });
+
+  it("returns the identical URL when the media host already matches the public API", () => {
+    expect(resolvePublicMediaUrl("http://localhost:8081/uploads/pin.webp", "http://localhost:8081")).toBe(
+      "http://localhost:8081/uploads/pin.webp"
+    );
+  });
+
+  it("re-roots uploads pathnames onto a different API host (localhost media, LAN API)", () => {
+    expect(
+      resolvePublicMediaUrl("http://localhost:8081/uploads/p.webp", "http://192.168.1.5:8081")
+    ).toBe("http://192.168.1.5:8081/uploads/p.webp");
+  });
+
+  it("omits unusable or unconfigured media URLs", () => {
+    expect(resolvePublicMediaUrl("javascript:alert(1)", "https://api.goodspot.example")).toBeNull();
+    expect(resolvePublicMediaUrl("/uploads/pin.webp", undefined)).toBeNull();
+    expect(resolvePublicMediaUrl("http://localhost:8081/uploads/pin.webp", undefined)).toBeNull();
+  });
+
+  it("rejects protocol-relative URLs instead of laundering the host", () => {
+    expect(
+      resolvePublicMediaUrl("//evil.com/uploads/x.webp", "https://api.goodspot.example")
+    ).toBeNull();
+  });
+
+  it("keeps query and hash when re-rooting uploads URLs", () => {
+    expect(
+      resolvePublicMediaUrl(
+        "http://192.168.68.112:8081/uploads/a.webp?v=2#h",
+        "https://api.goodspot.example"
+      )
+    ).toBe("https://api.goodspot.example/uploads/a.webp?v=2#h");
+  });
+
+  it("yields the same canonical uploads path as resolveMediaUrl", () => {
+    const sameOrigin = resolveMediaUrl("/uploads/a.webp?v=2#h");
+    const publicUrl = resolvePublicMediaUrl(
+      "/uploads/a.webp?v=2#h",
+      "https://api.goodspot.example"
+    );
+    expect(sameOrigin).toBe("/uploads/a.webp?v=2#h");
+    expect(publicUrl).toBe("https://api.goodspot.example/uploads/a.webp?v=2#h");
+    expect(new URL(publicUrl!).pathname).toBe(new URL(sameOrigin, "https://any.test").pathname);
+  });
+});

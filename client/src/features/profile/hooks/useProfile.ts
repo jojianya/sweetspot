@@ -1,0 +1,79 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useClearOnChange } from "@/shared/hooks/useClearOnChange";
+import { fetchUser, fetchUserPins } from "../api/users"
+import { fetchUserCollections } from "@/features/collections";
+import { ApiError } from "@/shared/api/client";
+import { errorMessage } from "@/shared/utils";
+import type { CollectionEntry, PublicProfile } from "@/shared/types/social"
+import type { PinListEntry } from "@/shared/types/pin";
+
+/**
+ * Profile data fan-out: loads the profile, its pins and its collections in
+ * parallel. A 404 maps to `notFound`; anything else maps to `error`.
+ * `retry` clears the failure and re-runs the load. Extracted unchanged from
+ * app/users/[id]/page.tsx.
+ */
+export function useProfile(id: string) {
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [pins, setPins] = useState<PinListEntry[]>([]);
+  const [collections, setCollections] = useState<CollectionEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  // Clear the previous id's data during render, the same derived-state
+  // pattern useAsyncData uses: navigating from /users/a to /users/b must not
+  // leave a's profile on screen under b, and it must show as loading rather
+  // than settled with stale content while b is in flight.
+  useClearOnChange(id, () => {
+    setProfile(null);
+    setPins([]);
+    setCollections([]);
+    setNotFound(false);
+    setError(null);
+    setLoading(true);
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [prof, userPins, userCollections] = await Promise.all([
+          fetchUser(id),
+          fetchUserPins(id),
+          fetchUserCollections(id),
+        ]);
+        if (cancelled) return;
+        setProfile(prof);
+        setPins(userPins);
+        setCollections(userCollections);
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 404) {
+          setNotFound(true);
+        } else {
+          setError(errorMessage(e));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, attempt]);
+
+  const retry = () => {
+    setError(null);
+    setNotFound(false);
+    setLoading(true);
+    setAttempt((n) => n + 1);
+  };
+
+  return { profile, setProfile, pins, collections, loading, notFound, error, retry };
+}

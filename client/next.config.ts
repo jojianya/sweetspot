@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-import { resolveAllowedDevOrigins } from "./src/lib/devOrigins";
+import { resolveAllowedDevOrigins } from "./src/shared/lib/devOrigins";
 
 /**
  * Server-side address of the Go API, used as the rewrite destination.
@@ -9,7 +9,7 @@ import { resolveAllowedDevOrigins } from "./src/lib/devOrigins";
  * address the server itself can reach: in Docker that is the compose service
  * name (http://server:8081), and when running `next dev` straight on the host it
  * is the published loopback port. That is exactly what API_INTERNAL_URL is for
- * (see lib/api/server.ts, which uses the same variable for SSR fetches).
+ * (see features/pins/api/server.ts, which uses the same variable for SSR fetches).
  *
  * NEXT_PUBLIC_API_URL is deliberately NOT preferred here. It used to be the
  * browser-facing API origin, and pointing the browser at a different origin than
@@ -22,7 +22,7 @@ import { resolveAllowedDevOrigins } from "./src/lib/devOrigins";
  * class of failure is gone regardless of which loopback name is used.
  *
  * NEXT_PUBLIC_API_URL is still meaningful, but only for absolute URLs in SSR
- * metadata (lib/site.ts) and as the SSR fetch fallback (lib/api/server.ts).
+ * metadata (shared/lib/site.ts) and as the SSR fetch fallback (lib/api/server.ts).
  */
 function apiProxyTarget(): string {
   const internal = process.env.API_INTERNAL_URL?.trim();
@@ -57,7 +57,7 @@ const nextConfig: NextConfig = {
   // reached by hostname (localhost), by loopback IP (127.0.0.1) and by LAN IP
   // when testing from another device, so the list comes from
   // NEXT_ALLOWED_DEV_ORIGINS (comma-separated) and falls back to the two
-  // loopback names. See src/lib/devOrigins.ts.
+  // loopback names. See src/shared/lib/devOrigins.ts.
   allowedDevOrigins: resolveAllowedDevOrigins(),
   async rewrites() {
     return [
@@ -79,7 +79,7 @@ const nextConfig: NextConfig = {
         // route (see server/internal/http/router.go). The DB stores absolute
         // URLs with the STORAGE_BASE_URL host at upload time, so a LAN-IP
         // change orphans every old URL. The client normalizes all media to
-        // same-origin /uploads/... paths (see lib/media.ts), and this rewrite
+        // same-origin /uploads/... paths (see shared/lib/media.ts), and this rewrite
         // serves them from the Go server without exposing the browser to the
         // backend's host/port at all.
         source: "/uploads/:path*",
